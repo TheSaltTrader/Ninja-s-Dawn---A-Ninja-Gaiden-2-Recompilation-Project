@@ -383,7 +383,9 @@ Provenance
 Built {built} on {host}.
 See SHA256SUMS for file hashes and provenance.txt for exactly what went in.
 
-Not redistributable: ng2.exe contains Ninja Gaiden II's own code, translated.
+ng2.exe contains Ninja Gaiden II's own code in translated form and no game data;
+it is published on the project's GitHub releases page and does nothing without
+your own copy of the game.
 """
 
 
@@ -634,7 +636,7 @@ def main():
         make_zip(dest, zip_path, version)
 
     print("\n=== v%s is in %s ===" % (version, dest))
-    print("Not redistributable - ng2.exe contains the game's own translated code.")
+    print("Attach the zip to the GitHub release; it holds translated game code and no game data.")
     return 0
 
 

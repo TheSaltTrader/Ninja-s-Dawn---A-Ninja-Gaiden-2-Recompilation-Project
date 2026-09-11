@@ -7,6 +7,11 @@ It is not an emulator. The game's PowerPC code is translated ahead of time into
 native x86-64, so there is no interpreter and no JIT warm-up: the game runs as a
 Windows program, at 60 fps, with PC settings in front of it.
 
+**Getting it:** download the latest `ng2recomp-vX.Y.Z-win-amd64.zip` from the
+[Releases](https://github.com/TheSaltTrader/Ninja-s-Dawn---A-Ninja-Gaiden-2-Recompilation-Project/releases)
+page, unzip it anywhere, and run `ng2.exe`. It needs nothing installed; it does
+need your own copy of the game, below. Or build it yourself, further down.
+
 ---
 
 ## What you must bring
@@ -70,9 +75,9 @@ the "Show the setup screen at the next launch" tick in the settings.
 
 ## Building from source
 
-This repository is the project's own code and documents; it holds no game
-material and no built executable, because `ng2.exe` contains the game's own
-translated code. You build it from your copy of the game.
+This repository is the project's own code and documents and holds no game
+material. The built executable is attached to each release; this is how to
+make your own from your copy of the game.
 
 1. **Tools.** Visual Studio 2022 Build Tools, LLVM/Clang in `C:\Program
    Files\LLVM`, Ninja and CMake, Python 3.12. The [ReXGlue](https://github.com/)
@@ -302,7 +307,10 @@ stock SDK drop, because this port depends on fixes made in that tree:
 
 ## Legal
 
-This repository contains **no** Ninja Gaiden II code, assets, or data. Ninja
+The source in this repository contains **no** Ninja Gaiden II code, assets, or
+data. The executable attached to each release contains the game's code in
+translated form, which is what a static recompilation is; it contains no game
+assets or data, and it does nothing without your own copy of the game. Ninja
 Gaiden II is © Tecmo Koei. You must supply your own legally obtained copy.
 
 The MIT licence in this repository applies to the project's own source — the
