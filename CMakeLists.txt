@@ -1,0 +1,97 @@
+# ng2 - ReXGlue Recompiled Project
+#
+# SDK boilerplate lives in generated/rexglue.cmake.
+
+cmake_minimum_required(VERSION 3.25)
+project(ng2 LANGUAGES CXX)
+
+# RC is needed for the icon and version block in resources/ng2.rc. Enabled only
+# on Windows: it is the only platform with an .rc compiler, and the executable
+# is Windows-only anyway.
+if(WIN32)
+    enable_language(RC)
+endif()
+
+set(CMAKE_CXX_STANDARD 23)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+
+include(generated/rexglue.cmake)
+
+# The port's own version, read from VERSION rather than typed here, so the
+# number on screen is the number the release script packages. Listed as a
+# configure dependency so bumping VERSION re-runs CMake - without that, the
+# build happily bakes in the previous number.
+file(STRINGS "${CMAKE_CURRENT_SOURCE_DIR}/VERSION" NG2_VERSION LIMIT_COUNT 1)
+string(STRIP "${NG2_VERSION}" NG2_VERSION)
+set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
+             "${CMAKE_CURRENT_SOURCE_DIR}/VERSION")
+message(STATUS "ng2 version ${NG2_VERSION}")
+
+# Sources
+set(NG2_SOURCES
+    src/main.cpp
+    src/diag_hooks.cpp
+    src/patch_hooks.cpp
+    src/ng2_audio_fix.cpp
+    src/ng2_chapter_fix.cpp
+    src/ng2_disc.cpp
+    src/ng2_menu.cpp
+    src/ng2_platform.cpp
+    src/ng2_saveimport.cpp
+    src/ng2_texnotify.cpp
+    src/ng2_textool.cpp
+    src/ng2_diagnostics.cpp
+    src/ng2_hwdetect.cpp
+    src/ng2_perf.cpp
+    src/ng2_autoskip.cpp
+    src/third_party/stb_image.cpp
+)
+
+# The icon. Explorer, the desktop shortcut and the taskbar all read it from
+# here - see the comment at the top of resources/ng2.rc.in.
+#
+# The .rc is generated so its version block comes from the VERSION file. A
+# hardcoded copy drifts the moment VERSION is bumped, and drifts silently:
+# nothing reads it except the Properties dialog.
+if(WIN32)
+    # VERSIONINFO wants four comma-separated numbers.
+    string(REPLACE "." ";" NG2_VERSION_PARTS "${NG2_VERSION}")
+    list(LENGTH NG2_VERSION_PARTS NG2_VERSION_PART_COUNT)
+    while(NG2_VERSION_PART_COUNT LESS 4)
+        list(APPEND NG2_VERSION_PARTS "0")
+        list(LENGTH NG2_VERSION_PARTS NG2_VERSION_PART_COUNT)
+    endwhile()
+    list(JOIN NG2_VERSION_PARTS ", " NG2_VERSION_RC)
+
+    # rc resolves a relative path against the .rc's own directory, and the
+    # generated one lives in the build tree - so hand it an absolute path.
+    set(NG2_ICON_PATH "${CMAKE_CURRENT_SOURCE_DIR}/resources/ng2.ico")
+    if(NOT EXISTS "${NG2_ICON_PATH}")
+        message(FATAL_ERROR
+            "resources/ng2.ico is missing. Regenerate it: python tools/make_icon.py")
+    endif()
+    # Backslashes are escape characters to the resource compiler.
+    string(REPLACE "\\" "/" NG2_ICON_PATH "${NG2_ICON_PATH}")
+
+    configure_file(resources/ng2.rc.in "${CMAKE_CURRENT_BINARY_DIR}/ng2.rc" @ONLY)
+    list(APPEND NG2_SOURCES "${CMAKE_CURRENT_BINARY_DIR}/ng2.rc")
+    set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
+                 "${CMAKE_CURRENT_SOURCE_DIR}/resources/ng2.rc.in")
+endif()
+
+if(WIN32)
+    add_executable(ng2 WIN32 ${NG2_SOURCES})
+else()
+    add_executable(ng2 ${NG2_SOURCES})
+endif()
+
+# GPU_PLUGINS stages the SDK's Xenos emulation plugin (rexgpu-xenos.dll)
+# next to the executable. It is runtime-loaded, never linked.
+rexglue_setup_target(ng2 GPU_PLUGINS xenos)
+
+target_compile_definitions(ng2 PRIVATE NG2_VERSION="${NG2_VERSION}")
+
+# DXGI, for reading the video-memory budget in src/ng2_hwdetect.cpp.
+if(WIN32)
+    target_link_libraries(ng2 PRIVATE dxgi)
+endif()

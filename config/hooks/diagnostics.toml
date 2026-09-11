@@ -1,0 +1,73 @@
+# Temporary diagnostic hooks. These log guest state; they do not change
+# behaviour. Bodies in src/diag_hooks.cpp.
+#
+# Startup dies in init phase 2 (0x822F3708) with an indirect call to a garbage
+# target. The chain is:
+#
+#   sub_83844348  0x8384463C  lwz  r11,0(r30)     ; r11 = [this+0]
+#                 0x83844644  stw  r20,0x14(r11)
+#                 0x83844648  lwz  r11,0(r30)
+#                 0x8384464C  stw  r25,0x18(r11)
+#                 0x83844650  lwz  r11,0(r30)
+#                 0x83844654  lwz  r11,0(r11)     ; r11 = [[this+0]+0] -> 0x4B4B4B4C
+#                 0x83844658  mtctr r11
+#                 0x8384465C  bctrl               ; FATAL
+#
+# So [this+0] points at something whose first word is not a function pointer.
+# Log `this`, [this+0] and [[this+0]] to find out what it actually points at.
+
+[[midasm_hook]]
+address = 0x8384463C
+name = "ng2DiagIndirectCallSite"
+registers = ["r30", "r25", "r24"]
+after_instruction = false
+
+# Entry to the same function, to see what `this` was on the way in and how many
+# times the path runs before the bad one.
+[[midasm_hook]]
+address = 0x83844354
+name = "ng2DiagEnterSub83844348"
+registers = ["r3"]
+after_instruction = true
+
+# Cursor state on entry, right after `lwz r24,0x18(r30)`. If the stream pointer
+# is already inside the lookup-table region here, the cursor was wrong before
+# this function ran (upstream bug). If it starts somewhere sensible and only
+# drifts into the table later, the decoder is desynchronising as it parses.
+[[midasm_hook]]
+address = 0x83844358
+name = "ng2DiagParserEntry"
+registers = ["r24"]
+after_instruction = true
+
+# Log every file the game opens. sub_8380EB88 is its CreateFile-style wrapper
+# (r3 = path, r4 = access, r7 = disposition) and is the only caller of
+# NtCreateFile. r3 is still live at 0x8380EB98 - the first write to it is the
+# error path at 0x8380EBDC.
+[[midasm_hook]]
+address = 0x8380EB98
+name = "ng2DiagFileOpen"
+registers = ["r3"]
+after_instruction = false
+
+# The guest implements its own fiber context switch at 0x83819200: it saves the
+# current context into the thread block ([r13+0x100]+0x164) and restores the
+# one in r3. Log the target so we can see whether the scheduler ever switches
+# to more than one context - if it only ever "switches" to the running one, no
+# task fiber can start.
+[[midasm_hook]]
+address = 0x83819200
+name = "ng2DiagContextSwitch"
+registers = ["r3"]
+after_instruction = false
+
+# Frame dump trigger. sub_822F3A88 runs once per frame from the main loop; the
+# body counts frames and, at a chosen frame, copies the GPU resolve targets out
+# of guest memory so they can be untiled and inspected offline. This is the only
+# way to actually see what is on screen: PrintWindow cannot read a D3D12
+# swapchain, and capturing the screen region photographs whatever is on top.
+[[midasm_hook]]
+address = 0x822F3A8C
+name = "ng2DiagFrameTick"
+registers = []
+after_instruction = true

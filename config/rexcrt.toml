@@ -1,0 +1,42 @@
+# Guest CRT functions replaced by the SDK's host implementations.
+#
+# NG2's task system is built on FIBERS, not OS threads. sub_822F2CA0 registers
+# a task by calling CreateFiber(0x8000, sub_822F2C70, slot), and the main loop
+# schedules them through SwitchToFiber every frame.
+#
+# A guest-implemented fiber switch cannot work under static recompilation. The
+# switch at 0x83819200 saves r1/LR/CR/r14-r31/VMX into one context block and
+# restores another, then "returns" into the restored context. On hardware that
+# resumes the other fiber. Here the recompiled call state lives on the *host*
+# stack and in C++ locals, not in the guest register file, so restoring guest
+# registers transfers nothing: the switch returns to its own caller and the
+# target fiber never starts.
+#
+# Measured: the scheduler runs SwitchToFiber 60x/second with exactly ONE
+# distinct target, forever, and neither the fiber entry (sub_822F2C70) nor the
+# front-end sequencer (sub_83649658, registered as task 0 by init phase 2) ever
+# executes. That is why the screen stays black - the boot sequence never runs.
+#
+# Mapping these to rexcrt hands fiber management to the runtime, which backs
+# each guest fiber with a real host fiber, so a switch actually transfers.
+#
+# Identification (all in the CRT/XAPI band at 0x8380Exxx):
+#   0x8380E418  ConvertThreadToFiber  errors 0x500 if already a fiber, else
+#                                     allocates the 0xA50 context
+#   0x8380E4A8  ConvertFiberToThread  clears and frees [r13+0x100]->0x164,
+#                                     errors 0x501 if there is none
+#   0x8380E4F8  CreateFiber           (stackSize, entry, param); allocates the
+#                                     0xA50 context and a stack (min 0x4000)
+#   0x8380E5D8  SwitchToFiber         (fiber); rejects a switch to the current
+#                                     fiber, else tail-branches to 0x83819200
+
+[rexcrt]
+ConvertThreadToFiber = 0x8380E418
+ConvertFiberToThread = 0x8380E4A8
+CreateFiber          = 0x8380E4F8
+# NOTE: 0x8380E638, not 0x8380E5D8. The scheduler (sub_822F2B48) calls
+# `bl 0x8380e638` every frame - a fast-path SECOND ENTRY into
+# SwitchToFiber that skips the entry's "already current?" guard. Mapping
+# only the real entry left the hot path running guest code. Both entries
+# take r3 = the fiber. 0x8380E5D8 is used only on task teardown.
+SwitchToFiber        = 0x8380E638

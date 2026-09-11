@@ -1,0 +1,46 @@
+// The application icon, and the version block Explorer shows in Properties.
+//
+// Configured by CMake from the VERSION file - a version hardcoded here drifts
+// the moment anyone bumps VERSION, and it drifts silently, because nothing
+// reads this except the Properties dialog.
+//
+// ID 1 on purpose. Both of the places that matter take the LOWEST-numbered icon
+// resource and nothing else:
+//
+//   * the Windows shell, for Explorer, the desktop shortcut and Alt-Tab;
+//   * SDL, for the window class - and therefore the taskbar button while the
+//     game is running. SDL_RegisterApp has no icon hint set here, so it falls
+//     back to EnumResourceNames(RT_GROUP_ICON) over GetModuleHandle(NULL),
+//     which is ng2.exe rather than the runtime DLL SDL is linked into. That is
+//     why the taskbar picks this up with no code on our side.
+//
+// Numeric IDs sort before named ones, so adding a named icon later would not
+// displace this. Keep it at 1.
+
+1 ICON "@NG2_ICON_PATH@"
+
+#define NG2_FILEVERSION_RC @NG2_VERSION_RC@
+
+1 VERSIONINFO
+FILEVERSION     NG2_FILEVERSION_RC
+PRODUCTVERSION  NG2_FILEVERSION_RC
+FILEOS          0x4L        // VOS_NT_WINDOWS32
+FILETYPE        0x1L        // VFT_APP
+BEGIN
+    BLOCK "StringFileInfo"
+    BEGIN
+        BLOCK "040904B0"    // US English, Unicode
+        BEGIN
+            VALUE "FileDescription", "Ninja Gaiden II"
+            VALUE "FileVersion",     "@NG2_VERSION@"
+            VALUE "ProductName",     "Ninja Gaiden II (ReXGlue recompilation)"
+            VALUE "ProductVersion",  "@NG2_VERSION@"
+            VALUE "InternalName",    "ng2"
+            VALUE "OriginalFilename", "ng2.exe"
+        END
+    END
+    BLOCK "VarFileInfo"
+    BEGIN
+        VALUE "Translation", 0x409, 1200
+    END
+END

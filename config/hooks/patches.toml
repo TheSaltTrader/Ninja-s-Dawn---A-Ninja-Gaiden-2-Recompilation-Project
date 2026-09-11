@@ -1,0 +1,115 @@
+# Game patches, as midasm hooks.
+#
+# Xenia ships these as guest *memory* patches (game-patches/patches/544307D5 -
+# Ninja Gaiden II (World).patch.toml). That does not work for a static
+# recompilation: the values being patched are immediates inside instructions,
+# and those instructions have already been translated to C++ constants by the
+# time anything could patch memory. Rewriting the register right after the
+# instruction runs has exactly the same effect and costs nothing when off.
+#
+# Verified against our image (base "World" build, not TU2):
+#
+#   0x836261E4  38800248  li r4,584     <- height
+#   0x836261E8  38600460  li r3,1120    <- width, then bl <video mode setup>
+#
+#   0x837C62F8  39400460  li r10,1120   <- width, stored to [r31+0x40]
+#   0x837C62FC  39200248  li r9,584     <- height
+#
+# The TU2 addresses from the same Xenia patch file decode as unrelated
+# instructions here, which is how we know which build this disc carries.
+
+# Site 1: the pair feeding the video mode call. Hooked after the second `li`
+# so both registers are live and can be rewritten together.
+[[midasm_hook]]
+address = 0x836261E8
+name = "ng2PatchRenderSize1"
+registers = ["r3", "r4"]
+after_instruction = true
+
+# Site 2: the pair written into the render description at [r31+0x40].
+[[midasm_hook]]
+address = 0x837C62FC
+name = "ng2PatchRenderSize2"
+registers = ["r9", "r10"]
+after_instruction = true
+
+# The community "Chapter 12 Crash Workaround" (Gliniak), from Xenia's patch
+# file for this title:
+#
+#   [[patch.be32]] address = 0x82834c78  value = 0x3bc00000   ; li r30, 0
+#
+# The instruction there is `lwz r30, 0x30(r11)`, feeding a `cmplwi r30, 0` and
+# a branch that returns early when it is zero. Forcing r30 to zero therefore
+# takes the early return every time, which is what skips the crash. Hooked
+# after the load rather than replacing it, for the same reason as the render
+# size patch: the instruction is already a C++ statement by the time anything
+# could patch memory.
+#
+# Its author's own warning stands and is repeated in the settings menu: it
+# causes problems outside Chapter 12, so it is off by default.
+[[midasm_hook]]
+address = 0x82834C78
+name = "ng2PatchChapter12"
+registers = ["r30"]
+after_instruction = true
+
+# Skip the pre-rendered videos.
+#
+# 0x8380EB88 is the game's CreateFile-style wrapper; `mr r28, r3` at
+# 0x8380EB98 copies the path it was given, and everything after uses r28. This
+# hook runs immediately after that copy and, when the setting is on, points r28
+# at a path that cannot resolve, so the open fails and the game takes its own
+# "this file is missing" path.
+#
+# This does not fix the decoder - that fault is inside rexgpu-xenos.dll (see
+# bugreport/REXGLUE-BUG-video-decode.md). It avoids two visible consequences of
+# it: the corrupted intro, and the attract-mode demo video, which reliably
+# desynchronises the GPU command stream and leaves the picture frozen while the
+# game carries on running.
+[[midasm_hook]]
+address = 0x8380EB9C
+name = "ng2PatchSkipVideos"
+registers = ["r28"]
+after_instruction = false
+
+# The music that dies mid-session: a lost wakeup in the game's own rendezvous
+# barrier, sub_8374F078 (see src/ng2_audio_fix.cpp for the whole story).
+#
+# The barrier's spin loop:
+#
+#   0x8374F154  cmpd   cr6,r10,r11     ; word == mask of expected arrivals?
+#   0x8374F158  beq    cr6,0x8374F170  ; yes: clear the word, return
+#   0x8374F15C  db16cyc
+#   0x8374F160  ld     r11,0(r4)       ; reload the word
+#   0x8374F164  cmpdi  cr6,r11,0       ; cleared by whoever saw equality?
+#   0x8374F168  bne    cr6,0x8374F154  ; no: spin
+#   0x8374F16C  blr                    ; yes: done
+#
+# Hooked right after the reload. When the thread's own arrival byte is no
+# longer in the word, the round it was waiting for has completed and been
+# cleared, and another worker has already arrived at the NEXT round on the
+# same word - the zero this loop was waiting for came and went. The hook sets
+# r11 to zero so the loop takes its own exit.
+[[midasm_hook]]
+address = 0x8374F164
+name = "ng2AudioBarrierFix"
+registers = ["r11", "r13"]
+after_instruction = false
+
+# The red mist after a boss: the next chapter never loads. After "continue to
+# the next chapter without saving?" -> Proceed, the post-boss state machine
+# (sub_8242BCF8) checks whether anything unlocked in the chapter is still
+# missing from the save and, if so, waits for the profile block's
+# achievement-write state ([0x8555B930+88]) to reach 2 - the value the game's
+# own achievement write leaves behind when it completes. On the console it
+# completes at once; in this port the write is never issued at the chapter end,
+# so the wait never ends. The hook runs right after that field is loaded
+# (lwz r11,88(r8) at 0x8242D7B0) and, when it is still below 2, reports 2, so
+# the game runs its own transition: loading screen, background, "press to
+# proceed", mist clear. Body in src/ng2_chapter_fix.cpp; --ng2_chapter_award_fix=false
+# switches it off.
+[[midasm_hook]]
+address = 0x8242D7B4
+name = "ng2ChapterAwardFix"
+registers = ["r11", "r8"]
+after_instruction = false

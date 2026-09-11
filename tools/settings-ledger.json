@@ -1,0 +1,173 @@
+{
+  "_comment": [
+    "Declarations for the Lodestone census (tools/lodestone_census.py).",
+    "",
+    "The census enumerates every field in ng2_settings.h itself. This file does",
+    "not list subjects - it explains the ones the census cannot verify on its",
+    "own, and every entry needs a reason a person can disagree with.",
+    "",
+    "'reason' declares a setting that is deliberately not in the settings UI.",
+    "'doc_phrase' gives the words the public README uses for it, because the",
+    "README is written for players and says 'Detail strength', not",
+    "'texture_ai_strength'. Without it the census would demand identifiers in",
+    "prose, which would make the docs worse to pass a test.",
+    "'undocumented_ok' declares a setting that is reachable but is not worth a",
+    "line in the README - internal state a player sets by using the app, not by",
+    "reading about it."
+  ],
+  "declared": [
+    {
+      "setting": "chapter12_workaround",
+      "reason": "cvar-only escape hatch (ng2_chapter12_workaround, on the F4 screen). The guard in patch_hooks.cpp makes it unnecessary; it exists only if that guard ever proves too permissive, and putting it in the player-facing menu would advertise a switch that should stay unused."
+    },
+    {
+      "setting": "hardware_detected",
+      "reason": "a run-once flag, not a knob. It records that first-run detection has happened so it does not run again; the player re-runs it with the Autodetect button instead.",
+      "undocumented_ok": true
+    },
+    {
+      "setting": "configured",
+      "doc_phrase": "setup screen"
+    },
+    {
+      "setting": "window_width",
+      "doc_phrase": "Window size"
+    },
+    {
+      "setting": "window_height",
+      "doc_phrase": "Window size"
+    },
+    {
+      "setting": "vsync",
+      "doc_phrase": "V-Sync"
+    },
+    {
+      "setting": "internal_720p",
+      "doc_phrase": "internal render"
+    },
+    {
+      "setting": "resolution_scale",
+      "doc_phrase": "Internal supersampling"
+    },
+    {
+      "setting": "texture_cache_mb",
+      "doc_phrase": "Texture cache"
+    },
+    {
+      "setting": "texture_dump",
+      "doc_phrase": "Dump textures while playing"
+    },
+    {
+      "setting": "texture_pack",
+      "doc_phrase": "Use the upscaled pack"
+    },
+    {
+      "setting": "texture_scale",
+      "doc_phrase": "Upscale factor"
+    },
+    {
+      "setting": "texture_ai",
+      "doc_phrase": "Upscaler"
+    },
+    {
+      "setting": "texture_ai_strength",
+      "doc_phrase": "Detail strength"
+    },
+    {
+      "setting": "texture_path",
+      "doc_phrase": "Texture folder"
+    },
+    {
+      "setting": "antialias",
+      "doc_phrase": "Anti-aliasing"
+    },
+    {
+      "setting": "present_effect",
+      "doc_phrase": "Output filter"
+    },
+    {
+      "setting": "cas_sharpness",
+      "doc_phrase": "CAS sharpness"
+    },
+    {
+      "setting": "skip_cinematics",
+      "doc_phrase": "Skip chapter cinematics"
+    },
+    {
+      "setting": "video_mode",
+      "doc_phrase": "Skip intro videos"
+    },
+    {
+      "setting": "hud_enabled",
+      "doc_phrase": "Show readouts"
+    },
+    {
+      "setting": "hud_fps",
+      "doc_phrase": "FPS"
+    },
+    {
+      "setting": "hud_gpu",
+      "doc_phrase": "GPU load"
+    },
+    {
+      "setting": "hud_vram",
+      "doc_phrase": "Video memory"
+    },
+    {
+      "setting": "present_dither",
+      "doc_phrase": "Dither the output"
+    },
+    {
+      "setting": "cursor_hide_seconds",
+      "doc_phrase": "Hide the cursor after"
+    },
+    {
+      "setting": "keyboard_control",
+      "doc_phrase": "Keyboard control"
+    },
+    {
+      "setting": "fuzzy_alpha",
+      "doc_phrase": "Fuzzy alpha"
+    },
+    {
+      "setting": "accurate_depth",
+      "doc_phrase": "Accurate depth"
+    },
+    {
+      "setting": "anisotropic",
+      "doc_phrase": "Anisotropic filtering"
+    },
+    {
+      "setting": "letterbox",
+      "doc_phrase": "Letterbox"
+    },
+    {
+      "setting": "monitor",
+      "doc_phrase": "Monitor"
+    },
+    {
+      "setting": "fps",
+      "doc_phrase": "Frame rate"
+    },
+    {
+      "setting": "fullscreen",
+      "doc_phrase": "Fullscreen"
+    },
+    {
+      "setting": "game_path",
+      "doc_phrase": "Choose folder"
+    },
+    {
+      "setting": "dlc_path",
+      "doc_phrase": "DLC folder"
+    },
+    {
+      "setting": "iso_path",
+      "doc_phrase": "Choose disc image"
+    },
+    {
+      "setting": "hud_menu_bars",
+      "doc_phrase": "Live cost bars in this menu"
+    }
+  ]
+}

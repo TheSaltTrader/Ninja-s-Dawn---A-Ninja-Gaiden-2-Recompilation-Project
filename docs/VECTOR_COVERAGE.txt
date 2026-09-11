@@ -1,0 +1,109 @@
+Vector instruction test coverage in the ReXGlue SDK
+==================================================
+
+Why this exists
+---------------
+Every pre-rendered video in Ninja Gaiden II decodes to garbage. The cause is
+NOT the video files and NOT an SDK decoder:
+
+  * Re-encoded one panel of the intro triptych to a byte-for-byte matching
+    profile - wmv3 (Main), 320x580, 4000 kb/s, 60 fps - with Microsoft's own
+    Expression Encoder 4, put it back, and let the game play it. Still garbled,
+    and differently from the two originals beside it. The file was never wrong.
+  * The game imports NO media APIs at all: xam.xex (65) and xboxkrnl.exe (173),
+    nothing else. It decodes the WMVs in its OWN code, which we recompiled.
+  * That translation has ZERO unimplemented instructions across all 553
+    generated files, so nothing is trapping - it runs, and produces wrong
+    pixels.
+
+So the decoder is our translated code, and a video decoder is almost entirely
+SIMD. Which raised the obvious question: how much of the vector translation is
+actually verified?
+
+What was checked by hand
+------------------------
+vperm is correct. Worked through: e = 15 - (c & 15) yields the right reversed
+index for both halves of the vA||vB concatenation, and slli_epi32(c,3) lands
+bit 4 of each control byte in its own bit 7, so the cross-byte bleed only
+touches bits blendv ignores. The *128 variants share builders with the base
+forms (VPERM128 -> build_vperm), so verifying one covers both.
+
+The lane-order-sensitive family - permutes, merges, packs, unpacks, splats,
+octet shifts - is in the TESTED set. Everything listed below is elementwise,
+so lane order cannot bite it; the risk there is a wrong intrinsic or a
+hand-rolled emulation, not element numbering. Four were sampled by hand
+(vsrab, vsrb, vavgub, vavgsb) and all four are correct.
+
+The gap
+-------
+Counted rather than estimated, and a builder counts as exercised if ANY opcode
+routed to it has a test:
+
+vector opcodes dispatched    : 173
+distinct builders behind them: 120
+builders NO test exercises   : 52
+
+  build_vaddsbs            <- vaddsbs
+  build_vaddsws            <- vaddsws
+  build_vaddubm            <- vaddubm
+  build_vaddubs            <- vaddubs
+  build_vadduhs            <- vadduhs
+  build_vadduwm            <- vadduwm
+  build_vadduws            <- vadduws
+  build_vavgsb             <- vavgsb
+  build_vavgsw             <- vavgsw
+  build_vavgub             <- vavgub
+  build_vcfux              <- vcfux vcuxwfp128
+  build_vcmpbfp            <- vcmpbfp vcmpbfp128
+  build_vcmpeqfp           <- vcmpeqfp vcmpeqfp128
+  build_vcmpequb           <- vcmpequb
+  build_vcmpequh           <- vcmpequh
+  build_vcmpequw           <- vcmpequw vcmpequw128
+  build_vcmpgefp           <- vcmpgefp vcmpgefp128
+  build_vcmpgtfp           <- vcmpgtfp vcmpgtfp128
+  build_vcmpgtsb           <- vcmpgtsb
+  build_vcmpgtsh           <- vcmpgtsh
+  build_vcmpgtsw           <- vcmpgtsw
+  build_vcmpgtub           <- vcmpgtub
+  build_vcmpgtuh           <- vcmpgtuh
+  build_vcmpgtuw           <- vcmpgtuw
+  build_vlogefp            <- vlogefp vlogefp128
+  build_vmaxsb             <- vmaxsb
+  build_vmaxsw             <- vmaxsw
+  build_vmaxub             <- vmaxub
+  build_vminsb             <- vminsb
+  build_vminsw             <- vminsw
+  build_vminub             <- vminub
+  build_vminuw             <- vminuw
+  build_vmulfp128          <- vmulfp128
+  build_vnmsubfp           <- vnmsubfp vnmsubfp128
+  build_vnor               <- vnor vnor128
+  build_vrefp              <- vrefp vrefp128
+  build_vrfim              <- vrfim vrfim128
+  build_vrfip              <- vrfip vrfip128
+  build_vrfiz              <- vrfiz vrfiz128
+  build_vrlw               <- vrlw vrlw128
+  build_vrsqrtefp          <- vrsqrtefp vrsqrtefp128
+  build_vsrab              <- vsrab
+  build_vsraw              <- vsraw vsraw128
+  build_vsrb               <- vsrb
+  build_vsrw               <- vsrw vsrw128
+  build_vsubsbs            <- vsubsbs
+  build_vsubsws            <- vsubsws
+  build_vsububm            <- vsububm
+  build_vsububs            <- vsububs
+  build_vsubuhs            <- vsubuhs
+  build_vsubuwm            <- vsubuwm
+  build_vsubuws            <- vsubuws
+
+Closing it
+----------
+tests/ppc/asm/instr_*.s in the SDK is the harness: PPC assembly annotated with
+REGISTER_IN / REGISTER_OUT, assembled, recompiled and compared automatically.
+Adding the missing cases is mechanical - the expected values come from the
+PowerPC semantics, not from what the translator currently does, or the test
+would only encode the bug.
+
+Honest status: this has NOT yet found the fault. It has ruled out the file
+format, the SDK, missing opcodes and the lane-order family, and replaced a
+guess with a counted list of what nothing verifies.

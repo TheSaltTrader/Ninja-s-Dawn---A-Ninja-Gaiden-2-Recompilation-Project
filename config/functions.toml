@@ -1,0 +1,253 @@
+# Manual function-boundary overrides for default.xex.
+#
+# The analyzer derives function bounds from .pdata, then fills gaps. MSVC does
+# not emit .pdata entries for `this`-adjusting virtual thunks (two instructions,
+# no prologue, no unwind data), so thunks that sit in the padding after a real
+# function get absorbed into that function's body. A `b` into one then looks
+# like a branch into the middle of a function and fails validation.
+#
+# Each entry below is a verified `addi r3, r3, N; b <method>` pair.
+
+[functions]
+
+# Reached from the thunk block at 0x8375B0F4; absorbed into fn 0x83759F10.
+#   0x83759FF8  addi r3, r3, 0x10
+#   0x83759FFC  b    0x8375E380
+0x83759FF8 = { name = "adjustor_thunk_83759FF8", size = 0x8 }
+
+# Reached from the thunk block at 0x8375B114; absorbed into fn 0x8375A3F0.
+#   0x8375A460  addi r3, r3, 4
+#   0x8375A464  b    0x837551E8
+0x8375A460 = { name = "adjustor_thunk_8375A460", size = 0x8 }
+
+# Interlocked increment helper, reached only through a function pointer, so
+# static analysis never saw a call to it. Absorbed into fn 0x8377E0B8.
+#   0x8377E168  addi r11, r3, 4
+#   0x8377E16C  mfmsr r9 / mtmsrd / lwarx / addi / stwcx. / mtmsrd / bne
+#   0x8377E188  mr r3, r10
+#   0x8377E18C  blr
+0x8377E168 = { name = "InterlockedIncrement_8377E168", size = 0x28 }
+
+# .text, absorbed into pdata fn 0x83845F40.
+#   0x83846050  lwz r10, 0(r3)
+#   0x83846054  li r11, 0
+#   0x83846058  stw r11, 0x6c(r10)
+#   0x8384605C  lwz r10, 0(r3)
+#   0x83846060  stw r11, 0x14(r10)
+#   0x83846064  blr
+0x83846050 = { name = "sub_83846050_missed", size = 0x18 }
+
+# Fiber/context switch, reached by a tail `b` from 0x8380E638. Saves the
+# current context into the thread block ([r13+0x100]+0x164) and restores the
+# one in r3, so it spans both halves and does not return to its caller.
+# Absorbed into pdata fn 0x83819170.
+#   0x83819200  lwz r4, 0x100(r13)
+#   0x83819204  lwz r5, 0x164(r4)
+#   0x83819208  mfcr r6
+#   0x8381920C  mflr r7
+#   0x83819210  std r1, 0x30(r5)
+#   0x83819214  std r14, 0x98(r5)
+#   0x83819218  std r15, 0xa0(r5)
+#   0x8381921C  std r16, 0xa8(r5)
+#   0x83819220  std r17, 0xb0(r5)
+#   0x83819224  std r18, 0xb8(r5)
+#   0x83819228  std r19, 0xc0(r5)
+#   0x8381922C  std r20, 0xc8(r5)
+#   ...
+0x83819200 = { name = "ContextSwitch_83819200", size = 0x40C }
+
+# .text, absorbed into pdata fn 0x83758B60.
+#   0x83759098  li r11, 6
+#   0x8375909C  li r10, 0
+#   0x837590A0  li r3, 0
+#   0x837590A4  stb r11, 0(r4)
+#   0x837590A8  sth r10, 2(r4)
+#   0x837590AC  blr
+0x83759098 = { name = "sub_83759098_missed", size = 0x18 }
+
+# .text, absorbed into pdata fn 0x83753D08.
+#   0x83753E00  lbz r10, 0x3c(r3)
+#   0x83753E04  clrlwi r11, r4, 0x18
+#   0x83753E08  mr r9, r5
+#   0x83753E0C  mr r5, r6
+#   0x83753E10  cmplw cr6, r11, r10
+#   0x83753E14  blt cr6, 0x83753e24
+#   0x83753E18  lis r3, -0x7ff9
+#   0x83753E1C  ori r3, r3, 0x57
+#   0x83753E20  blr
+#   0x83753E24  lwz r10, 0x24(r3)
+#   0x83753E28  slwi r11, r11, 3
+#   0x83753E2C  mr r6, r7
+#   ...
+0x83753E00 = { name = "sub_83753E00_missed", size = 0x48 }
+
+# .text, absorbed into pdata fn 0x8375A978.
+#   0x8375B0B8  addi r3, r3, -0x10
+#   0x8375B0BC  b 0x8375a878
+0x8375B0B8 = { name = "sub_8375B0B8_missed", size = 0x8 }
+
+# Selecting a DLC costume killed the game with
+#   [FATAL] Call to invalid or unregistered function at guest address 0x836D7C08
+# once the costume sprites and message files had loaded. The DLC itself is
+# fine; this is the delegate trampoline the costume menu calls through.
+#
+# Both of these sit in the padding *after* fn 0x836D7B90's `blr` at
+# 0x836D7BF0, separated by a zero word, so .pdata swallowed them into that
+# function's range and no call could reach them.
+#
+# A callback trampoline: swap in a new `this` from [this+0x10] and tail-call
+# the function pointer at [this+0xC].
+#   0x836D7C08  mr r11, r3
+#   0x836D7C0C  lwz r3, 0x10(r11)
+#   0x836D7C10  lwz r11, 0xc(r11)
+#   0x836D7C14  mtctr r11
+#   0x836D7C18  bctr
+0x836D7C08 = { name = "sub_836D7C08_missed", size = 0x14 }
+
+# Its neighbour in the same padding, same shape - adjust `this` by +0x10 and
+# tail-call [this+0xC]. Not yet observed faulting, but it is unreachable for
+# exactly the same reason and would fault the moment anything called it.
+#   0x836D7BF8  lwz r11, 0xc(r3)
+#   0x836D7BFC  addi r3, r3, 0x10
+#   0x836D7C00  mtctr r11
+#   0x836D7C04  bctr
+0x836D7BF8 = { name = "sub_836D7BF8_missed", size = 0x10 }
+
+# .text, absorbed into pdata fn 0x824355F0.
+#   0x824356D0  lbz r11, 0(r4)
+#   0x824356D4  lis r10, -0x7beb
+#   0x824356D8  li r3, 2
+#   0x824356DC  stb r11, 0x2736(r10)
+#   0x824356E0  blr
+0x824356D0 = { name = "sub_824356D0_missed", size = 0x14 }
+
+# A one-instruction JUMP THUNK: `b 0x83683358`, and nothing else. It sits
+# after fn 0x83682B30's own `b` at 0x83682F2C, with a zero pad after it and
+# the next real function at 0x83682F38.
+#
+# Reached when Proceed is pressed on the chapter card, which crashed with
+#   [FATAL] Call to invalid or unregistered function at guest address 0x83682F30
+#
+# SIZE IS 4, AND add_function.py GETS THIS WRONG. It reported 0x804: its size
+# heuristic does not stop at an unconditional branch, so it ran straight
+# through the padding, through the next function, and would have swallowed it.
+# Always check the size that tool prints against the disassembly.
+#   0x83682F30  b 0x83683358
+0x83682F30 = { name = "sub_83682F30_missed", size = 0x4 }
+
+# .text, absorbed into pdata fn 0x82348270.
+#   0x82348688  li r9, 0xca
+#   0x8234868C  lis r10, -0x7c3a
+#   0x82348690  li r11, 0
+#   0x82348694  sth r9, 0(r3)
+#   0x82348698  stw r11, 0x1db0(r10)
+#   0x8234869C  blr
+0x82348688 = { name = "sub_82348688_missed", size = 0x18 }
+
+# .text, absorbed into pdata fn 0x83759F10.
+#   0x83759FF0  addi r3, r3, -4
+#   0x83759FF4  b 0x837e4c98
+0x83759FF0 = { name = "sub_83759FF0_missed", size = 0x8 }
+
+# .text, absorbed into pdata fn 0x8375A978.
+#   0x8375B0E0  addi r3, r3, -0x10
+#   0x8375B0E4  b 0x8375a640
+0x8375B0E0 = { name = "sub_8375B0E0_missed", size = 0x8 }
+
+# .text, absorbed into pdata fn 0x8375A978.
+#   0x8375B108  addi r3, r3, -0x10
+#   0x8375B10C  b 0x8375a6a0
+0x8375B108 = { name = "sub_8375B108_missed", size = 0x8 }
+
+# .text, absorbed into pdata fn 0x8375DFB8.
+#   0x8375E1C8  addi r3, r3, -0x10
+#   0x8375E1CC  b 0x8375b978
+0x8375E1C8 = { name = "sub_8375E1C8_missed", size = 0x8 }
+
+# .text, absorbed into pdata fn 0x8375DFB8.
+#   0x8375E1D8  addi r3, r3, -0x10
+#   0x8375E1DC  b 0x8375de00
+0x8375E1D8 = { name = "sub_8375E1D8_missed", size = 0x8 }
+
+# .text, absorbed into pdata fn 0x8375DFB8.
+#   0x8375E208  addi r3, r3, -0x10
+#   0x8375E20C  b 0x8375a030
+0x8375E208 = { name = "sub_8375E208_missed", size = 0x8 }
+
+# .text, absorbed into pdata fn 0x8375DFB8.
+#   0x8375E210  addi r3, r3, -4
+#   0x8375E214  b 0x8375b130
+0x8375E210 = { name = "sub_8375E210_missed", size = 0x8 }
+
+# .text, absorbed into pdata fn 0x8375DFB8.
+#   0x8375E218  addi r3, r3, -0x10
+#   0x8375E21C  b 0x8375a010
+0x8375E218 = { name = "sub_8375E218_missed", size = 0x8 }
+
+# .text, absorbed into pdata fn 0x8375DFB8.
+#   0x8375E220  addi r3, r3, -0x10
+#   0x8375E224  b 0x8375c878
+0x8375E220 = { name = "sub_8375E220_missed", size = 0x8 }
+
+# .text, absorbed into pdata fn 0x837FAE70. An adjustor thunk like the rest.
+#   0x837FAEDC  addi r3, r3, -4
+#   0x837FAEE0  b 0x837FB9F0
+#   0x837FAEE4  <00000000>          <- padding; the thunk ends here
+#
+# SIZE CORRECTED BY HAND to 0x8. add_function.py sizes a function by scanning
+# forward to the next blr, which for a thunk walks straight through the zero
+# padding and over the two unrelated functions that follow - it proposed
+# 0x3DD4, i.e. 15,828 bytes for two instructions. Registering that span as one
+# function would have swallowed everything inside it. The other nine thunks
+# added in the same run happened to sit directly before a blr and came out at
+# the correct 0x8; this one did not, which is the only reason it was visible.
+0x837FAEDC = { name = "adjustor_thunk_837FAEDC", size = 0x8 }
+
+# .text, absorbed into pdata fn 0x836AA1C8.
+#   0x836AA260  lis r11, -0x7de8
+#   0x836AA264  lfs f1, -0x924(r11)
+#   0x836AA268  blr
+0x836AA260 = { name = "sub_836AA260_missed", size = 0xC }
+
+# .text, absorbed into pdata fn 0x83680D60.
+#   0x83680E28  lwz r11, 0(r3)
+#   0x83680E2C  lwz r11, 0x40(r11)
+#   0x83680E30  mtctr r11
+#   0x83680E34  bctr
+0x83680E28 = { name = "sub_83680E28_missed", size = 0x10 }
+
+# .text, absorbed into pdata fn 0x823EEB38.
+#   0x823F05BC  li r17, 1
+#   0x823F05C0  mr r3, r17
+#   0x823F05C4  addi r1, r1, 0x220
+#   0x823F05C8  addi r12, r1, -0x98
+#   0x823F05CC  bl 0x83955864
+#   0x823F05D0  b 0x83954280
+0x823F05BC = { name = "sub_823F05BC_missed", size = 0x18 }
+
+# .text, absorbed into pdata fn 0x83723338.
+#   0x8372398C  li r3, 1
+#   0x83723990  bl 0x8246f198
+#   0x83723994  addi r11, r27, 0x18
+#   0x83723998  stw r11, 0(r26)
+#   0x8372399C  addi r1, r1, 0x180
+#   0x837239A0  addi r12, r1, -0x38
+#   0x837239A4  bl 0x83955854
+#   0x837239A8  b 0x839542b0
+0x8372398C = { name = "sub_8372398C_missed", size = 0x20 }
+
+# .embsec_, absorbed into pdata fn 0x83A4A910.
+#   0x83A566F8  lwz r11, 0(r22)
+#   0x83A566FC  lwz r10, 0x78(r1)
+#   0x83A56700  addi r11, r11, 2
+#   0x83A56704  lwz r9, 0x6c(r1)
+#   0x83A56708  addi r10, r10, 1
+#   0x83A5670C  addi r9, r9, 0x18
+#   0x83A56710  stw r11, 0(r22)
+#   0x83A56714  lwz r11, 4(r22)
+#   0x83A56718  stw r10, 0x78(r1)
+#   0x83A5671C  addi r11, r11, 1
+#   0x83A56720  stw r9, 0x6c(r1)
+#   0x83A56724  stw r11, 4(r22)
+#   ...
+0x83A566F8 = { name = "sub_83A566F8_missed", size = 0xC4 }
