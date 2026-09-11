@@ -570,6 +570,8 @@ everything it had observed.
 Sound died mid-session and never came back: no error, the audio session still
 ACTIVE, its peak flat at zero, and immune to alt-tabbing. Worst in Chapter 12,
 which is the clue - at 28 fps it underruns far more often than anywhere else.
+(The 28 fps was the test machine's graphics card being saturated by other
+work at the time, not the port; the underruns were real all the same.)
 
 The SDL driver's semaphore is a credit meaning "the guest may submit one more
 frame". It was returned ONLY when a real frame had been consumed, so the first

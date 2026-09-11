@@ -254,7 +254,6 @@ If the game never reaches the menu, set the environment variable
   ring-buffer failure unrelated to the one fixed in v1.0.0. It has not been seen
   since the ring fix was fully deployed, but it is not closed until a long
   unattended run says so.
-- **Chapter 12 runs at around 28 fps.** Playable; not explained.
 - **Chapter-loading videos cannot be skipped**, by design: the game treats one
   of them failing to open as a bad disc.
 - **Achievements earned in a chapter are awarded at the next chapter load**,

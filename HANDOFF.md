@@ -333,7 +333,8 @@ apart. Zero delta over 8s = genuinely blocked.
 3. **Chapter 12 → 13** — blocked on a real playthrough.
 4. Re-cut the release package; the current one predates all of today's fixes.
 
-Still open from before today, untouched: chapter 12 runs at ~28 fps; BC7/BC3
+Still open from before today, untouched: chapter 12 runs at ~28 fps (later
+withdrawn: the test machine's GPU was saturated by other work); BC7/BC3
 texture compression never attempted; ~1,300 missing guest functions need
 per-candidate extent validation before bulk registration (a previous attempt
 produced overlapping extents and undefined-label compile errors).

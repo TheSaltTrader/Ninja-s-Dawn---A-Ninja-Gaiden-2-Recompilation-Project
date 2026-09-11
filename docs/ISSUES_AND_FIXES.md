@@ -813,7 +813,9 @@ deploy and has not been observed since; it is kept open as O2.
 
 **Symptom.** Sound died mid-session and never came back: no error, the audio
 session still active, its peak flat at zero, immune to alt-tabbing. Worst in
-chapter 12, which at 28 fps underruns far more often than anywhere else.
+chapter 12, which on the test machine at the time ran at 28 fps (the graphics
+card was saturated by other work, O3) and so underran far more often than
+anywhere else.
 
 **Cause.** The SDL audio driver's semaphore is a credit meaning "the guest may
 submit one more frame", and it was returned only when a real frame had been
@@ -1942,7 +1944,9 @@ waiting on. It has not been observed since the ring fix was really deployed
 that would root-cause it is in the deployed plugin, but it is not closed until
 a long unattended run says so.
 
-**O3. Chapter 12 runs at about 28 fps.** Playable; not explained.
+**O3. Withdrawn: "chapter 12 runs at about 28 fps".** The low frame rate was
+measured while this machine's graphics card was saturated by other work; it
+was never the port's. Not an open issue.
 
 **O4. Mission Mode needs the game's title update.** Not a licence or content
 problem: a full licence mask and installing the content under the profile's
