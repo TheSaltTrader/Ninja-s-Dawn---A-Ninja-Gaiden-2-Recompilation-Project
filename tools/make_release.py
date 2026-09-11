@@ -26,6 +26,7 @@ handing to someone who already owns Ninja Gaiden II - not for publishing.
 
 import argparse
 import datetime
+import glob
 import hashlib
 import os
 import platform
@@ -49,6 +50,19 @@ PAYLOAD = [
     "rexgpu-xenos.dll",
     "gamecontrollerdb.txt",
 ]
+
+# The Visual C++ runtime the executable and both SDK DLLs import. Windows does
+# not ship it, so without these a machine that never installed the
+# redistributable fails at start-up with a "DLL not found" box and nothing in
+# the log. Microsoft permits shipping these files beside an application
+# (app-local deployment). They are the only thing the game loads that is
+# neither Windows itself nor this folder - checked by listing the modules of
+# the running process (v1.0.6).
+VCRT_DLLS = ["msvcp140.dll", "vcruntime140.dll", "vcruntime140_1.dll",
+             "msvcp140_atomic_wait.dll"]
+VCRT_GLOB = os.path.join(os.environ.get("ProgramFiles(x86)", r"C:\Program Files (x86)"),
+                         "Microsoft Visual Studio", "2022", "*", "VC", "Redist", "MSVC",
+                         "*", "x64", "Microsoft.VC143.CRT")
 
 # Sources whose mtime must predate the executable, or the build is stale.
 SOURCE_GLOBS = ["src", "config", "ng2_manifest.toml", "CMakeLists.txt"]
@@ -529,6 +543,18 @@ def main():
         print("  %-24s %s%s" % (name, human(os.path.getsize(os.path.join(dest, name))),
                                 ("   [%s]" % note) if note else ""))
     check_sdk_pair(dest)
+
+    # The VC runtime, from the compiler's own redistributable set.
+    vcrt_dirs = sorted(glob.glob(VCRT_GLOB))
+    if not vcrt_dirs:
+        die("Visual C++ redistributable folder not found under %s" % VCRT_GLOB)
+    vcrt_dir = vcrt_dirs[-1]
+    for name in VCRT_DLLS:
+        source = os.path.join(vcrt_dir, name)
+        if not os.path.isfile(source):
+            die("%s is missing from %s" % (name, vcrt_dir))
+        shutil.copy2(source, os.path.join(dest, name))
+        print("  %-24s %s   [VC runtime]" % (name, human(os.path.getsize(source))))
 
     os.makedirs(os.path.join(dest, "tools"), exist_ok=True)
     for tool, required in TOOLS:

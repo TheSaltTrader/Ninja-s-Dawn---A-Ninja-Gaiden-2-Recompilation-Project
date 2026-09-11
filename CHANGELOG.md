@@ -32,6 +32,17 @@ The instrumentation used to find this (function tracers, state dumps, the
 build: the recompiled sources were regenerated from the game and only the
 fixes remain, so the game runs without the per-function trace check.
 
+### Fixed - the release needed the Visual C++ runtime to be installed already
+
+A standalone check of what the game loads found one thing outside Windows and
+the release folder: the Visual C++ 2015-2022 runtime (msvcp140, vcruntime140,
+vcruntime140_1 and msvcp140_atomic_wait). Windows does not ship it, so on a
+machine without it the game would not start, with a "DLL not found" message
+and nothing in the log. The four DLLs now ship in the release folder, copied
+from the compiler's own redistributable set and listed in the provenance file
+like everything else. Everything else the game loads is Windows itself, the
+two runtime DLLs beside it, and the files you bring: the game and the DLC.
+
 
 ### Fixed - the pack could serve the wrong texture (shop windows rendered violet)
 
