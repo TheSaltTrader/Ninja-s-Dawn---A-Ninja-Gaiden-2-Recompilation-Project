@@ -308,10 +308,8 @@ class Ng2App : public rex::ReXApp {
           // checkbox is where the preference is set; this is a look.
         });
 
-    rex::ui::RegisterBind("bind_ng2_quit", "Escape", "Quit the game", [this] {
-      ShutdownCleanly();
-      app_context().QuitFromUIThread();
-    });
+    rex::ui::RegisterBind("bind_ng2_quit", "Escape", "Quit the game",
+                          [this] { QuitFromEscape(); });
 
     rex::ui::RegisterBind(
         "bind_ng2_settings", "F10", "Toggle the Ninja Gaiden II settings menu",
@@ -370,25 +368,55 @@ class Ng2App : public rex::ReXApp {
     StartExitWatchdog();
   }
 
-  // Make sure the process actually goes.
+  // Escape's quit: release what we own, then take the close button's path.
   //
-  // Escape asks the runtime to quit gracefully, and measured, that does not
-  // come back: our own teardown runs to completion and logs it, and then the
-  // process sits there not responding - the guest's threads are fibers and the
-  // graceful path waits on something that never finishes. The close button does
-  // not hit this, because the SDK hard-exits on that path itself ("Title
-  // terminated; hard-exiting process").
+  // It used to ask the runtime to quit gracefully (QuitFromUIThread), and
+  // measured, that never comes back: our own teardown ran to completion and
+  // logged it, and the process sat there until the watchdog below killed it
+  // three seconds later, window black the whole time. The guest's threads are
+  // fibers and the graceful path waits on something that never finishes. The
+  // close button never showed it, because the SDK's close path terminates the
+  // title and hard-exits ("Title terminated; hard-exiting process."). So
+  // Escape now asks the window to close, which is exactly that path, with the
+  // watchdog kept behind it in case the request is ever swallowed. Fable 2
+  // made the same change first and measured it: 0.4 s where the watchdog
+  // path took 3.3 s.
   //
-  // So the ordering is: release everything WE own, give the runtime a few
-  // seconds to shut down properly, and if it has not, do what the close button
-  // already does. Quitting cleanly means the settings are written and our
-  // threads are joined - which has happened by the time this starts - not that
-  // the process is entitled to hang.
+  // Reachable from a test seam as well as the key: NG2_QUIT_AFTER=<seconds>
+  // fires this from a timer, so whether the quit really exits, and how fast,
+  // is something a script measures rather than something anyone believes.
+  void QuitFromEscape() {
+    REXLOG_INFO("Escape: quitting");
+    ShutdownCleanly();
+    tex_job_.CancelAndJoin();
+    if (auto* w = window()) {
+      w->RequestClose();
+    } else {
+      app_context().QuitFromUIThread();
+    }
+  }
+
+  void ArmQuitSeam() {
+    const int after = EnvInt("NG2_QUIT_AFTER", 0);
+    if (after <= 0)
+      return;
+    REXLOG_INFO("Quit seam: Escape's path fires in {} s", after);
+    std::thread([this, after] {
+      std::this_thread::sleep_for(std::chrono::seconds(after));
+      app_context().CallInUIThreadDeferred([this] { QuitFromEscape(); });
+    }).detach();
+  }
+
+  // Make sure the process actually goes. Our own teardown is done by the time
+  // this starts - the settings are written, our threads are joined - so what
+  // remains is the runtime's, and it is not entitled to hang. On the close
+  // request path this never fires; it is the backstop.
   void StartExitWatchdog() {
     std::thread([] {
       std::this_thread::sleep_for(std::chrono::seconds(3));
-      REXLOG_WARN("Shutdown: the runtime did not finish in 3s; exiting now");
+      REXLOG_WARN("Shutdown: the runtime did not finish in 3 s; exiting now");
       std::fflush(nullptr);
+      rex::FlushLogging();
       std::_Exit(0);
     }).detach();
   }
@@ -1004,6 +1032,7 @@ class Ng2App : public rex::ReXApp {
 
   void OnPostSetup() override {
     MaybeWriteDiagnostics();
+    ArmQuitSeam();
 
     // [diag] Opt-in now, and that is the whole point.
     //

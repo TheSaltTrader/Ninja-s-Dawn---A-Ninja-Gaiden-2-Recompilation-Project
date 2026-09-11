@@ -3,6 +3,27 @@
 Versions are cut with `tools/make_release.py`, which refuses to package a
 version that has no section here.
 
+## v1.0.7 - 2026-09-11
+
+### Fixed - Escape took three seconds to quit, with a black window
+
+Escape released everything the port owns, asked the runtime to quit
+gracefully, and then waited: that graceful path never returns on this title
+(the guest's threads are fibers and it waits on something that never
+finishes), so the process sat with a black window until the three-second
+watchdog killed it. The window's close button never had the problem, because
+the SDK's close path terminates the title and hard-exits at once.
+
+Escape now takes that same path: it saves the settings, joins the port's own
+threads, and then asks the window to close. The watchdog stays behind it as a
+backstop and no longer fires. Measured from the "Escape: quitting" line to the
+process being gone: 0.7 seconds, where it was 3.3. The Fable II port made this
+change first and measured the same.
+
+The exit is measurable rather than believed: `NG2_QUIT_AFTER=<seconds>` in the
+environment fires Escape's own code from a timer, and `scratchpad/quit_test.ps1`
+launches the build with it and times the process to its end.
+
 ## v1.0.6 - 2026-09-11
 
 ### Fixed - the red mist after a boss: the next chapter now loads on its own
