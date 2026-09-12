@@ -3,6 +3,23 @@
 Versions are cut with `tools/make_release.py`, which refuses to package a
 version that has no section here.
 
+## v1.0.12 - 2026-09-12
+
+### Fixed - switching the texture pack with F9 a few times in a row crashed the game
+
+Every crash of this kind had the same stack: the GPU plugin reading a 4x pack
+file into a texture that had been created at 1x. A texture created while the
+pack was off has the game's own size; when the pack came back on before the
+end-of-frame cache clear had recreated it, the upload looked the pack file up
+again, found it, and read four times the buffer. The 1.5-second guard on the
+key (v1.0.10) only narrowed the window.
+
+The plugin now records the replacement it chose when the texture was created
+and uploads that one, and refuses any file whose size differs from the texture
+it is going into. This port takes the runtime and GPU plugin pair that carries
+it (the Fable II port, which shares the plugin, made the change), so F9 can be
+pressed as often as wanted, mid-load included.
+
 ## v1.0.11 - 2026-09-11
 
 ### Fixed - collapsing the settings window crashed the game
