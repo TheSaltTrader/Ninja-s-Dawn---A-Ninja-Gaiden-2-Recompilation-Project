@@ -3,6 +3,29 @@
 Versions are cut with `tools/make_release.py`, which refuses to package a
 version that has no section here.
 
+## v1.0.8 - 2026-09-11
+
+### Fixed - a texture run that stopped halfway redid every texture
+
+A 4x AI run died 2,449 textures into the 9,418 it had left: the disk was full
+("No space left on device", in the log). The pack's record then said the run
+was incomplete, and the tool treated that exactly like a pack made with other
+settings: the next run would redo every texture, all 22,026, and rewrite the
+104 GB already made. Hours of work, thrown away for one interrupted write.
+
+The completion flag no longer decides that. When the pack's scale, upscaler
+and strength match the settings, an interrupted run continues with the
+textures still missing. What counts as "already in the pack" is now a file
+whose size matches its own header; the one file the failure cut short (a
+header with no pixels behind it) is redone rather than handed to the game.
+Checking 15,255 files takes two seconds. The settings menu says "the next run
+continues with the textures still missing" instead of promising to redo
+everything.
+
+Worth knowing: a 4x pack is raw RGBA, about 7 MB per 1024x1024 texture, so
+the full game at 4x runs to well over 100 GB. The menu's size estimate is
+being revisited.
+
 ## v1.0.7 - 2026-09-11
 
 ### Fixed - Escape took three seconds to quit, with a black window

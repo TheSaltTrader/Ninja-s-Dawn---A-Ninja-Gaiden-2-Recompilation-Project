@@ -397,6 +397,35 @@ def write_tex(path, img):
         f.write(img.tobytes())
 
 
+def intact_pack_ids(pack):
+    """The ids of the pack's .tex files that are whole: header present and the
+    file exactly 16 + width*height*4 bytes. Returns (ids, number cut short).
+
+    Reading 16 bytes of each of ~15,000 files takes a few seconds and is what
+    makes "leave the textures already in the pack alone" safe after a run that
+    died mid-write: the file the failure cut short is the one to redo, and the
+    plugin would otherwise be handed a texture with no pixels behind its header.
+    """
+    ids = set()
+    cut_short = 0
+    for fn in os.listdir(pack):
+        if not fn.endswith(".tex"):
+            continue
+        path = os.path.join(pack, fn)
+        try:
+            with open(path, "rb") as f:
+                hdr = f.read(16)
+            if len(hdr) == 16 and hdr[:4] == TEX_MAGIC:
+                _, w, h = struct.unpack("<III", hdr[4:16])
+                if os.path.getsize(path) == 16 + w * h * 4:
+                    ids.add(fn[:-4])
+                    continue
+        except OSError:
+            pass
+        cut_short += 1
+    return ids, cut_short
+
+
 def pack_reason(w, h, fmt):
     """Why a texture is NOT a pack candidate, or None if it is.
 
@@ -602,20 +631,32 @@ def main():
         m = read_manifest(pack)
         if m:
             same = (m.get("scale") == str(args.scale) and m.get("upscaler") == upscaler_name
-                    and abs(float(m.get("strength", "0")) - strength) < 0.005
-                    and m.get("complete") == "1")
+                    and abs(float(m.get("strength", "0")) - strength) < 0.005)
             if not same:
-                print("NOTE: the pack was made at %sx with %s (strength %s, complete=%s); "
+                print("NOTE: the pack was made at %sx with %s (strength %s); "
                       "the settings now are %dx with %s (strength %.2f) - redoing every texture"
-                      % (m.get("scale"), m.get("upscaler"), m.get("strength"), m.get("complete"),
+                      % (m.get("scale"), m.get("upscaler"), m.get("strength"),
                          args.scale, upscaler_name, strength), flush=True)
                 args.only_missing = False
+            elif m.get("complete") != "1":
+                # A run that stopped halfway (out of disk, cancelled, crashed)
+                # leaves complete=0. Every texture it did write is whole and made
+                # with these settings, so the run continues with what is missing.
+                # It used to redo everything here, which after a failure 2,449
+                # textures into a 9,418-texture run meant redoing all 22,026 at
+                # 4x and rewriting the 104 GB already made.
+                print("NOTE: the pack's last run was stopped halfway - continuing with the "
+                      "textures still missing (a file cut short by the stop is redone)",
+                      flush=True)
     # What is already in the pack, for --only-missing. A pack of ~6,000 takes
     # half an hour with the AI; the handful dumped since take minutes, and
     # redoing everything to get them was the only option before this.
     have_tex = set()
     if args.only_missing and os.path.isdir(pack):
-        have_tex = {fn[:-4] for fn in os.listdir(pack) if fn.endswith(".tex")}
+        have_tex, cut_short = intact_pack_ids(pack)
+        if cut_short:
+            print("%d pack file(s) are shorter than their header says (a write cut short) "
+                  "- they will be redone" % cut_short, flush=True)
     reused = 0
     # Two steps, each reported as its own PROGRESS bar. Naming them lets the
     # app restart its bar and its clock at the second rather than showing 100%

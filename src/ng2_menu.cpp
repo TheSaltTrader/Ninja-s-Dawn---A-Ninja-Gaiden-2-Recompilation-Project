@@ -1830,8 +1830,8 @@ bool SettingsOverlay::DrawTextures() {
       else
         std::snprintf(made, sizeof(made), "%dx, Lanczos", pack_scale);
       if (!pack_complete)
-        Muted("The pack's last run was stopped halfway (%s) - the next run redoes "
-              "every texture.", made);
+        Muted("The pack's last run was stopped halfway (%s) - the next run continues "
+              "with the textures still missing.", made);
       else if (settings_differ)
         Muted("The pack was made at %s, which differs from the settings above - "
               "the next run redoes every texture.", made);
