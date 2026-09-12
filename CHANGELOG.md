@@ -3,6 +3,23 @@
 Versions are cut with `tools/make_release.py`, which refuses to package a
 version that has no section here.
 
+## v1.0.11 - 2026-09-11
+
+### Fixed - collapsing the settings window crashed the game
+
+The arrow at the top left of the in-game settings window collapses it, as
+any such window does. Collapsed, the window is not drawn, but the texture
+section went on submitting its rows into a table that was never begun, and
+the first row read through a null table pointer inside the runtime. The crash
+dump named the line. The window no longer offers the arrow (F10 closes it), a
+window that is not drawn ends early, and the texture table is guarded like
+every other table on the page.
+
+Found through Windows' own crash dumps in `%LOCALAPPDATA%\CrashDumps`, which
+the port had never looked at: every crash the game has had is recorded there
+with a stack, even when the log stops without a word. Four other crashes from
+the same evening are named in `docs/ISSUES_AND_FIXES.md` (S22, still open).
+
 ## v1.0.10 - 2026-09-11
 
 ### Fixed - pressing F9 twice quickly could crash the game
