@@ -16,7 +16,7 @@ entry that describes something later withdrawn or replaced says so in the
 entry itself, so that a superseded fix is never read as the current one.
 
 Entries carry an id (B1, R2, ...) so that they can cross-refer. The appendix at
-the end maps every one of the changelog's 136 headings to the entry that
+the end maps every one of the changelog's 137 headings to the entry that
 covers it, so what this document does not cover can be counted rather than
 guessed.
 
@@ -29,7 +29,7 @@ guessed.
 | Audio | 2 |
 | Chapter transitions and crashes | 4 |
 | Texture pack and AI upscaling | 17 |
-| Settings, installer and launcher | 20 |
+| Settings, installer and launcher | 21 |
 | Input | 5 |
 | Tools and diagnostics | 15 |
 | Still open | 14 |
@@ -1624,6 +1624,25 @@ when a delay is chosen and back when set to never.
 
 **Version.** v1.0.5.
 
+**S21. A settings path may be relative to the executable's folder**
+
+**Symptom.** An install could not be moved as one folder: `texture_path`,
+`game_path`, `dlc_path` and the remembered `iso_path` were absolute, so a
+copy on another drive or PC opened the setup screen and the texture pack
+went missing until the paths were set again.
+
+**Cause.** A relative path in the settings file was resolved against the
+process's working directory, which is the install folder only when the
+game is launched from it, so relative paths were never usable.
+
+**Fix.** `Ng2Settings::Beside()` resolves a non-absolute path against the
+folder ng2.exe is in; the game, DLC, texture and remembered-ISO paths go
+through it. A pre-configured folder with `game\`, `dlc\`, `user\`,
+`textures\` and `iso\` inside it and `texture_path=textures` in its settings
+keeps working wherever it is put. `scratchpad/make_portable.ps1` assembles one.
+
+**Version.** v1.0.9.
+
 ---
 
 ## Input
@@ -2125,138 +2144,139 @@ findings list) are mapped to the entry that carries their substance.
 | # | Version | Heading | Entry |
 |---|---|---|---|
 | 1 | v1.0.9 | Fixed - the settings menu still forced the full redo | T17 |
-| 2 | v1.0.8 | Fixed - a texture run that stopped halfway redid every texture | T17 |
-| 3 | v1.0.7 | Fixed - Escape took three seconds to quit | B5 |
-| 4 | v1.0.6 | Fixed - the red mist after a boss | C2 |
-| 5 | v1.0.6 | Fixed - the release needed the Visual C++ runtime | B8 |
-| 6 | v1.0.6 | Fixed - the pack could serve the wrong texture | T14 |
-| 7 | v1.0.6 | Fixed - "Dump while playing" did nothing | T15 |
-| 8 | v1.0.6 | Fixed - the census could not see a second texture | T16 |
-| 9 | v1.0.5 | Fixed - the settings pointer never hid | S20 |
-| 10 | v1.0.5 | Fixed - the texture upscale died when the menu closed | T12 |
-| 11 | v1.0.5 | Changed - the enhanced-texture status false count | T13 |
-| 12 | v1.0.4 | Fixed - crash at the chapter 13 boss | R6, C3 |
-| 13 | v1.0.4 | Still open - chapter 12 never hands over to 13 | C2 |
-| 14 | v1.0.3 | Fixed - chapter 12 never handed over to 13 | C1, C2 |
-| 15 | v1.0.2 | Fixed - the music died mid-session | A2 |
-| 16 | v1.0.2 | Changed - the texture counts | T7 |
-| 17 | v1.0.2 | Added - processing only what is missing | T7 |
-| 18 | v1.0.1 | Fixed - the whole picture stretched | D7 |
-| 19 | v1.0.1 | Fixed - Cancel did not cancel | T5 |
-| 20 | v1.0.1 | Fixed - the progress bar reached 100% | T6 |
-| 21 | v1.0.1 | Fixed - the AI upscaler garbled at 2x | T4 |
-| 22 | v1.0.0 | Added - a Browse button | S18 |
-| 23 | v1.0.0 | Changed - every setting editable in-game | S18 |
-| 24 | v1.0.0 | Fixed - the stuck-wait watchdog | X4 |
-| 25 | v1.0.0 | Fixed - `db16cyc` translated to nothing | R5 |
-| 26 | v1.0.0 | Fixed - two graphics settings never reached the plugin | D9 |
-| 27 | v1.0.0 | Changed - V-Sync states its consequence | D10 |
-| 28 | v1.0.0 | Added - a census of Xenia's known issues | X6 |
-| 29 | v1.0.0 | Fixed - the publication allowlist | X3 |
-| 30 | v1.0.0 | Fixed - the attract demo no longer freezes | D12, O2 |
-| 31 | v1.0.0 | Added - one button for a bug report | X7 |
-| 32 | v1.0.0 | Added - a Lodestone census | X5 |
-| 33 | v1.0.0 | Added - the texture pack is warmed per stage | T11 |
-| 34 | v1.0.0 | Fixed - audio could stop silently | A1 |
-| 35 | v1.0.0 | Fixed - opening the settings could kill the process | S19 |
-| 36 | v1.0.0 | Fixed - the settings menu scanned two folders | T10 |
-| 37 | v1.0.0 | Changed - dumping and the pack cannot both be on | T8 |
-| 38 | v1.0.0 | Changed - the upscaler is a choice | T9 |
-| 39 | v1.0.0 | Fixed - the Chapter 12 workaround applies only to 12 | C1 |
-| 40 | v1.0.0 | Added - three more guest functions | R1 |
-| 41 | v1.0.0 | Fixed - the release shipped no tools | X2 |
-| 42 | v1.0.0 | Fixed - "Skip intro videos" could not be turned off | V8 |
-| 43 | v1.0.0 | Fixed - "Skip chapter cinematics" could never fire | V9 |
-| 44 | v1.0.0 | Removed - the video conversion machinery | V11 |
-| 45 | v0.5.4 | Added - live CPU/GPU/VRAM readouts | X8 |
-| 46 | v0.5.4 | Changed - supersampling goes to 8x | D8 |
-| 47 | v0.5.4 | Added - accurate depth and fuzzy alpha | D8 |
-| 48 | v0.5.4 | Fixed - F9 no longer overwrites the setting | T2 |
-| 49 | v0.5.4 | Added - AI upscaling, as an optional download | T3 |
-| 50 | v0.5.4 | Added - the memory settings from the hardware | S17 |
-| 51 | v0.5.4 | Added - F9 switches the pack | T2 |
-| 52 | v0.5.4 | Changed - the pack format is raw, default 2x | T1 |
-| 53 | v0.5.4 | Added - the texture pack is actually used | T1 |
-| 54 | v0.5.4 | Added - frame-time statistics | X8 |
-| 55 | v0.5.4 | Changed - the texture cache can be raised | D8 |
-| 56 | v0.5.3 | Added - an application icon | S16 |
-| 57 | v0.5.3 | Fixed - "Quit Game" returns to the setup screen | B6 |
-| 58 | v0.5.3 | Fixed - the video mode setting could never select 0 | V10 |
-| 59 | v0.5.3 | Fixed - the game crashed ~90 seconds after launch | B7 |
-| 60 | v0.5.3 | Changed - texture dumping refuses non-art | T1 |
-| 61 | v0.5.2 | Fixed - character stuck at a ledge | R4 |
-| 62 | v0.5.2 | Added - external live analysis | X9 |
-| 63 | v0.5.1 | Fixed - a crash in Chapter 5 on ten thunks | R1 |
-| 64 | v0.5.1 | Fixed - "Quit Game" left a black screen | B6 |
-| 65 | v0.5.1 | Not fixed - the ledge jump loop | R4 |
-| 66 | v0.5.0 | Fixed - every video in the game | V1, R3 |
-| 67 | v0.5.0 | Removed - the video re-encoding pipeline | V11 |
-| 68 | v0.4.5 | Added - the port's own version, on screen | S15 |
-| 69 | v0.4.4 | Fixed - pressing anything during a video worked the menu | I5 |
-| 70 | v0.4.3 | Changed - the monitor list shows resolutions | D5 |
-| 71 | v0.4.3 | Fixed - the installer forgot which disc image | S7 |
-| 72 | v0.4.2 | Fixed - 4K could not be set | D4 |
-| 73 | v0.4.2 | Fixed - the monitor list was in the wrong order | D5 |
-| 74 | v0.4.1 | Added - two graphics levers | D8 |
-| 75 | v0.4.0 | Fixed - the settings screen lost its buttons | D3 |
-| 76 | v0.4.0 | Added - update an install in place | S8 |
-| 77 | v0.3.9 | Fixed - built with no optimization | X1 |
-| 78 | v0.3.8 | Changed - import a folder of saves | S13 |
-| 79 | v0.3.7 | Fixed - the install finished at 106% | S5 |
-| 80 | v0.3.7 | Fixed - Rescan did not see freshly installed files | S6 |
-| 81 | v0.3.7 | Fixed - videos stretched on an ultrawide | V7 |
-| 82 | v0.3.7 | Known - true ultrawide rendering is not there | O1 |
-| 83 | v0.3.6 | Changed - one cheat | S12 |
-| 84 | v0.3.6 | Fixed - the setup-screen tick pushed Save off | S11 |
-| 85 | v0.3.5 | Fixed - releases shipped without ffmpeg | X2 |
-| 86 | v0.3.5 | Fixed - three settings read but never written | S9 |
-| 87 | v0.3.5 | Fixed - Escape did not close the game | B5 |
-| 88 | v0.3.5 | Changed - Cheats are ticks | S12 |
-| 89 | v0.3.5 | Added - ultrawide resolutions | D6 |
-| 90 | v0.3.5 | Added - Save settings, and a way back | S10 |
-| 91 | v0.3.4 | Added - import a saved game | S13 |
-| 92 | v0.3.4 | Fixed - reading an STFS display name | S13 |
-| 93 | v0.3.4 | Fixed - the controller did nothing, sign-in prompt | I3 |
-| 94 | v0.3.4 | Added - Skip intro videos | V8 |
-| 95 | v0.3.4 | Changed - the profile, saves and DLC live with the game | S14 |
-| 96 | v0.3.4 | Added - a Cheats section | S12 |
-| 97 | v0.3.4 | How Infinite karma works without an address | S12 |
-| 98 | v0.3.4 | Fixed - the search crashed the game | S12 |
-| 99 | v0.3.4 | Found - karma lives at 0x230 | S12 |
-| 100 | v0.3.4 | Fixed - the system save's content header | S13 |
-| 101 | v0.3.3 | Fixed - loading a save raised "Disc Read Error" | V5 |
-| 102 | v0.3.3 | Fixed - videos looked for in the wrong place | V6 |
-| 103 | v0.3.3 | Fixed - the d-pad from the keyboard | I2 |
-| 104 | v0.3.3 | Save import | S13 |
-| 105 | v0.3.2 | The Chapter 12 guard is now properly verified | C1 |
-| 106 | v0.3.1 | The Chapter 12 workaround is automatic | C1 |
-| 107 | v0.3.0 | Fixed - the intro had stopped playing | V4 |
-| 108 | v0.3.0 | Added (videos prepared at install, live with the game, Escape quits) | S4, I4 |
-| 109 | v0.3.0 | Changed (one bar, no consoles, ffmpeg beside the game, Videos row gone, Chapter 12 row gone) | S4, C1 |
-| 110 | v0.3.0 | Chapter 12 cannot be automated | C1 |
-| 111 | v0.2.2 | The intro reads as one picture | V2 |
-| 112 | v0.2.2 | Also ruled out | V2 |
-| 113 | v0.2.1 | The attract demo now plays instead of being skipped | V3 |
-| 114 | v0.2.1 | Fixed (own size, NUL byte, edge trim) | V2, X11 |
-| 115 | v0.2.1 | On the intro seams | V2 |
-| 116 | v0.2.1 | Note | V2 |
-| 117 | v0.2.0 | How it works | V2 |
-| 118 | v0.2.0 | Four things this cost | V2 |
-| 119 | v0.2.0 | Also | V2 |
-| 120 | v0.2.0 | Known | V2 |
-| 121 | v0.1.5 | Added (preset, keyboard control, hide pointer) | S3, I1 |
-| 122 | v0.1.5 | Changed (Workarounds group, tighter rows) | S3 |
-| 123 | v0.1.5 | Not brought over from re:Blue | S3 |
-| 124 | v0.1.4 | Added (Skip videos) | V8 |
-| 125 | v0.1.4 | Findings (Mission Mode, bloom) | O4, O5 |
-| 126 | v0.1.4 | Documentation | X12 |
-| 127 | v0.1.3 | Added (Chapter 12 crash workaround) | C1 |
-| 128 | v0.1.3 | Bloom | O5 |
-| 129 | v0.1.2 | Two things worth knowing (and the four absorbed functions above it) | R1, X10 |
-| 130 | v0.1.1 | Fixed (DLC costume crash) | R1 |
-| 131 | v0.1.1 | Settings | S2, D11 |
-| 132 | v0.1.1 | Not added, and why | D11, T1, O6 |
-| 133 | v0.1.0 | The recompilation | B1, B2, B3, B4 |
-| 134 | v0.1.0 | Settings | S1 |
-| 135 | v0.1.0 | Fixed | D1, D2, S1 |
-| 136 | v0.1.0 | Known issues | V1, V3, O6 |
+| 2 | v1.0.9 | Added - a settings path may be relative to the executable's folder | S21 |
+| 3 | v1.0.8 | Fixed - a texture run that stopped halfway redid every texture | T17 |
+| 4 | v1.0.7 | Fixed - Escape took three seconds to quit | B5 |
+| 5 | v1.0.6 | Fixed - the red mist after a boss | C2 |
+| 6 | v1.0.6 | Fixed - the release needed the Visual C++ runtime | B8 |
+| 7 | v1.0.6 | Fixed - the pack could serve the wrong texture | T14 |
+| 8 | v1.0.6 | Fixed - "Dump while playing" did nothing | T15 |
+| 9 | v1.0.6 | Fixed - the census could not see a second texture | T16 |
+| 10 | v1.0.5 | Fixed - the settings pointer never hid | S20 |
+| 11 | v1.0.5 | Fixed - the texture upscale died when the menu closed | T12 |
+| 12 | v1.0.5 | Changed - the enhanced-texture status false count | T13 |
+| 13 | v1.0.4 | Fixed - crash at the chapter 13 boss | R6, C3 |
+| 14 | v1.0.4 | Still open - chapter 12 never hands over to 13 | C2 |
+| 15 | v1.0.3 | Fixed - chapter 12 never handed over to 13 | C1, C2 |
+| 16 | v1.0.2 | Fixed - the music died mid-session | A2 |
+| 17 | v1.0.2 | Changed - the texture counts | T7 |
+| 18 | v1.0.2 | Added - processing only what is missing | T7 |
+| 19 | v1.0.1 | Fixed - the whole picture stretched | D7 |
+| 20 | v1.0.1 | Fixed - Cancel did not cancel | T5 |
+| 21 | v1.0.1 | Fixed - the progress bar reached 100% | T6 |
+| 22 | v1.0.1 | Fixed - the AI upscaler garbled at 2x | T4 |
+| 23 | v1.0.0 | Added - a Browse button | S18 |
+| 24 | v1.0.0 | Changed - every setting editable in-game | S18 |
+| 25 | v1.0.0 | Fixed - the stuck-wait watchdog | X4 |
+| 26 | v1.0.0 | Fixed - `db16cyc` translated to nothing | R5 |
+| 27 | v1.0.0 | Fixed - two graphics settings never reached the plugin | D9 |
+| 28 | v1.0.0 | Changed - V-Sync states its consequence | D10 |
+| 29 | v1.0.0 | Added - a census of Xenia's known issues | X6 |
+| 30 | v1.0.0 | Fixed - the publication allowlist | X3 |
+| 31 | v1.0.0 | Fixed - the attract demo no longer freezes | D12, O2 |
+| 32 | v1.0.0 | Added - one button for a bug report | X7 |
+| 33 | v1.0.0 | Added - a Lodestone census | X5 |
+| 34 | v1.0.0 | Added - the texture pack is warmed per stage | T11 |
+| 35 | v1.0.0 | Fixed - audio could stop silently | A1 |
+| 36 | v1.0.0 | Fixed - opening the settings could kill the process | S19 |
+| 37 | v1.0.0 | Fixed - the settings menu scanned two folders | T10 |
+| 38 | v1.0.0 | Changed - dumping and the pack cannot both be on | T8 |
+| 39 | v1.0.0 | Changed - the upscaler is a choice | T9 |
+| 40 | v1.0.0 | Fixed - the Chapter 12 workaround applies only to 12 | C1 |
+| 41 | v1.0.0 | Added - three more guest functions | R1 |
+| 42 | v1.0.0 | Fixed - the release shipped no tools | X2 |
+| 43 | v1.0.0 | Fixed - "Skip intro videos" could not be turned off | V8 |
+| 44 | v1.0.0 | Fixed - "Skip chapter cinematics" could never fire | V9 |
+| 45 | v1.0.0 | Removed - the video conversion machinery | V11 |
+| 46 | v0.5.4 | Added - live CPU/GPU/VRAM readouts | X8 |
+| 47 | v0.5.4 | Changed - supersampling goes to 8x | D8 |
+| 48 | v0.5.4 | Added - accurate depth and fuzzy alpha | D8 |
+| 49 | v0.5.4 | Fixed - F9 no longer overwrites the setting | T2 |
+| 50 | v0.5.4 | Added - AI upscaling, as an optional download | T3 |
+| 51 | v0.5.4 | Added - the memory settings from the hardware | S17 |
+| 52 | v0.5.4 | Added - F9 switches the pack | T2 |
+| 53 | v0.5.4 | Changed - the pack format is raw, default 2x | T1 |
+| 54 | v0.5.4 | Added - the texture pack is actually used | T1 |
+| 55 | v0.5.4 | Added - frame-time statistics | X8 |
+| 56 | v0.5.4 | Changed - the texture cache can be raised | D8 |
+| 57 | v0.5.3 | Added - an application icon | S16 |
+| 58 | v0.5.3 | Fixed - "Quit Game" returns to the setup screen | B6 |
+| 59 | v0.5.3 | Fixed - the video mode setting could never select 0 | V10 |
+| 60 | v0.5.3 | Fixed - the game crashed ~90 seconds after launch | B7 |
+| 61 | v0.5.3 | Changed - texture dumping refuses non-art | T1 |
+| 62 | v0.5.2 | Fixed - character stuck at a ledge | R4 |
+| 63 | v0.5.2 | Added - external live analysis | X9 |
+| 64 | v0.5.1 | Fixed - a crash in Chapter 5 on ten thunks | R1 |
+| 65 | v0.5.1 | Fixed - "Quit Game" left a black screen | B6 |
+| 66 | v0.5.1 | Not fixed - the ledge jump loop | R4 |
+| 67 | v0.5.0 | Fixed - every video in the game | V1, R3 |
+| 68 | v0.5.0 | Removed - the video re-encoding pipeline | V11 |
+| 69 | v0.4.5 | Added - the port's own version, on screen | S15 |
+| 70 | v0.4.4 | Fixed - pressing anything during a video worked the menu | I5 |
+| 71 | v0.4.3 | Changed - the monitor list shows resolutions | D5 |
+| 72 | v0.4.3 | Fixed - the installer forgot which disc image | S7 |
+| 73 | v0.4.2 | Fixed - 4K could not be set | D4 |
+| 74 | v0.4.2 | Fixed - the monitor list was in the wrong order | D5 |
+| 75 | v0.4.1 | Added - two graphics levers | D8 |
+| 76 | v0.4.0 | Fixed - the settings screen lost its buttons | D3 |
+| 77 | v0.4.0 | Added - update an install in place | S8 |
+| 78 | v0.3.9 | Fixed - built with no optimization | X1 |
+| 79 | v0.3.8 | Changed - import a folder of saves | S13 |
+| 80 | v0.3.7 | Fixed - the install finished at 106% | S5 |
+| 81 | v0.3.7 | Fixed - Rescan did not see freshly installed files | S6 |
+| 82 | v0.3.7 | Fixed - videos stretched on an ultrawide | V7 |
+| 83 | v0.3.7 | Known - true ultrawide rendering is not there | O1 |
+| 84 | v0.3.6 | Changed - one cheat | S12 |
+| 85 | v0.3.6 | Fixed - the setup-screen tick pushed Save off | S11 |
+| 86 | v0.3.5 | Fixed - releases shipped without ffmpeg | X2 |
+| 87 | v0.3.5 | Fixed - three settings read but never written | S9 |
+| 88 | v0.3.5 | Fixed - Escape did not close the game | B5 |
+| 89 | v0.3.5 | Changed - Cheats are ticks | S12 |
+| 90 | v0.3.5 | Added - ultrawide resolutions | D6 |
+| 91 | v0.3.5 | Added - Save settings, and a way back | S10 |
+| 92 | v0.3.4 | Added - import a saved game | S13 |
+| 93 | v0.3.4 | Fixed - reading an STFS display name | S13 |
+| 94 | v0.3.4 | Fixed - the controller did nothing, sign-in prompt | I3 |
+| 95 | v0.3.4 | Added - Skip intro videos | V8 |
+| 96 | v0.3.4 | Changed - the profile, saves and DLC live with the game | S14 |
+| 97 | v0.3.4 | Added - a Cheats section | S12 |
+| 98 | v0.3.4 | How Infinite karma works without an address | S12 |
+| 99 | v0.3.4 | Fixed - the search crashed the game | S12 |
+| 100 | v0.3.4 | Found - karma lives at 0x230 | S12 |
+| 101 | v0.3.4 | Fixed - the system save's content header | S13 |
+| 102 | v0.3.3 | Fixed - loading a save raised "Disc Read Error" | V5 |
+| 103 | v0.3.3 | Fixed - videos looked for in the wrong place | V6 |
+| 104 | v0.3.3 | Fixed - the d-pad from the keyboard | I2 |
+| 105 | v0.3.3 | Save import | S13 |
+| 106 | v0.3.2 | The Chapter 12 guard is now properly verified | C1 |
+| 107 | v0.3.1 | The Chapter 12 workaround is automatic | C1 |
+| 108 | v0.3.0 | Fixed - the intro had stopped playing | V4 |
+| 109 | v0.3.0 | Added (videos prepared at install, live with the game, Escape quits) | S4, I4 |
+| 110 | v0.3.0 | Changed (one bar, no consoles, ffmpeg beside the game, Videos row gone, Chapter 12 row gone) | S4, C1 |
+| 111 | v0.3.0 | Chapter 12 cannot be automated | C1 |
+| 112 | v0.2.2 | The intro reads as one picture | V2 |
+| 113 | v0.2.2 | Also ruled out | V2 |
+| 114 | v0.2.1 | The attract demo now plays instead of being skipped | V3 |
+| 115 | v0.2.1 | Fixed (own size, NUL byte, edge trim) | V2, X11 |
+| 116 | v0.2.1 | On the intro seams | V2 |
+| 117 | v0.2.1 | Note | V2 |
+| 118 | v0.2.0 | How it works | V2 |
+| 119 | v0.2.0 | Four things this cost | V2 |
+| 120 | v0.2.0 | Also | V2 |
+| 121 | v0.2.0 | Known | V2 |
+| 122 | v0.1.5 | Added (preset, keyboard control, hide pointer) | S3, I1 |
+| 123 | v0.1.5 | Changed (Workarounds group, tighter rows) | S3 |
+| 124 | v0.1.5 | Not brought over from re:Blue | S3 |
+| 125 | v0.1.4 | Added (Skip videos) | V8 |
+| 126 | v0.1.4 | Findings (Mission Mode, bloom) | O4, O5 |
+| 127 | v0.1.4 | Documentation | X12 |
+| 128 | v0.1.3 | Added (Chapter 12 crash workaround) | C1 |
+| 129 | v0.1.3 | Bloom | O5 |
+| 130 | v0.1.2 | Two things worth knowing (and the four absorbed functions above it) | R1, X10 |
+| 131 | v0.1.1 | Fixed (DLC costume crash) | R1 |
+| 132 | v0.1.1 | Settings | S2, D11 |
+| 133 | v0.1.1 | Not added, and why | D11, T1, O6 |
+| 134 | v0.1.0 | The recompilation | B1, B2, B3, B4 |
+| 135 | v0.1.0 | Settings | S1 |
+| 136 | v0.1.0 | Fixed | D1, D2, S1 |
+| 137 | v0.1.0 | Known issues | V1, V3, O6 |

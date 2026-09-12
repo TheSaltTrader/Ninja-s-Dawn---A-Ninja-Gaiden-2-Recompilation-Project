@@ -146,11 +146,11 @@ struct Ng2Tuning {
     if (s.texture_dump && !s.texture_path.empty()) {
       out.push_back({"texture_dump", "true",
                      "write every unique guest texture out for upscaling"});
-      out.push_back({"texture_dump_path", s.texture_path + "/dump",
+      out.push_back({"texture_dump_path", (s.ResolvedTexturePath() / "dump").generic_string(),
                      "where dumped textures go"});
     }
     if (s.texture_pack && !s.texture_path.empty()) {
-      out.push_back({"texture_pack_path", s.texture_path + "/pack",
+      out.push_back({"texture_pack_path", (s.ResolvedTexturePath() / "pack").generic_string(),
                      "upscaled textures to load instead of the game's own"});
     }
 

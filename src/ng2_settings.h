@@ -249,13 +249,30 @@ struct Ng2Settings {
     return rex::filesystem::GetExecutableFolder() / "ng2_settings.cfg";
   }
 
+  // A path from the settings file, absolute or relative to the executable's
+  // folder. Relative is what makes an install portable: a pre-configured
+  // folder with game\, dlc\, textures\ and user\ inside it keeps working
+  // when it is moved to another drive or PC, with no visit to the setup
+  // screen. Before this a relative path was taken against the process's
+  // working directory, which is the folder only when launched from it.
+  static std::filesystem::path Beside(const std::string& p) {
+    std::filesystem::path path(p);
+    if (path.is_absolute())
+      return path;
+    return rex::filesystem::GetExecutableFolder() / path;
+  }
+
   // Where the game data actually comes from: the configured folder, or game/
   // beside the executable.
   std::filesystem::path ResolvedGamePath() const {
     if (!game_path.empty())
-      return std::filesystem::path(game_path);
+      return Beside(game_path);
     return rex::filesystem::GetExecutableFolder() / "game";
   }
+
+  // The texture folder (dump/ and pack/ inside it). Only meaningful when
+  // texture_path is set; callers check that first.
+  std::filesystem::path ResolvedTexturePath() const { return Beside(texture_path); }
 
   // Prepared videos, kept with the game data rather than beside the
   // executable, so they travel with an install wherever it is put and are
@@ -266,7 +283,7 @@ struct Ng2Settings {
 
   std::filesystem::path ResolvedDlcPath() const {
     if (!dlc_path.empty())
-      return std::filesystem::path(dlc_path);
+      return Beside(dlc_path);
     return rex::filesystem::GetExecutableFolder() / "dlc";
   }
 

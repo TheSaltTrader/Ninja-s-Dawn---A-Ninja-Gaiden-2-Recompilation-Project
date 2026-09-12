@@ -867,10 +867,12 @@ void ApplyLiveSettings(const Ng2Settings& s, rex::ui::Window* window) {
   // Set before the pack path so the reload it triggers already sees dump=on.
   const bool dump_on = s.texture_dump && !s.texture_path.empty();
   SetCvar("texture_dump", dump_on ? "true" : "false");
-  SetCvar("texture_dump_path", dump_on ? s.texture_path + "/dump" : std::string());
+  SetCvar("texture_dump_path",
+          dump_on ? (s.ResolvedTexturePath() / "dump").generic_string() : std::string());
   SetCvar("texture_pack_path",
-          (s.texture_pack && !s.texture_path.empty()) ? s.texture_path + "/pack"
-                                                      : std::string());
+          (s.texture_pack && !s.texture_path.empty())
+              ? (s.ResolvedTexturePath() / "pack").generic_string()
+              : std::string());
   if (window != nullptr) {
     window->SetFullscreen(s.fullscreen);
     // Auto-hide is a *mode*, not just a delay. The window only ever hides the
@@ -905,7 +907,7 @@ SetupScreen::SetupScreen(rex::ui::ImGuiDrawer* drawer, Ng2Settings* settings,
   // nothing is installed without pressing the button.
   if (!settings_->iso_path.empty()) {
     std::error_code ec;
-    const std::filesystem::path remembered(settings_->iso_path);
+    const std::filesystem::path remembered = Ng2Settings::Beside(settings_->iso_path);
     if (std::filesystem::is_regular_file(remembered, ec)) {
       iso_path_ = remembered;
       iso_info_ = InspectDisc(iso_path_);
@@ -1420,7 +1422,7 @@ bool SettingsOverlay::DrawTextures() {
 
   const bool have_path = !s.texture_path.empty();
   const std::filesystem::path dir =
-      have_path ? std::filesystem::path(s.texture_path) : std::filesystem::path();
+      have_path ? s.ResolvedTexturePath() : std::filesystem::path();
   // Counted OFF the UI thread, and not every frame.
   //
   // These two walk the dump and pack folders. That was fine when a pack was a

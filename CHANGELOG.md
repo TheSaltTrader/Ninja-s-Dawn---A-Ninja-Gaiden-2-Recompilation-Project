@@ -16,6 +16,16 @@ and stopped. The menu now forces a redo only when the pack was made with
 other settings. An interrupted pack shows "the next run continues with the
 textures still missing" and the button counts only those.
 
+### Added - a settings path may be relative to the executable's folder
+
+`texture_path`, `game_path` and `dlc_path` in `ng2_settings.cfg` are now taken
+relative to the folder ng2.exe is in when they are not absolute. That is what
+makes a portable install: one folder holding the game, the DLC, the profile
+and saves, and the texture dump and pack, that keeps working when it is moved
+to another drive or PC without a visit to the setup screen. A relative path
+used to be resolved against the process's working directory, which is that
+folder only when the game is launched from it.
+
 ## v1.0.8 - 2026-09-11
 
 ### Fixed - a texture run that stopped halfway redid every texture
