@@ -859,16 +859,12 @@ void ApplyLiveSettings(const Ng2Settings& s, rex::ui::Window* window) {
   // so the scene in front of the player switches over within a frame or two -
   // which is the only way to actually judge a texture pack, since comparing it
   // against a screenshot from a previous run compares two different moments.
-  // Dumping, live as well (the plugin's dump cvars are hot-reloadable since the
-  // content-hash change). Ticking "dump" turns the pack off, and that path
-  // change drops every texture, so the scene in front of the player is dumped
-  // there and then. Before this the flag only travelled in the tuning file at
-  // launch: a player ticked dump, walked the level, and nothing was written.
-  // Set before the pack path so the reload it triggers already sees dump=on.
-  const bool dump_on = s.texture_dump && !s.texture_path.empty();
-  SetCvar("texture_dump", dump_on ? "true" : "false");
-  SetCvar("texture_dump_path",
-          dump_on ? (s.ResolvedTexturePath() / "dump").generic_string() : std::string());
+  // Dumping is RESTART-REQUIRED: it is delivered only in the launch tuning file
+  // (ng2_tuning.h), never pushed live. Toggling it mid-session used to clear the
+  // cache and dump "the scene in front of the player", which made players think a
+  // stage was being captured when everything already resident - and the whole
+  // start of the stage - was never re-loaded and so never written. On from launch,
+  // every texture the stage loads passes through the dump path. So nothing here.
   SetCvar("texture_pack_path",
           (s.texture_pack && !s.texture_path.empty())
               ? (s.ResolvedTexturePath() / "pack").generic_string()
@@ -1556,9 +1552,14 @@ bool SettingsOverlay::DrawTextures() {
       changed = true;
     }
     ImGui::EndDisabled();
+    RestartTag();
     if (s.texture_pack)
       Muted("Turn the pack off first - dumping and loading together stall the "
             "command stream.");
+    else if (s.texture_dump)
+      Muted("Dumping begins at the NEXT launch and captures the stage from its "
+            "start. Turning it on mid-game would miss every texture already "
+            "loaded, so it is applied on restart.");
 
     RowStart("Use the upscaled textures",
              "Loads the finished pack instead of the game's own textures. "

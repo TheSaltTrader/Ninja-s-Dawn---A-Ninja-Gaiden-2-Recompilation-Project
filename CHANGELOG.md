@@ -3,6 +3,35 @@
 Versions are cut with `tools/make_release.py`, which refuses to package a
 version that has no section here.
 
+## v1.0.13 - 2026-09-12
+
+### Fixed - streamed textures (like chapter 10) can now be upscaled
+
+Some stages stream many textures through the same memory addresses. The pack
+matched a texture the moment it was created, on whatever bytes were there then,
+which for a streamed texture is a leftover from the previous one. So the game
+asked for an image the pack did not have and fell back to the original, and no
+amount of dumping helped, because the match happened at the wrong moment.
+
+The match now happens when the texture is actually loaded, on the bytes really
+in memory - the same bytes the dump records. Each texture keeps its normal
+version, always drawn, and gains a separate upscaled copy only when its real
+content is found in the pack, rechecked every load so a reused address stays
+correct. Nothing can go missing: a texture with no pack entry simply shows at
+its original resolution. Measured in chapter 10: about 1500 textures upscaled
+where roughly 400 did before, at full frame rate, with your existing pack.
+
+To fill a stage out, dump it and process it as before; the difference is that
+the dumped textures now actually take effect. This applies to every chapter.
+
+### Changed - texture dumping now takes effect on the next launch
+
+Turning dumping on mid-stage only captured what loaded afterwards, so the start
+of the stage and everything already in memory were silently missed, which read
+as "dumping does nothing". Dumping is now a restart-required setting, marked as
+such in the menu: it begins at the next launch and captures the whole stage
+from its start.
+
 ## v1.0.12 - 2026-09-12
 
 ### Fixed - switching the texture pack with F9 a few times in a row crashed the game
