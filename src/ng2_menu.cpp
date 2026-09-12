@@ -1820,8 +1820,11 @@ bool SettingsOverlay::DrawTextures() {
         have_manifest &&
         (pack_scale != s.texture_scale || pack_upscaler != want_upscaler ||
          (want_ai && std::fabs(pack_strength - s.texture_ai_strength) > 0.005f));
-    const bool must_redo =
-        packed > 0 && (!have_manifest || settings_differ || !pack_complete);
+    // A pack whose last run stopped halfway is NOT a reason to redo it: every
+    // texture it wrote is whole and made with its recorded settings, and the
+    // tool redoes any file a stop cut short. Requiring completion here made a
+    // full-disk failure 2,449 textures into a run cost all 22,026 again.
+    const bool must_redo = packed > 0 && (!have_manifest || settings_differ);
     if (have_manifest) {
       char made[80];
       if (pack_upscaler == 2)

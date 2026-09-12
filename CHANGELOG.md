@@ -3,6 +3,19 @@
 Versions are cut with `tools/make_release.py`, which refuses to package a
 version that has no section here.
 
+## v1.0.9 - 2026-09-11
+
+### Fixed - the settings menu still forced the full redo v1.0.8 had fixed in the tool
+
+v1.0.8 taught the texture tool to continue an interrupted run. The menu had
+the same rule of its own: a pack whose record said "incomplete" greyed the
+"Redo textures already in the pack" box ticked, and the button became
+"Process all 22,026 textures", run without the only-missing flag. So the
+first run after v1.0.8 was still a full redo; it was caught two minutes in
+and stopped. The menu now forces a redo only when the pack was made with
+other settings. An interrupted pack shows "the next run continues with the
+textures still missing" and the button counts only those.
+
 ## v1.0.8 - 2026-09-11
 
 ### Fixed - a texture run that stopped halfway redid every texture
