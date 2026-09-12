@@ -297,6 +297,21 @@ class Ng2App : public rex::ReXApp {
             REXLOG_WARN("F9: no texture folder is set - nothing to switch to");
             return;
           }
+          // One switch at a time. A path change makes the plugin clear its
+          // pack tables at once and drop the texture cache at the end of the
+          // frame, after draining the GPU; a second press landing inside that
+          // window flips the path back while the first clear is still pending.
+          // The Fable II port, which shares this plugin, crashed on exactly
+          // that: F9 twice within a second, and the process died with no
+          // further log. Nobody compares textures at that rate, so a press
+          // within 1.5 s of the previous one is dropped, and says so.
+          const auto now = std::chrono::steady_clock::now();
+          static auto last_switch = now - std::chrono::seconds(10);
+          if (now - last_switch < std::chrono::milliseconds(1500)) {
+            REXLOG_INFO("F9 ignored: the pack is still switching");
+            return;
+          }
+          last_switch = now;
           settings_.texture_pack = !settings_.texture_pack;
           REXLOG_INFO("F9: texture pack {}", settings_.texture_pack ? "ON" : "OFF");
           ng2::ApplyLiveSettings(settings_, window());

@@ -3,6 +3,22 @@
 Versions are cut with `tools/make_release.py`, which refuses to package a
 version that has no section here.
 
+## v1.0.10 - 2026-09-11
+
+### Fixed - pressing F9 twice quickly could crash the game
+
+F9 switches the texture pack on and off during play. A path change makes the
+GPU plugin clear its pack tables at once and drop the texture cache at the end
+of the frame, after draining the GPU; a second press landing inside that
+window flipped the path back while the first clear was still pending. The
+Fable II port, which shares the plugin, crashed on exactly that: F9 twice
+within a second, and the process died with nothing further in the log. This
+port has the same handler and the same plugin and had simply not been hit.
+
+A press within 1.5 seconds of the previous one is now dropped, and the log
+says "F9 ignored: the pack is still switching". Nobody compares textures at
+that rate, so nothing is lost.
+
 ## v1.0.9 - 2026-09-11
 
 ### Fixed - the settings menu still forced the full redo v1.0.8 had fixed in the tool
