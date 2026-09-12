@@ -1499,7 +1499,10 @@ bool SettingsOverlay::DrawTextures() {
 
   {
     TightRows tight;
-    ImGui::BeginTable("texrows", 2, ImGuiTableFlags_SizingStretchProp);
+    // Guarded like every other table here: a BeginTable() that returns false
+    // (window collapsed or clipped) has no table for the rows to go into.
+    if (!ImGui::BeginTable("texrows", 2, ImGuiTableFlags_SizingStretchProp))
+      return changed;
 
     RowStart("Folder",
              "Where dumped and upscaled textures are kept. Needs room: the "
@@ -1929,7 +1932,17 @@ void SettingsOverlay::OnDraw(ImGuiIO& io) {
   char title[96];
   std::snprintf(title, sizeof(title), "Ninja Gaiden II - Settings  (v%s)",
                 NG2_VERSION);
-  ImGui::Begin(title, nullptr, ImGuiWindowFlags_NoSavedSettings);
+  // No collapse arrow. Collapsing made Begin() return false while the body
+  // below kept submitting widgets; the texture table was begun without a
+  // check and its first row read through a null table pointer (crash dump
+  // 2026-09-11 23:37, ImGui::TableNextRow). A collapsed settings window is
+  // of no use anyway; F10 closes it.
+  if (!ImGui::Begin(title, nullptr,
+                    ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoCollapse)) {
+    ImGui::End();
+    ImGui::PopFont();
+    return;
+  }
 
   PageOptions opts;
   opts.restart_bound_editable = false;

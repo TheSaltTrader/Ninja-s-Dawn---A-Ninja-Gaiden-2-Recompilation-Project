@@ -49,6 +49,9 @@ Copy-Tree $src.dlc      "$Dest\dlc"        "dlc"
 Copy-Tree $src.user     "$Dest\user"       "user"
 Copy-Tree $src.dump     "$Dest\textures\dump" "dump"
 Copy-Tree $src.pack     "$Dest\textures\pack" "pack"
+# The AI upscaler (Real-ESRGAN) lives beside dump/ and pack/; without it the
+# other PC falls back to Lanczos and the menu offers a download.
+if (Test-Path "C:\ng2tex\upscaler") { Copy-Tree "C:\ng2tex\upscaler" "$Dest\textures\upscaler" "upscaler" }
 Copy-Tree $src.iso      "$Dest\iso"        "iso"
 
 # The settings: this machine's, with every path made relative to the folder.
