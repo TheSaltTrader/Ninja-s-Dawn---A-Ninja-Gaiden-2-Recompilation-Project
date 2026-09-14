@@ -3,6 +3,32 @@
 Versions are cut with `tools/make_release.py`, which refuses to package a
 version that has no section here.
 
+## v1.0.16 - 2026-09-13
+
+### Added - the game checks for updates on launch and can install them itself
+
+On start-up the game now asks GitHub whether a newer release exists and, if
+one does, shows a prompt: **Update now**, **What's new**, or **Later**.
+Choosing to update downloads the release zip and, after a confirmation,
+closes the game, swaps in the new program files and reopens - the player
+never visits the website or unzips anything by hand. The installer only ever
+replaces the program (the executable, the runtime and GPU plugin, the Visual
+C++ runtime, the controller database and the texture tools); `game\`, `dlc\`,
+`user\` and the settings files are never touched, the same contract as a
+manual "unzip over it" update.
+
+The check is a background network call that never delays the boot, and the
+prompt appears only when there is genuinely a newer version. A new setting,
+**"Check for updates when the game starts"** (on by default), turns the whole
+thing off for anyone who would rather keep launch offline; the F10 settings
+menu also has a **Check now** button and shows the download progress and the
+same install button. The check talks only to the GitHub releases API and
+downloads only the signed release asset over HTTPS (WinHTTP); nothing else
+leaves the machine.
+
+Implemented app-side in `src/ng2_update.*` with no plugin change; the runtime
+and GPU plugin are the stock pair, unchanged since v1.0.13.
+
 ## v1.0.15 - 2026-09-13
 
 ### Fixed - the bundled AI upscaler was never looked at

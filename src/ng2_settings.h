@@ -231,6 +231,13 @@ struct Ng2Settings {
   // a PC port is a surprising default.
   bool keyboard_control = false;
 
+  // Check GitHub for a newer release when the game starts, and offer to
+  // download and install it. On by default: the prompt appears only when there
+  // really is a newer version, and the check itself is a background network
+  // call that never blocks the boot. Off means the launcher never touches the
+  // network - the "Check now" button in the menu still works by hand.
+  bool check_for_updates = true;
+
   // --- Content -----------------------------------------------------------
   // The last disc image chosen in the installer. Kept only so the field is not
   // blank next launch: an empty box beside a 7 GB file that is still sitting
@@ -362,6 +369,7 @@ struct Ng2Settings {
         << "skip_cinematics=" << (skip_cinematics ? 1 : 0) << "\n"
         << "iso_path=" << iso_path << "\n"
         << "keyboard_control=" << (keyboard_control ? 1 : 0) << "\n"
+        << "check_for_updates=" << (check_for_updates ? 1 : 0) << "\n"
         << "cursor_hide_seconds=" << cursor_hide_seconds << "\n"
         << "configured=" << (configured ? 1 : 0) << "\n";
     REXLOG_INFO("Settings: saved {}", Path().string());
@@ -437,6 +445,7 @@ struct Ng2Settings {
     else if (k == "letterbox") letterbox = Truthy(v);
     else if (k == "cursor_hide_seconds") cursor_hide_seconds = std::atoi(v.c_str());
     else if (k == "keyboard_control") keyboard_control = Truthy(v);
+    else if (k == "check_for_updates") check_for_updates = Truthy(v);
     else if (k == "iso_path") iso_path = v;
     else if (k == "game_path") game_path = v;
     else if (k == "dlc_path") dlc_path = v;

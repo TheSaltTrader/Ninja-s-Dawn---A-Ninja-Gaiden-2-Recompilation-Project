@@ -159,6 +159,10 @@ class SettingsOverlay final : public rex::ui::ImGuiDialog {
 
  private:
   bool DrawTextures();
+  // The "Updates" section: the on-launch toggle, a Check-now button, and the
+  // status/actions for a pending update. Returns true if a saved setting
+  // changed.
+  bool DrawUpdates();
 
   Ng2Settings* settings_;
   rex::ui::Window* window_;

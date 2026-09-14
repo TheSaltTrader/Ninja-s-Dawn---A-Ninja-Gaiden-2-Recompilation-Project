@@ -27,6 +27,7 @@
 
 #include "ng2_platform.h"
 #include "ng2_saveimport.h"
+#include "ng2_update.h"
 
 namespace fs = std::filesystem;
 
@@ -1921,6 +1922,85 @@ bool SettingsOverlay::DrawTextures() {
   return changed;
 }
 
+bool SettingsOverlay::DrawUpdates() {
+  SectionHeader("Updates");
+  bool changed = false;
+
+  bool check = settings_->check_for_updates;
+  if (ImGui::Checkbox("Check for updates when the game starts", &check)) {
+    settings_->check_for_updates = check;
+    settings_->Save();
+    changed = true;
+  }
+  HelpMarker(
+      "On launch the game asks GitHub whether a newer version exists and, if "
+      "so, offers to download and install it. The check runs in the background "
+      "and never delays startup. Turn it off to keep launch offline - the "
+      "'Check now' button below still works by hand.");
+
+  const ng2::update::Snapshot s = ng2::update::Get();
+  ImGui::Spacing();
+
+  using P = ng2::update::Phase;
+  switch (s.phase) {
+    case P::kChecking:
+      Muted("Checking for updates...");
+      break;
+    case P::kUpToDate:
+      Muted("You have v%s - the latest version.", s.current_version.c_str());
+      break;
+    case P::kAvailable:
+      Muted("v%s is available (you have v%s).", s.latest_version.c_str(),
+            s.current_version.c_str());
+      ImGui::Spacing();
+      if (ImGui::Button("Download and install")) {
+        ng2::update::BeginUpdate();
+      }
+      break;
+    case P::kDownloading: {
+      Muted("Downloading v%s...", s.latest_version.c_str());
+      const float frac =
+          s.bytes_total > 0 ? static_cast<float>(s.progress) : 0.0f;
+      std::string label = s.bytes_total > 0
+                              ? FormatBytes(s.bytes_done) + " / " +
+                                    FormatBytes(s.bytes_total)
+                              : FormatBytes(s.bytes_done);
+      ImGui::ProgressBar(frac, ImVec2(-1.0f, 0.0f), label.c_str());
+      break;
+    }
+    case P::kReadyToApply:
+      Muted("v%s is ready. The game will close, install it, and reopen.",
+            s.latest_version.c_str());
+      ImGui::Spacing();
+      if (ImGui::Button("Restart and install now")) {
+        ng2::update::ApplyNow();
+      }
+      break;
+    case P::kApplying:
+      Muted("Installing v%s... the game will restart.",
+            s.latest_version.c_str());
+      break;
+    case P::kError:
+      Muted("Update failed: %s", s.error.c_str());
+      break;
+    case P::kIdle:
+    default:
+      Muted("You have v%s.", s.current_version.c_str());
+      break;
+  }
+
+  ImGui::Spacing();
+  const bool busy = (s.phase == P::kChecking || s.phase == P::kDownloading ||
+                     s.phase == P::kApplying);
+  ImGui::BeginDisabled(busy);
+  if (ImGui::Button("Check now")) {
+    ng2::update::CheckAsync();
+  }
+  ImGui::EndDisabled();
+
+  return changed;
+}
+
 void SettingsOverlay::OnDraw(ImGuiIO& io) {
   ImGui::SetNextWindowSize(ImVec2(680, 620), ImGuiCond_FirstUseEver);
   ImGui::SetNextWindowPos(ImVec2(io.DisplaySize.x * 0.5f, io.DisplaySize.y * 0.5f),
@@ -1963,6 +2043,8 @@ void SettingsOverlay::OnDraw(ImGuiIO& io) {
   ImGui::Spacing();
   Muted("Game data and DLC are chosen on the setup screen, which runs before "
         "the game is loaded. Saves are imported there too.");
+
+  DrawUpdates();
 
   DrawDiagnosticsSection();
 

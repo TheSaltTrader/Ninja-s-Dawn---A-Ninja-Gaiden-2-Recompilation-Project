@@ -21,6 +21,7 @@
 #include "ng2_texnotify.h"
 #include "ng2_settings.h"
 #include "ng2_tuning.h"
+#include "ng2_update.h"
 #include <rex/system/flags.h>
 #include <rex/system/xam/content_manager.h>
 #include <rex/system/xmemory.h>
@@ -252,6 +253,10 @@ class Ng2App : public rex::ReXApp {
     // running.
     tex_notify_ = std::make_unique<ng2::TextureNotifyOverlay>(drawer);
     warm_overlay_ = std::make_unique<ng2::WarmOverlay>(drawer);
+
+    // The launch-time update prompt. Draws nothing until a check finds a newer
+    // version; the check itself is started in OnPostSetup when the setting is on.
+    update_overlay_ = std::make_unique<ng2::update::UpdateOverlay>(drawer);
 
     // The readouts, and the sampler behind them. Started unconditionally: it
     // ticks twice a second and the menu's own CPU/GPU bars need it even when
@@ -559,6 +564,23 @@ class Ng2App : public rex::ReXApp {
     REXLOG_INFO("Shutdown for relaunch: cheat worker joined, settings saved");
   }
 
+  // The apply handler for the self-update. By the time this runs the staged
+  // PowerShell updater is already launched and waiting on this process's id: a
+  // running exe holds its own image locked, so the swap can only happen once we
+  // are gone. This exits the same way ReturnToMenu does - clean save, no
+  // relaunch of our own (the updater relaunches us after it copies the files).
+  void ExitForUpdate() {
+    if (shutting_down_)
+      return;
+    StopTitleWatcher();
+    ShutdownCleanlyForRelaunch();
+    tex_job_.CancelAndJoin();
+    REXLOG_INFO("Update: exiting so the installer can replace the files");
+    std::fflush(nullptr);
+    rex::FlushLogging();
+    std::_Exit(0);
+  }
+
   // Called when the window's close button is pressed, before the SDK's own
   // close handling terminates the title. Marks the watcher off so the
   // termination that is about to happen is not mistaken for a guest quit.
@@ -580,6 +602,7 @@ class Ng2App : public rex::ReXApp {
     advanced_.reset();
     tex_notify_.reset();
     warm_overlay_.reset();
+    update_overlay_.reset();
     perf_hud_.reset();
 
     // Every bind this port registered, not just the two it started with - a
@@ -1049,6 +1072,24 @@ class Ng2App : public rex::ReXApp {
     MaybeWriteDiagnostics();
     ArmQuitSeam();
 
+    // Self-update. Wire the module to this install, register the clean-exit that
+    // lets the staged updater replace our files, and - if the player has left
+    // the setting on - start a background check. The check never blocks the
+    // boot; the prompt appears only if a newer version actually exists.
+    {
+      const std::filesystem::path folder = rex::filesystem::GetExecutableFolder();
+      ng2::update::Init(NG2_VERSION, folder, folder / "ng2.exe");
+      ng2::update::SetApplyHandler([this] {
+        app_context().CallInUIThreadDeferred([this] { ExitForUpdate(); });
+      });
+      if (settings_.check_for_updates) {
+        REXLOG_INFO("Update: checking for a newer release (have v{})", NG2_VERSION);
+        ng2::update::CheckAsync();
+      } else {
+        REXLOG_INFO("Update: on-launch check is off");
+      }
+    }
+
     // [diag] Opt-in now, and that is the whole point.
     //
     // These two shipped ENABLED in v0.5.0-v0.5.2 and the oscillation scan
@@ -1221,6 +1262,7 @@ class Ng2App : public rex::ReXApp {
   std::unique_ptr<rex::ui::SettingsDialog> advanced_;
   std::unique_ptr<ng2::TextureNotifyOverlay> tex_notify_;
   std::unique_ptr<ng2::WarmOverlay> warm_overlay_;
+  std::unique_ptr<ng2::update::UpdateOverlay> update_overlay_;
   std::unique_ptr<ng2::PerfHudOverlay> perf_hud_;
 
   // What the first-run hardware detection saw, reported once logging exists.

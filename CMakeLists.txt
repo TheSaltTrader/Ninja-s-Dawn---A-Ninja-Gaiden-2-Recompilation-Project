@@ -40,6 +40,7 @@ set(NG2_SOURCES
     src/ng2_saveimport.cpp
     src/ng2_texnotify.cpp
     src/ng2_textool.cpp
+    src/ng2_update.cpp
     src/ng2_diagnostics.cpp
     src/ng2_hwdetect.cpp
     src/ng2_perf.cpp
@@ -92,6 +93,7 @@ rexglue_setup_target(ng2 GPU_PLUGINS xenos)
 target_compile_definitions(ng2 PRIVATE NG2_VERSION="${NG2_VERSION}")
 
 # DXGI, for reading the video-memory budget in src/ng2_hwdetect.cpp.
+# WinHTTP, for the on-launch update check and download in src/ng2_update.cpp.
 if(WIN32)
-    target_link_libraries(ng2 PRIVATE dxgi)
+    target_link_libraries(ng2 PRIVATE dxgi winhttp)
 endif()
