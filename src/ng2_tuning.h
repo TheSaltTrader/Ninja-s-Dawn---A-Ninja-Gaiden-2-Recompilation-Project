@@ -36,6 +36,7 @@
 #pragma once
 
 #include <cstdio>
+#include <cstdlib>
 #include <filesystem>
 #include <fstream>
 #include <string>
@@ -176,6 +177,40 @@ struct Ng2Tuning {
       // controller mapping. Give it an absolute path.
       out.push_back({"hid_mappings_file", mappings_file,
                      "absolute path - the default is resolved against the CWD"});
+    }
+
+    // --- Hidden GPU measurement / readback test levers -----------------------
+    //
+    // NOT player settings, and off unless an env var is set - so a normal
+    // launch sends none of these and the plugin's own defaults stand
+    // (readback_memexport=true, readback_resolve=none). This mirrors the
+    // project's env-lever precedent (the retired NG2_RESOLVE_AT_LOAD) and exists
+    // to make the optimization work MEASURABLE before anything is changed for
+    // real, per the rule "measure before you tune".
+    //
+    //   NG2_DRAW_CENSUS=<seconds>  turn on the plugin's GPU census - it prints
+    //       "[gpu] fence waits in <n> s: ..." and the draw/memexport/resolve
+    //       tallies every <seconds>, which is how we learn whether THIS title
+    //       even pays the readback cost that cost Fable II its town frame rate.
+    //   NG2_MEMEXPORT=0|1  force readback_memexport off/on. Fable II's locked-60
+    //       win was =0, but it is a GPU-coherency trade-off that has to be
+    //       verified per game, so it lives here as a test lever, not a setting.
+    //   NG2_READBACK=none|fast|some|full  the readback_resolve mode.
+    //
+    // Once a value is measured safe AND a win on this title, it graduates to a
+    // fixed entry in Fixed() (baked, like the other correctness cvars) rather
+    // than staying an env var.
+    if (const char* c = std::getenv("NG2_DRAW_CENSUS"); c && *c) {
+      out.push_back({"draw_census", c,
+                     "[test lever NG2_DRAW_CENSUS] seconds between GPU census reports"});
+    }
+    if (const char* mx = std::getenv("NG2_MEMEXPORT"); mx && *mx) {
+      out.push_back({"readback_memexport", (mx[0] == '0') ? "false" : "true",
+                     "[test lever NG2_MEMEXPORT] shader-memexport CPU readback"});
+    }
+    if (const char* rb = std::getenv("NG2_READBACK"); rb && *rb) {
+      out.push_back({"readback_resolve", rb,
+                     "[test lever NG2_READBACK] resolve readback: none/fast/some/full"});
     }
     return out;
   }
