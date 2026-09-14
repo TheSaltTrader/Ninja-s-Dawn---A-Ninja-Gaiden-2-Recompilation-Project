@@ -615,10 +615,9 @@ bool DrawSettings(Ng2Settings& s, const PageOptions& opts) {
     ImGui::SameLine();
     changed |= ImGui::Checkbox("CPU##hud", &s.hud_cpu);
     ImGui::SameLine();
-    changed |= ImGui::Checkbox("Graphs##hud", &s.hud_graph);
-    HelpMarker("Draws a rolling one-minute line graph under each readout, so a "
-               "dip or a climb is visible over time rather than just the instant "
-               "value.");
+    changed |= ImGui::Checkbox("Bars##hud", &s.hud_bars);
+    HelpMarker("Draws a small bar under each readout showing its current level "
+               "at a glance, in the Fable II style.");
     if (s.hud_enabled && !s.hud_fps && !s.hud_gpu && !s.hud_vram && !s.hud_cpu)
       Muted("Nothing is selected, so nothing will show.");
     // Separate switch, because it is a separate display: these bars are in the
