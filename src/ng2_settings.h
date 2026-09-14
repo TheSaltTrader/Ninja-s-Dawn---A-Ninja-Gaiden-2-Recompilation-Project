@@ -218,6 +218,7 @@ struct Ng2Settings {
   // F8), so an update that adds them changes nothing until the player turns the
   // HUD on.
   bool hud_cpu = true;
+  bool hud_ram = true;   // process system-memory (RAM) readout, under CPU
   bool hud_bars = true;
 
   // The live CPU/GPU/VRAM bars drawn INSIDE the settings, beside the texture
@@ -360,6 +361,7 @@ struct Ng2Settings {
         << "hud_gpu=" << (hud_gpu ? 1 : 0) << "\n"
         << "hud_vram=" << (hud_vram ? 1 : 0) << "\n"
         << "hud_cpu=" << (hud_cpu ? 1 : 0) << "\n"
+        << "hud_ram=" << (hud_ram ? 1 : 0) << "\n"
         << "hud_bars=" << (hud_bars ? 1 : 0) << "\n"
         << "hud_menu_bars=" << (hud_menu_bars ? 1 : 0) << "\n"
         // Nine more with the same fault, found by the ROUNDTRIP sweep rather
@@ -449,6 +451,7 @@ struct Ng2Settings {
     else if (k == "hud_gpu") hud_gpu = Truthy(v);
     else if (k == "hud_vram") hud_vram = Truthy(v);
     else if (k == "hud_cpu") hud_cpu = Truthy(v);
+    else if (k == "hud_ram") hud_ram = Truthy(v);
     else if (k == "hud_bars") hud_bars = Truthy(v);
     else if (k == "hud_graph") hud_bars = Truthy(v);  // migrate the old name
     else if (k == "hud_menu_bars") hud_menu_bars = Truthy(v);

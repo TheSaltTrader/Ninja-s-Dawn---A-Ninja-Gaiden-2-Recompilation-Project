@@ -111,7 +111,7 @@ void PerfHudOverlay::OnDraw(ImGuiIO& io) {
 
   const Ng2Settings* s = g_hud_settings;
   if (!s || !s->hud_enabled ||
-      (!s->hud_fps && !s->hud_gpu && !s->hud_vram && !s->hud_cpu))
+      (!s->hud_fps && !s->hud_gpu && !s->hud_vram && !s->hud_cpu && !s->hud_ram))
     return;
 
   const PerfSample p = GetPerfSample();
@@ -171,6 +171,19 @@ void PerfHudOverlay::OnDraw(ImGuiIO& io) {
       ImGui::SameLine();
       ImGui::TextColored(label, " %.1f of %.0f", busy, cores);
       Bar(p.cpu_percent / 100.0f, red);
+    }
+    if (s->hud_ram) {
+      ImGui::TextColored(label, "RAM");
+      ImGui::SameLine();
+      if (p.ram_valid) {
+        const float frac = p.ram_total_mb > 0.0f ? p.ram_mb / p.ram_total_mb : 0.0f;
+        const ImVec4 c = frac < 0.7f ? good : (frac < 0.9f ? warn : bad);
+        ImGui::TextColored(c, "%.1f / %.1f GB", p.ram_mb / 1024.0f,
+                           p.ram_total_mb / 1024.0f);
+        Bar(frac, green);  // fixed green, as requested
+      } else {
+        ImGui::TextColored(label, "n/a");
+      }
     }
     if (s->hud_gpu) {
       ImGui::TextColored(label, "GPU");

@@ -574,8 +574,181 @@ void OscillationLoop() {
 }
 }  // namespace
 
+// --- Projection-matrix finder (NG2_FIND_PROJ) -------------------------------
+//
+// Finds the guest's perspective PROJECTION matrix in memory and the function
+// that builds it, so the field of view can be hooked for FOV / ultrawide - the
+// Fable II method, done IN-PROCESS (no cdb, so no risk of a debug register left
+// armed with no handler). A perspective projection is a 4x4 of floats that is
+// almost all zeros with a +/-1 in the w-projection slot; among several on
+// screen at once (camera, shadows, reflections) the camera's has the largest
+// far plane. Once found, the same hardware write trap the oscillation hunt uses
+// logs the writing guest function.
+namespace {
+
+// Read a big-endian float from guest memory (Xbox 360 is big-endian; NG2's own
+// scan tools search for big-endian values).
+inline float BeF32(const uint8_t* p) {
+  uint32_t u;
+  std::memcpy(&u, p, 4);
+  u = _byteswap_ulong(u);
+  float f;
+  std::memcpy(&f, &u, 4);
+  return f;
+}
+
+// True if the 16 floats (row-major) are a D3D perspective projection; fills the
+// vertical field of view and the clip planes.
+bool PerspectiveFromRowMajor(const float m[16], float& fovy_deg, float& znear,
+                             float& zfar) {
+  auto z = [](float v) { return std::fabs(v) < 1e-4f; };
+  if (!(z(m[1]) && z(m[2]) && z(m[3]) && z(m[4]) && z(m[6]) && z(m[7]) &&
+        z(m[8]) && z(m[9]) && z(m[12]) && z(m[13]) && z(m[15])))
+    return false;
+  if (std::fabs(std::fabs(m[11]) - 1.0f) > 0.01f) return false;  // w-proj = +/-1
+  const float xs = m[0], ys = m[5], Q = m[10], zt = m[14];
+  if (!(xs > 0.1f && xs < 20.0f) || !(ys > 0.1f && ys < 20.0f)) return false;
+  if (!std::isfinite(Q) || !std::isfinite(zt) || std::fabs(Q) < 1e-4f) return false;
+  const float zn = -zt / Q;              // LH: Q=zf/(zf-zn), zt=-zn*Q
+  const float denom = Q - 1.0f;
+  if (std::fabs(denom) < 1e-4f) return false;
+  const float zf = zn * Q / denom;
+  if (!(zn > 0.001f && zn < 50.0f) || !(zf > zn && zf < 1.0e7f)) return false;
+  fovy_deg = 2.0f * std::atan(1.0f / ys) * 57.2957795f;
+  if (!(fovy_deg > 10.0f && fovy_deg < 170.0f)) return false;
+  znear = zn;
+  zfar = zf;
+  return true;
+}
+
+struct ProjCand {
+  uint32_t addr;
+  float fovy, zn, zf;
+};
+
+void FindProjectionThread() {
+  auto* memory = REX_KERNEL_MEMORY();
+  if (!memory) return;
+  REXLOG_INFO("[proj] projection-matrix finder armed (NG2_FIND_PROJ)");
+  const uint32_t lo = 0x00020000u, hi = 0x1F000000u;
+  const size_t span = hi - lo;
+  auto* base = memory->TranslatePhysical<uint8_t*>(lo);
+  if (!base) { REXLOG_WARN("[proj] cannot translate guest memory"); return; }
+  std::vector<uint8_t> snap(span);
+
+  for (int attempt = 0; attempt < 90; ++attempt) {  // keep trying until a 3D scene
+    Sleep(attempt == 0 ? 8000 : 3000);  // let a 3D scene render first
+    CopyCommitted(snap.data(), base, span);
+
+    // Row-major or its transpose (column-major storage) match a perspective.
+    auto try_mats = [](const float m[16], float& fovy, float& zn, float& zf) {
+      if (PerspectiveFromRowMajor(m, fovy, zn, zf)) return true;
+      float t[16];
+      for (int r = 0; r < 4; ++r)
+        for (int c = 0; c < 4; ++c) t[r * 4 + c] = m[c * 4 + r];
+      return PerspectiveFromRowMajor(t, fovy, zn, zf);
+    };
+    auto near1 = [](float v) { return std::fabs(std::fabs(v) - 1.0f) < 0.01f; };
+
+    std::vector<ProjCand> found;
+    for (size_t off = 0; off + 64 <= span; off += 4) {
+      if (!committed[off >> 12]) continue;
+      // Cheap reject: the w-projection term (row-major m11 at +44, column-major
+      // m14 at +56) must be ~+/-1, in either endianness. snap is our own buffer,
+      // safe to read past a page edge (uncommitted pages are zero).
+      const uint8_t* q = snap.data() + off;
+      float r44, r56;
+      std::memcpy(&r44, q + 44, 4);
+      std::memcpy(&r56, q + 56, 4);
+      if (!(near1(r44) || near1(r56) || near1(BeF32(q + 44)) || near1(BeF32(q + 56))))
+        continue;
+      float mbe[16], mle[16];
+      for (int i = 0; i < 16; ++i) {
+        mbe[i] = BeF32(q + i * 4);
+        std::memcpy(&mle[i], q + i * 4, 4);
+      }
+      float fovy, zn, zf;
+      if (!try_mats(mbe, fovy, zn, zf) && !try_mats(mle, fovy, zn, zf)) continue;
+      found.push_back({uint32_t(lo + off), fovy, zn, zf});
+      if (found.size() > 4000) break;
+    }
+
+    if (found.empty()) {
+      // Diagnostic: the strict check matched nothing, so dump the blocks that
+      // LOOK like a projection (mostly zeros, one +/-1, a couple of scales),
+      // read big-endian, so the real layout is visible in the log and the
+      // strict check can be calibrated.
+      static int dbg = 0;
+      for (size_t off = 0; off + 64 <= span && dbg < 24; off += 4) {
+        if (!committed[off >> 12]) continue;
+        const uint8_t* q = snap.data() + off;
+        float m[16];
+        int zeros = 0, ones = 0, scales = 0;
+        for (int i = 0; i < 16; ++i) {
+          m[i] = BeF32(q + i * 4);
+          const float a = std::fabs(m[i]);
+          if (!std::isfinite(m[i])) { scales = -100; break; }
+          if (a < 1e-4f) ++zeros;
+          else if (std::fabs(a - 1.0f) < 0.01f) ++ones;
+          else if (a > 0.05f && a < 1.0e6f) ++scales;
+        }
+        if (zeros >= 8 && ones >= 1 && scales >= 2) {
+          REXLOG_INFO("[proj-dbg] 0x{:08X} BE: {:.3f} {:.3f} {:.3f} {:.3f} | "
+                      "{:.3f} {:.3f} {:.3f} {:.3f} | {:.3f} {:.3f} {:.3f} {:.3f} "
+                      "| {:.3f} {:.3f} {:.3f} {:.3f}",
+                      uint32_t(lo + off), m[0], m[1], m[2], m[3], m[4], m[5],
+                      m[6], m[7], m[8], m[9], m[10], m[11], m[12], m[13], m[14],
+                      m[15]);
+          ++dbg;
+        }
+      }
+      REXLOG_INFO("[proj] attempt {}: no perspective matrix yet (in a 3D scene?)",
+                  attempt);
+      continue;
+    }
+    std::sort(found.begin(), found.end(),
+              [](const ProjCand& a, const ProjCand& b) { return a.zf > b.zf; });
+    REXLOG_INFO("[proj] attempt {}: {} perspective matrices; distinct ones:",
+                attempt, found.size());
+    int shown = 0;
+    float last_fov = -1.0f, last_zf = -1.0f;
+    for (const auto& c : found) {
+      if (std::fabs(c.fovy - last_fov) < 0.2f && std::fabs(c.zf - last_zf) < 1.0f)
+        continue;  // collapse identical copies
+      last_fov = c.fovy;
+      last_zf = c.zf;
+      if (shown++ >= 12) break;
+      REXLOG_INFO("[proj]   0x{:08X}  fovy={:.1f}deg  near={:.3f}  far={:.1f}",
+                  c.addr, c.fovy, c.zn, c.zf);
+    }
+    const ProjCand cam = found.front();  // biggest far plane = world camera
+    REXLOG_INFO("[proj] CAMERA candidate 0x{:08X} (fovy {:.1f}, near {:.3f}, "
+                "far {:.1f})", cam.addr, cam.fovy, cam.zn, cam.zf);
+    // Arming a hardware write trap on a live 3D scene sets debug registers on
+    // every thread; that is the riskier half, so it only runs when explicitly
+    // asked. The scan above is pure memory reads and cannot destabilise a stage.
+    if (const char* t = std::getenv("NG2_TRAP_PROJ"); t && *t) {
+      REXLOG_INFO("[proj] NG2_TRAP_PROJ set - arming a write trap to find the builder");
+      ArmWriteTrap(cam.addr);  // watches m[0]; the VEH logs [animwriter] guest_fn
+      for (int k = 0; k < 40 && g_wt_count < 4; ++k) {
+        if (g_wt_target) ApplyWatchToAllThreads();  // new threads come up unarmed
+        Sleep(250);
+      }
+      REXLOG_INFO("[proj] done: {} writer(s) logged above as [animwriter] guest_fn",
+                  g_wt_count);
+    } else {
+      REXLOG_INFO("[proj] scan only; set NG2_TRAP_PROJ=1 to also trace the builder");
+    }
+    return;
+  }
+  REXLOG_WARN("[proj] gave up: no perspective matrix seen");
+}
+
+}  // namespace
+
 namespace ng2 {
 void ScanOscillating() { std::thread(OscillationScanThread).detach(); }
+void FindProjection() { std::thread(FindProjectionThread).detach(); }
 void StartOscillationLoop() {
   static std::atomic<bool> started{false};
   bool expected = false;

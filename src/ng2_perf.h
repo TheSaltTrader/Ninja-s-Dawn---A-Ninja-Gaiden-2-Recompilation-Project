@@ -29,8 +29,11 @@ struct PerfSample {
   float gpu_percent = 0.0f;  // this process's GPU engines, -1 if unavailable
   float vram_mb = 0.0f;      // this process's local video memory
   float vram_total_mb = 0.0f;
+  float ram_mb = 0.0f;       // this process's working set (system RAM)
+  float ram_total_mb = 0.0f;
   bool gpu_valid = false;
   bool vram_valid = false;
+  bool ram_valid = false;
 };
 
 // Starts the sampler. Safe to call twice; the second call does nothing.

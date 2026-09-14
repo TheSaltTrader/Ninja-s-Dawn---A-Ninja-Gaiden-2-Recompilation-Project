@@ -16,6 +16,7 @@
 #include <rex/logging.h>
 
 #pragma comment(lib, "pdh.lib")
+#pragma comment(lib, "psapi.lib")
 
 namespace ng2 {
 namespace {
@@ -201,6 +202,23 @@ bool SampleVram(float& used_mb, float& total_mb) {
   return true;
 }
 
+// --- System memory ---------------------------------------------------------
+
+// This process's working set against total physical RAM, so it pairs with the
+// per-process VRAM figure: "what is the game holding in main memory".
+bool SampleRam(float& used_mb, float& total_mb) {
+  PROCESS_MEMORY_COUNTERS pmc{};
+  MEMORYSTATUSEX ms{};
+  ms.dwLength = sizeof(ms);
+  if (!GetProcessMemoryInfo(GetCurrentProcess(), &pmc, sizeof(pmc)))
+    return false;
+  if (!GlobalMemoryStatusEx(&ms))
+    return false;
+  used_mb = float(double(pmc.WorkingSetSize) / (1024.0 * 1024.0));
+  total_mb = float(double(ms.ullTotalPhys) / (1024.0 * 1024.0));
+  return true;
+}
+
 void SampleLoop() {
   CpuMeter cpu;
   GpuMeter gpu;
@@ -234,6 +252,7 @@ void SampleLoop() {
     if (!s.gpu_valid)
       s.gpu_percent = -1.0f;
     s.vram_valid = SampleVram(s.vram_mb, s.vram_total_mb);
+    s.ram_valid = SampleRam(s.ram_mb, s.ram_total_mb);
 
     {
       std::lock_guard<std::mutex> lock(g_mutex);

@@ -615,10 +615,13 @@ bool DrawSettings(Ng2Settings& s, const PageOptions& opts) {
     ImGui::SameLine();
     changed |= ImGui::Checkbox("CPU##hud", &s.hud_cpu);
     ImGui::SameLine();
+    changed |= ImGui::Checkbox("RAM##hud", &s.hud_ram);
+    ImGui::SameLine();
     changed |= ImGui::Checkbox("Bars##hud", &s.hud_bars);
     HelpMarker("Draws a small bar under each readout showing its current level "
                "at a glance, in the Fable II style.");
-    if (s.hud_enabled && !s.hud_fps && !s.hud_gpu && !s.hud_vram && !s.hud_cpu)
+    if (s.hud_enabled && !s.hud_fps && !s.hud_gpu && !s.hud_vram && !s.hud_cpu &&
+        !s.hud_ram)
       Muted("Nothing is selected, so nothing will show.");
     // Separate switch, because it is a separate display: these bars are in the
     // Textures section of this menu, not on screen during play.
