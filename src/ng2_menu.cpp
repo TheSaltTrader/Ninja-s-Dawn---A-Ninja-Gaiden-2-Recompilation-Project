@@ -1763,10 +1763,11 @@ bool SettingsOverlay::DrawTextures() {
     // did here, as an access violation in rexruntime at ImGui::TableNextRow.
     ImGui::TextUnformatted("Upscaler");
     HelpMarker("Lanczos is a high-quality resample and needs nothing extra. "
-               "Real-ESRGAN is a trained model that adds detail, and needs a "
-               "43 MB download plus a Vulkan-capable GPU.");
+               "Real-ESRGAN is a trained model that adds detail; the port "
+               "ships it under tools/upscaler, and it needs a Vulkan-capable "
+               "GPU.");
     const char* upscalers[] = {"Lanczos (built in)",
-                               "Real-ESRGAN AI (downloaded)"};
+                               "Real-ESRGAN AI (adds detail)"};
     int upscaler_index = (s.texture_ai && ai_ready) ? 1 : 0;
     ImGui::SetNextItemWidth(260.0f);
     if (ImGui::Combo("##upscaler", &upscaler_index, upscalers,
@@ -1792,7 +1793,8 @@ bool SettingsOverlay::DrawTextures() {
             "borrowed, so a higher value sharpens rather than repaints.");
       }
     } else if (have_path) {
-      Muted("The AI upscaler is not installed yet.");
+      Muted("The AI upscaler is missing from tools/upscaler; a copy can be "
+            "downloaded into the texture folder instead.");
       // Say what it needs BEFORE the button, so the requirements are not
       // something discovered by a failure.
       Muted("It needs: Python (for the download and the packing step), a "
@@ -1801,8 +1803,8 @@ bool SettingsOverlay::DrawTextures() {
             "Python - the upscaler is a standalone executable that lives in the "
             "texture folder and can be deleted at any time.");
       Muted("Source: the official Real-ESRGAN release (xinntao/Real-ESRGAN), "
-            "under its own licence. It is not shipped with this port so that "
-            "having it on the machine stays your decision.");
+            "under its own licence (BSD-3). The port ships a copy under "
+            "tools/upscaler; this download replaces one that went missing.");
       const bool downloading = tex_job_->progress.running.load();
       ImGui::BeginDisabled(downloading || tex_job_->tools.python.empty());
       if (ImGui::Button("Download AI upscaler (43 MB)")) {

@@ -162,6 +162,36 @@ bool OnPath(const char* exe, std::string& out) {
 
 // Any of our Python helpers. They sit beside the executable in a release and
 // under tools/ in the source tree, so both are tried.
+// Where the tools live. The port is run from its build folder during
+// development and from an install folder afterwards, so both are tried
+// rather than assuming one.
+fs::path ToolsDir() {
+  const auto exe = rex::filesystem::GetExecutableFolder();
+  for (const auto& candidate :
+       {exe / "tools", exe.parent_path().parent_path().parent_path() / "tools"}) {
+    std::error_code ec;
+    if (fs::is_directory(candidate, ec))
+      return candidate;
+  }
+  return exe / "tools";
+}
+
+// Whether `base` holds the upscaler executable, wherever in the archive it
+// landed - the layout has changed between releases, and "the folder exists"
+// is not the same as "the tool is there".
+bool UpscalerUnder(const fs::path& base) {
+  std::error_code ec;
+  if (!fs::is_directory(base, ec))
+    return false;
+  for (fs::recursive_directory_iterator it(base, ec), end; it != end; it.increment(ec)) {
+    if (ec)
+      break;
+    if (it->path().filename() == "realesrgan-ncnn-vulkan.exe")
+      return true;
+  }
+  return false;
+}
+
 fs::path FindToolScript(const std::string& name) {
   const auto exe_dir = rex::filesystem::GetExecutableFolder();
   std::error_code ec;
@@ -204,6 +234,12 @@ TextureTools FindTextureTools() {
     if (OnPath(candidate, t.python))
       break;
   }
+  // Said once, in the log, so "the AI option is greyed out" can be read
+  // against what was actually on disk.
+  const fs::path bundled = ToolsDir() / "upscaler";
+  REXLOG_INFO("Texture tools: python '{}'; bundled AI upscaler {} at {}",
+              t.python, UpscalerUnder(bundled) ? "present" : "MISSING",
+              bundled.string());
   return t;
 }
 
@@ -390,19 +426,13 @@ PackCensus CountPack(const fs::path& texture_dir) {
 }
 
 bool UpscalerInstalled(const fs::path& texture_dir) {
-  std::error_code ec;
-  const fs::path base = texture_dir / "upscaler";
-  if (!fs::is_directory(base, ec))
-    return false;
-  // Wherever in the archive it landed - the layout has changed between
-  // releases, and "the folder exists" is not the same as "the tool is there".
-  for (fs::recursive_directory_iterator it(base, ec), end; it != end; it.increment(ec)) {
-    if (ec)
-      break;
-    if (it->path().filename() == "realesrgan-ncnn-vulkan.exe")
-      return true;
-  }
-  return false;
+  // The texture folder's own copy first (the Download button puts one there,
+  // and it is the override), then the copy the port ships under
+  // tools/upscaler. v1.0.14 shipped that copy and looked only here, so a
+  // fresh install said "not installed" and packed with Lanczos.
+  if (!texture_dir.empty() && UpscalerUnder(texture_dir / "upscaler"))
+    return true;
+  return UpscalerUnder(ToolsDir() / "upscaler");
 }
 
 std::thread DownloadUpscalerAsync(const TextureTools& tools, const fs::path& texture_dir,

@@ -49,8 +49,22 @@ RETRIES = 2
 
 
 def find_upscaler(root):
-    """The downloaded executable, or None. Mirrors tools/get_upscaler.py."""
-    base = os.path.join(root, "upscaler")
+    """The upscaler executable, or None.
+
+    Two places, in order: the texture folder (where get_upscaler.py puts a
+    per-folder copy), then the one BUNDLED beside these tools. The port ships
+    the upscaler, so the bundled copy is the normal case and the per-folder one
+    is an override.
+    """
+    for base in (os.path.join(root, "upscaler"),
+                 os.path.join(os.path.dirname(os.path.abspath(__file__)), "upscaler")):
+        exe = _find_in(base)
+        if exe:
+            return exe
+    return None
+
+
+def _find_in(base):
     direct = os.path.join(base, "realesrgan-ncnn-vulkan.exe")
     if os.path.isfile(direct):
         return direct

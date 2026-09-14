@@ -3,6 +3,41 @@
 Versions are cut with `tools/make_release.py`, which refuses to package a
 version that has no section here.
 
+## v1.0.15 - 2026-09-13
+
+### Fixed - the bundled AI upscaler was never looked at
+
+v1.0.14 put the Real-ESRGAN engine in the zip at `tools/upscaler/` and made
+AI the default, but the two places that decide whether the AI is available
+- the Textures page and the pack tool - still looked only in the texture
+folder's own `upscaler/`, where the Download button puts a copy. On a fresh
+install the page therefore said "not installed yet", reset the method to
+Lanczos, and every pack was made with Lanczos: the very thing v1.0.14
+claimed to end. Both now check the texture folder first and the port's
+`tools/upscaler/` second, the way the Fable 2 port does, and the log line
+"Texture tools: ..." written when the Textures page is first opened says
+which copy was found.
+
+### Changed - the pack tool decides before it decodes, and holds paths, not pixels
+
+Phase 1 of a full run decoded every dumped texture in pure Python and only
+then asked whether it was art; on the Fable 2 port's 196,000-dump folder
+that was two and a half hours to pack 70,000, with every decoded image kept
+in memory until phase 2 (heading for some 45 GB). The tool now turns render
+targets, fonts and HUD away by shape and format before decoding, reuses the
+decoded PNG beside each raw dump when it exists (same decoder, same bytes),
+and keeps only the path until the chunk that needs the pixels. The output
+is byte-identical to the old tool's (117 of 117 on a 400-texture sample);
+phase 1 of that Fable 2 run went from hours to thirty seconds.
+
+### Fixed - continuing a stopped run no longer keeps the previous pack's files
+
+A run at new settings rewrites the manifest first and then overwrites the
+pack file by file. Stopped halfway, the next run saw a manifest matching
+its settings and marked incomplete, and continued it - counting every
+file already in the folder as done, including the ones the OLD settings
+had made. Files older than the manifest of a stopped run are now redone.
+
 ## v1.0.14 - 2026-09-13
 
 ### Added - the AI upscaler ships in the zip, and is the default

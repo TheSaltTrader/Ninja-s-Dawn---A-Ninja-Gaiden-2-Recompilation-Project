@@ -462,6 +462,53 @@ def _pot(v):
     return v > 0 and (v & (v - 1)) == 0
 
 
+def decode_dump(dump, tid, name, w, h, fmt, tiled, pitch, endian):
+    """The dumped guest bytes of one texture as an RGBA image.
+
+    Raises FileNotFoundError when the raw dump is gone, and whatever the
+    decoder raises on bad data; the caller decides what each means.
+    """
+    raw = os.path.join(dump, "tex_%s.bin" % tid)
+    if not os.path.isfile(raw):
+        raw = os.path.join(dump, "tex_%s.bin" % tid[:16])   # dumped before hashes
+    if not os.path.isfile(raw):
+        raise FileNotFoundError(raw)
+    data = open(raw, "rb").read()
+    data = swap_endian(data, endian)
+
+    bpb, block = FMT_INFO[fmt]
+    if tiled:
+        # The key's pitch is in units of 32 TEXELS, and tiled_offset_2d
+        # wants a pitch in BLOCKS. Dividing by bytes-per-block instead of
+        # by the block width put every macro-tile row at the wrong stride,
+        # which decoded as recognisable art sliced into horizontal bands.
+        pitch_texels = max(pitch * 32, w)
+        pitch_blocks = max(1, pitch_texels // block)
+        data = untile(data, w, h, bpb, block, pitch_blocks)
+    if fmt in (FMT_DXT1, FMT_DXT2_3, FMT_DXT4_5):
+        px = decode_dxt(data, w, h, fmt)
+    else:
+        px = decode_plain(data, w, h, fmt)
+    return Image.frombytes("RGBA", (w, h), px)
+
+
+def open_pending(entry, dump):
+    """The decoded image behind a phase-1 entry: the PNG on disk, or a fresh
+    decode when that file is unreadable (a run stopped by a full disk can
+    leave one truncated)."""
+    tid, path, key = entry
+    try:
+        return Image.open(path).convert("RGBA")
+    except Exception as exc:                                    # noqa: BLE001
+        if key is None:
+            raise
+        print("  %s unreadable (%s) - decoding it again" % (os.path.basename(path), exc),
+              flush=True)
+        img = decode_dump(dump, *key)
+        img.save(path)
+        return img
+
+
 def make_upscaler(model_name, scale):
     """Return a function (PIL RGBA) -> upscaled PIL RGBA.
 
@@ -657,6 +704,30 @@ def main():
         if cut_short:
             print("%d pack file(s) are shorter than their header says (a write cut short) "
                   "- they will be redone" % cut_short, flush=True)
+    # A stopped run may have been REDOING an older pack: it rewrote the manifest
+    # first and then overwrote the files one by one, so every file older than
+    # that manifest was made by the run before it, at settings the manifest
+    # no longer describes. Those are still to be done.
+    if have_tex:
+        m = read_manifest(pack)
+        if m.get("complete") != "1" and m.get("written"):
+            try:
+                since = time.mktime(time.strptime(m["written"], "%Y-%m-%d %H:%M:%S"))
+            except ValueError:
+                since = None
+            if since is not None:
+                older = set()
+                for tid in have_tex:
+                    try:
+                        if os.path.getmtime(os.path.join(pack, tid + ".tex")) < since - 1:
+                            older.add(tid)
+                    except OSError:
+                        older.add(tid)
+                if older:
+                    print("NOTE: %d pack file(s) predate the run that was stopped halfway "
+                          "- made with the settings before it, so they are redone"
+                          % len(older), flush=True)
+                    have_tex -= older
     reused = 0
     # Two steps, each reported as its own PROGRESS bar. Naming them lets the
     # app restart its bar and its clock at the second rather than showing 100%
@@ -674,56 +745,38 @@ def main():
         if fmt not in FMT_INFO:
             skipped += 1
             continue
-        if args.only_missing:
-            if tid in have_tex:
-                reused += 1                 # in the pack already: leave it alone
-                continue
-            reason = pack_reason(w, h, fmt)
-            if reason and not args.include_ui:
-                skips[reason] = skips.get(reason, 0) + 1
-                ui += 1
-                continue
-            decoded = os.path.join(dump, name + ".png")
-            if os.path.isfile(decoded):     # decoded on an earlier run
-                pending.append((tid, Image.open(decoded).convert("RGBA")))
-                continue
-        raw = os.path.join(dump, "tex_%s.bin" % tid)
-        if not os.path.isfile(raw):
-            raw = os.path.join(dump, "tex_%s.bin" % tid[:16])   # dumped before hashes
-        if not os.path.isfile(raw):
-            failed += 1
+        if args.only_missing and tid in have_tex:
+            reused += 1                 # in the pack already: leave it alone
             continue
-        data = open(raw, "rb").read()
-        data = swap_endian(data, endian)
-
-        bpb, block = FMT_INFO[fmt]
-        if tiled:
-            # The key's pitch is in units of 32 TEXELS, and tiled_offset_2d
-            # wants a pitch in BLOCKS. Dividing by bytes-per-block instead of
-            # by the block width put every macro-tile row at the wrong stride,
-            # which decoded as recognisable art sliced into horizontal bands.
-            pitch_texels = max(pitch * 32, w)
-            pitch_blocks = max(1, pitch_texels // block)
-            data = untile(data, w, h, bpb, block, pitch_blocks)
-        try:
-            if fmt in (FMT_DXT1, FMT_DXT2_3, FMT_DXT4_5):
-                px = decode_dxt(data, w, h, fmt)
-            else:
-                px = decode_plain(data, w, h, fmt)
-            img = Image.frombytes("RGBA", (w, h), px)
-        except Exception as exc:                                # noqa: BLE001
-            print("  decode failed for %s: %s" % (name, exc))
-            failed += 1
-            continue
-
-        img.save(os.path.join(dump, name + ".png"))
-
+        # Whether a texture is art is decided by shape and format alone, so
+        # the render targets, fonts and HUD are turned away BEFORE decoding:
+        # a full run used to decode every dump in pure Python to pack a
+        # third of them, and the decode is nearly all of phase 1.
         reason = pack_reason(w, h, fmt)
         if reason and not args.include_ui:
             skips[reason] = skips.get(reason, 0) + 1
             ui += 1
             continue
-        pending.append((tid, img))
+        # The decoded PNG beside the raw dump is the SAME bytes a fresh decode
+        # gives, so a run at new settings reuses it: the upscale is redone,
+        # the decode is not. Phase 1 keeps the path, not the image - every
+        # decoded texture held until phase 2 was gigabytes on a big dump.
+        decoded = os.path.join(dump, name + ".png")
+        key = (tid, name, w, h, fmt, tiled, pitch, endian)
+        if os.path.isfile(decoded) and os.path.getsize(decoded) > 0:
+            pending.append((tid, decoded, key))
+            continue
+        try:
+            img = decode_dump(dump, *key)
+        except FileNotFoundError:
+            failed += 1
+            continue
+        except Exception as exc:                                # noqa: BLE001
+            print("  decode failed for %s: %s" % (name, exc))
+            failed += 1
+            continue
+        img.save(decoded)
+        pending.append((tid, decoded, key))
 
     # Anything decoded on a PREVIOUS run whose raw .bin is gone.
     #
@@ -732,7 +785,11 @@ def main():
     # between machines) leaves the decoded art perfectly usable while the index
     # describes almost nothing. Recovering from the PNGs means a pack can be
     # rebuilt at a different scale or strength without replaying the game.
-    have = {tid for tid, _ in pending}
+    # Everything the index listed was dealt with above, whatever the outcome
+    # (packed, waiting, turned away, or already in the pack) - a PNG of one of
+    # those is not a recovery, and counting a packed one again as 'already'
+    # overstated that number by every PNG in the folder.
+    handled = {e[0] for e in uniq} | {e[0] for e in pending}
     by_name = {v: k for k, v in FMT_NAMES.items()}
     for fn in sorted(os.listdir(dump)):
         m = DECODED_RE.match(fn)
@@ -740,14 +797,14 @@ def main():
             continue
         tid, w2, h2 = m.group(1), int(m.group(2)), int(m.group(3))
         fmt2 = by_name.get(m.group(4))
-        if tid in have or fmt2 is None:
+        if tid in handled or fmt2 is None:
             continue
         if args.only_missing and tid in have_tex:
             reused += 1
             continue
         if pack_reason(w2, h2, fmt2) and not args.include_ui:
             continue
-        pending.append((tid, Image.open(os.path.join(dump, fn)).convert("RGBA")))
+        pending.append((tid, os.path.join(dump, fn), None))
         recovered += 1
     if recovered:
         print("recovered %d textures from previously decoded PNGs" % recovered)
@@ -763,6 +820,8 @@ def main():
           flush=True)
     if total_pack:
         write_manifest(pack, args.scale, upscaler_name, strength, complete=False)
+    written = 0
+    failed_at = failed
     if total_pack == 0:
         pass
     elif args.ai:
@@ -774,19 +833,33 @@ def main():
                   "button, or run tools/get_upscaler.py")
             return 1
         print("AI upscaler: %s (detail strength %.2f)" % (exe, args.ai_strength))
-        written = 0
         for base in range(0, total_pack, ai_upscale.CHUNK):
-            part = pending[base:base + ai_upscale.CHUNK]
+            part = []
+            for entry in pending[base:base + ai_upscale.CHUNK]:
+                try:
+                    part.append((entry[0], open_pending(entry, dump)))
+                except Exception as exc:                        # noqa: BLE001
+                    print("  decode failed for %s: %s" % (entry[0], exc))
+                    failed += 1
             got = ai_upscale.upscale_many(exe, part, args.scale, gpu=args.gpu)
             for tid, src in part:
                 write_tex(os.path.join(pack, "%s.tex" % tid),
                           ai_upscale.blend(got[tid], src, args.ai_strength))
                 written += 1
-                print("PROGRESS %d %d %s" % (written, total_pack, tid), flush=True)
+                print("PROGRESS %d %d %s" % (written + (failed - failed_at),
+                                             total_pack, tid), flush=True)
     else:
-        for i, (tid, img) in enumerate(pending, 1):
+        for i, entry in enumerate(pending, 1):
+            tid = entry[0]
             print("PROGRESS %d %d %s" % (i, total_pack, tid), flush=True)
+            try:
+                img = open_pending(entry, dump)
+            except Exception as exc:                            # noqa: BLE001
+                print("  decode failed for %s: %s" % (tid, exc))
+                failed += 1
+                continue
             write_tex(os.path.join(pack, "%s.tex" % tid), up(img) if up else img)
+            written += 1
 
     took = time.time() - started
     if total_pack or not read_manifest(pack):
@@ -797,7 +870,7 @@ def main():
     # many textures the tool considers art, how many it wrote this run, how
     # many it left alone, and how many it never packs by design.
     print("SUMMARY art=%d written=%d already=%d excluded=%d failed=%d"
-          % (total_pack + reused, total_pack, reused, ui, failed))
+          % (written + reused, written, reused, ui, failed))
     print("DONE decoded=%d skipped_format=%d skipped_ui=%d failed=%d in %.1fs"
           % (done - skipped - failed, skipped, ui, failed, took))
     return 0
