@@ -114,6 +114,22 @@
       "doc_phrase": "Video memory"
     },
     {
+      "setting": "hud_cpu",
+      "doc_phrase": "CPU load"
+    },
+    {
+      "setting": "hud_ram",
+      "doc_phrase": "System memory"
+    },
+    {
+      "setting": "hud_bars",
+      "doc_phrase": "Draw as bars"
+    },
+    {
+      "setting": "check_for_updates",
+      "doc_phrase": "Check for updates"
+    },
+    {
       "setting": "present_dither",
       "doc_phrase": "Dither the output"
     },
@@ -168,6 +184,14 @@
     {
       "setting": "hud_menu_bars",
       "doc_phrase": "Live cost bars in this menu"
+    },
+    {
+      "setting": "ultrawide",
+      "doc_phrase": "Ultrawide"
+    },
+    {
+      "setting": "fov_scale",
+      "reason": "Fine field-of-view multiplier for Ultrawide 3D. The in-menu slider was removed in v1.0.17 - the Ultrawide toggle alone picks the correct field of view for the monitor, and the slider added a per-value knob without a clear use - so this field is kept at its default (1.0) and only parsed from old settings files. The Ultrawide toggle itself is in the menu and documented."
     }
   ]
 }

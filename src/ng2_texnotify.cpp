@@ -105,10 +105,11 @@ void TextureNotifyOverlay::OnDraw(ImGuiIO& io) {
 
 void PerfHudOverlay::OnDraw(ImGuiIO& io) {
   (void)io;
-  // Counted here rather than on a timer: this runs once per PRESENTED frame, so
-  // it measures frames the player actually saw.
-  PerfFrameTick();
-
+  // FPS is NOT counted here: this callback runs once per HOST present, which on a
+  // high-refresh monitor with vsync is the display's rate, not the game's (it
+  // read 165 on a 165 Hz panel while the game ran at 60). The counter is driven
+  // instead from ng2DiagFrameTick - the guest main-loop frame hook - so it shows
+  // the rate the game actually renders at.
   const Ng2Settings* s = g_hud_settings;
   if (!s || !s->hud_enabled ||
       (!s->hud_fps && !s->hud_gpu && !s->hud_vram && !s->hud_cpu && !s->hud_ram))

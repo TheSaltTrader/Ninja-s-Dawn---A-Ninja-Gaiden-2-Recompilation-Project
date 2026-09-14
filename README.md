@@ -154,6 +154,7 @@ accepted and quietly ignored.
 | Internal render size | 1120 × 584 (as shipped) | The game renders at 1120 × 584 and scales up. 1280 × 720 removes that upscale - the same change as the Xenia community patch for this title. (restart) |
 | Internal supersampling | 1× | 1–8×. Renders above output size and downsamples. Also scales shadow maps, because the SDK's resolution scale applies to resolve targets. 4× and 8× are there for hardware that does not exist yet; 2× is the useful setting today. (restart) |
 | Letterbox | on | Keeps the original aspect instead of stretching. |
+| Ultrawide (3D) | off | Widens the 3D field of view to fill a wider-than-16:9 screen with correct proportions - you see more of the world across the width, with no stretching. Full-screen menus, videos and the in-game HUD stay 16:9. Takes effect immediately. |
 | Dither the output | off | Hides colour banding on 8-bit displays. |
 
 An **Autodetect** button re-runs the first-launch hardware detection and picks settings for your card again.
@@ -222,13 +223,18 @@ the benefit arrives on your second visit to a stage rather than your first.
 |---|---|
 | Show readouts (**F8**) | off |
 | FPS | on |
+| CPU load | on |
+| System memory (RAM) | on |
 | GPU load | on |
 | Video memory | on |
+| Draw as bars | on |
 | Live cost bars in this menu | on |
 
-The first four are the on-screen readout during play. The last is separate: the
-CPU/GPU/VRAM bars drawn inside the Textures section, for watching the cost move
-while you toggle the pack with F9.
+All but the last are the on-screen readout during play: FPS, CPU load, system
+memory (RAM), GPU load and video memory, each toggled on its own, and **Draw as
+bars** which shows them as coloured bars instead of numbers. The last is
+separate: the CPU/GPU/VRAM bars drawn inside the Textures section, for watching
+the cost move while you toggle the pack with F9.
 
 ### Other
 
@@ -236,6 +242,7 @@ while you toggle the pack with F9.
 |---|---|---|
 | Hide the cursor after | 5 s | |
 | Keyboard control | off | |
+| Check for updates | on | On launch, checks GitHub for a newer release and offers to download and install it, keeping your settings, game and DLC. Turn it off to never touch the network. |
 
 ### Report a problem
 
@@ -251,10 +258,13 @@ If the game never reaches the menu, set the environment variable
 
 ## Known issues
 
-- **True ultrawide rendering is not there.** A 21:9 internal render size makes
-  the 3D scene wider but the game's 2D layer does not follow: chapter cards
-  stretch and the credits sit off centre. What works is an ultrawide window
-  with "Keep aspect ratio" on, which pillarboxes.
+- **Ultrawide is a field-of-view widen, not a wider render.** With **Ultrawide
+  (3D)** on, the 3D field of view widens so the game fills a wider-than-16:9
+  screen with correct proportions; full-screen menus, videos and the in-game HUD
+  stay 16:9. The game still renders 16:9 internally (a wider render surface
+  breaks the console's frame resolves), so this is a field-of-view change, not a
+  higher horizontal resolution. Leave it off (with Keep aspect ratio on) for a
+  pillarboxed 16:9 image.
 - **The attract demo froze the game in earlier versions**, from a second
   ring-buffer failure unrelated to the one fixed in v1.0.0. It has not been seen
   since the ring fix was fully deployed, but it is not closed until a long

@@ -473,15 +473,12 @@ bool DrawSettings(Ng2Settings& s, const PageOptions& opts) {
     changed |= ImGui::Checkbox("##letterbox", &s.letterbox);
 
     RowStart("Ultrawide (3D)",
-             "Tell the game the monitor's real aspect so the 3D field of view "
-             "widens to match - more of the world across the width, with correct "
-             "proportions and no distortion. The full-screen 2D screens (chapter "
-             "cards, menus, credits) are built for 16:9 and will stretch at other "
-             "aspects; the in-game HUD is fine. Applies on the next launch.");
+             "Widen Ninja Gaiden II's horizontal field of view so the 3D fills a "
+             "wider screen with correct proportions - the world, characters and "
+             "enemies all show more across the width, no stretching. Vertical view "
+             "and depth are unchanged. Full-screen menus and videos stay 16:9 with "
+             "black bars, and the in-game HUD stays 16:9. Takes effect immediately.");
     changed |= ImGui::Checkbox("##ultrawide", &s.ultrawide);
-    if (s.ultrawide)
-      Muted("Applies at the next launch. 2D menus and chapter cards stretch; "
-            "the 3D and the in-game HUD are correct.");
 
     RowStart("Hide the pointer after",
              "Seconds of mouse stillness over the window before the pointer "
@@ -864,6 +861,20 @@ void ApplyLiveSettings(const Ng2Settings& s, rex::ui::Window* window) {
   SetCvar("present_dither", s.present_dither ? "true" : "false");
   SetCvar("present_letterbox", s.letterbox ? "true" : "false");
   SetCvar("vsync", s.vsync ? "true" : "false");
+  // Ultrawide 3D FOV (ng2_fov_k), live. Mirrors Ng2App::ApplyFov: on, the 3D is
+  // widened by the render/display aspect so the 16:9 frame filled to the wider
+  // screen keeps correct proportions; off, k=1. The plugin caches the per-shader
+  // scan, so this is cheap. The fine FOV slider was removed, so fov_scale is 1.
+  {
+    double k = 1.0;
+    if (s.ultrawide) {
+      int mw = 0, mh = 0;
+      if (ng2::MonitorFullSize(s.monitor, mw, mh) && mw > 0 && mh > 0)
+        k = (16.0 / 9.0) / (double(mw) / double(mh));
+    }
+    k = std::clamp(k, 0.40, 1.20);
+    SetCvar("ng2_fov_k", std::to_string(k));
+  }
   SetCvar("mnk_mode", s.keyboard_control ? "true" : "false");
   // Read afresh every time the guest opens a video, so turning this on mid-run
   // takes effect at the next one rather than at the next launch.

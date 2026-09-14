@@ -781,18 +781,12 @@ class Ng2App : public rex::ReXApp {
     // size as before, an ultrawide is told a display of its own height.
     int guest_w = settings_.window_width;
     int guest_h = settings_.window_height;
-    if (settings_.ultrawide) {
-      // True ultrawide: tell the game the monitor's real aspect so its 3D field
-      // of view widens to match (verified). Scaled to ~1080 tall so the video
-      // mode stays a sane size; the render surface is left native, which is
-      // what keeps the EDRAM resolves valid.
-      int mw = 0, mh = 0;
-      float sc = 1.0f;
-      if (ng2::MonitorWorkArea(settings_.monitor, mw, mh, sc) && mw > 0 && mh > 0) {
-        guest_h = 1080;
-        guest_w = 1080 * mw / mh;
-      }
-    } else if (guest_w * 9 > guest_h * 16) {
+    // Always tell the guest a 16:9 display. Ultrawide is now done by the GPU
+    // plugin: it widens the 3D field of view and fills the screen during
+    // gameplay, and pillarboxes menus and videos at 16:9 (see ApplyFov and the
+    // ng2_fov_k cvar). Reporting a wide display instead only stretched the 2D
+    // and NG2's fixed-16:9 3D, which is the "stretch mod" this replaces.
+    if (guest_w * 9 > guest_h * 16) {
       guest_w = guest_h * 16 / 9;
     } else if (guest_w * 9 < guest_h * 16) {
       guest_h = guest_w * 9 / 16;
@@ -850,6 +844,31 @@ class Ng2App : public rex::ReXApp {
         REXCVAR_GET(video_mode_width), REXCVAR_GET(video_mode_height),
         settings_.resolution_scale, settings_.fps, settings_.fullscreen,
         settings_.vsync);
+  }
+
+  // Ultrawide 3D FOV. The GPU plugin reads ng2_fov_k on every draw and scales
+  // each 3D projection's column 0 by it - k < 1 widens the horizontal field of
+  // view (Hor+), k = 1 is off - and detects gameplay vs menus/videos so gameplay
+  // fills the screen (its 3D widened, its HUD kept 16:9) while menus and videos
+  // pillarbox at 16:9. The per-shader scan is cached in the plugin, so the widen
+  // is effectively free (an earlier per-draw scan cost ~1/3 of the frame rate).
+  // Hot-reloadable, so the Ultrawide toggle calls this live; OnPostSetup calls it
+  // once at boot. Ultrawide on: k = render_aspect / display_aspect, so the 16:9
+  // frame filled to the wider screen comes out with correct proportions. Off:
+  // k = 1 (native 16:9). The fine FOV slider was removed - fov_scale stays 1.
+  void ApplyFov() {
+    double k = 1.0;
+    if (settings_.ultrawide) {
+      int mw = 0, mh = 0;
+      if (ng2::MonitorFullSize(settings_.monitor, mw, mh) && mw > 0 && mh > 0) {
+        const double display_aspect = double(mw) / double(mh);
+        const double render_aspect = 16.0 / 9.0;
+        k = render_aspect / display_aspect;
+      }
+    }
+    k = std::clamp(k, 0.40, 1.20);
+    rex::cvar::SetFlagByName("ng2_fov_k", std::to_string(k));
+    REXLOG_INFO("FOV: ultrawide={} -> ng2_fov_k={:.4f}", settings_.ultrawide, k);
   }
 
   // Install downloadable content.
@@ -1120,6 +1139,10 @@ class Ng2App : public rex::ReXApp {
   void OnPostSetup() override {
     MaybeWriteDiagnostics();
     ArmQuitSeam();
+
+    // Apply the saved ultrawide / FOV now that the GPU plugin (which owns the
+    // ng2_fov_k cvar) is loaded and its cvars are registered.
+    ApplyFov();
 
     // Self-update. Wire the module to this install, register the clean-exit that
     // lets the staged updater replace our files, and - if the player has left

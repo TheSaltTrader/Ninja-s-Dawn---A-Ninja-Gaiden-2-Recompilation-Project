@@ -21,6 +21,7 @@
 
 #include "ng2_autoskip.h"
 #include "ng2_chapter.h"
+#include "ng2_perf.h"
 
 #include <rex/cvar.h>
 #include "third_party/renderdoc_app.h"
@@ -1251,6 +1252,12 @@ void ReportFrameRate() {
 
 void ng2DiagFrameTick() {
   ++g_frame;
+  // Drive the HUD's FPS readout from this guest-frame hook (sub_822F3A88 runs
+  // once per frame from the game's main loop), so it shows the rate the GAME
+  // renders at. It used to be ticked from the overlay's draw callback, which
+  // runs once per HOST present - on a high-refresh monitor with vsync that is
+  // the display's rate (e.g. 165), not the game's, so it read far too high.
+  ng2::PerfFrameTick();
   ReportFrameRate();
   MaybeTriggerRenderDocCapture(g_frame);
   MaybeDumpGuestPlane();

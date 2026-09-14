@@ -82,6 +82,11 @@ float SystemScale();
 // primary when the index is out of range. False if nothing was determined.
 bool MonitorWorkArea(int index, int& width, int& height, float& scale);
 
+// The FULL physical bounds of one monitor (rcMonitor, taskbar included) - the
+// area a fullscreen window covers, so the right aspect for the ultrawide FOV.
+// Falls back to the primary when the index is out of range.
+bool MonitorFullSize(int index, int& width, int& height);
+
 // Starts another copy of this application and does NOT wait for it. Used by
 // the game's own "Quit Game", which returns the player to the setup screen by
 // relaunching - see Ng2App::ReturnToMenu for why it is a relaunch and not a

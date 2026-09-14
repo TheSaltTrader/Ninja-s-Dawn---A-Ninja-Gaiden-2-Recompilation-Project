@@ -3,6 +3,36 @@
 Versions are cut with `tools/make_release.py`, which refuses to package a
 version that has no section here.
 
+## v1.0.17 - 2026-09-14
+
+### Added - Ultrawide (3D) field of view
+
+A new **Ultrawide (3D)** switch on the Display screen widens Ninja Gaiden II's
+horizontal field of view to fill a wider-than-16:9 monitor with correct
+proportions: the world, characters, enemies and effects all show more across
+the width, with no stretching, and the vertical view and depth are unchanged.
+It is scene-aware - actual gameplay fills the screen while full-screen menus,
+videos and the in-game HUD stay 16:9 (pillarboxed with black bars on an
+ultrawide), so 2D art is never stretched. It takes effect immediately, with no
+restart, and is off by default.
+
+Under the hood the GPU plugin scales the horizontal column of each 3D draw's
+projection (a Hor+ widen that is mathematically exact), detects gameplay from
+menus by how much 3D versus 2D each frame draws, and caches the per-shader
+projection location so the widen costs no measurable frame rate.
+
+### Fixed - the on-screen FPS readout now shows the game's frame rate
+
+The F8 FPS number was counted once per host present, so on a high-refresh
+monitor with V-Sync it showed the display's rate (e.g. 165) rather than the
+game's. It is now counted from the game's own main-loop frame, so it reflects
+how fast the game is actually running.
+
+### Changed
+
+The fine field-of-view slider from an earlier internal build was removed; the
+Ultrawide toggle alone picks the correct field of view for the monitor.
+
 ## v1.0.16 - 2026-09-13
 
 ### Added - the game checks for updates on launch and can install them itself
