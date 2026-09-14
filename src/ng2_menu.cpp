@@ -612,7 +612,14 @@ bool DrawSettings(Ng2Settings& s, const PageOptions& opts) {
     changed |= ImGui::Checkbox("GPU##hud", &s.hud_gpu);
     ImGui::SameLine();
     changed |= ImGui::Checkbox("VRAM##hud", &s.hud_vram);
-    if (s.hud_enabled && !s.hud_fps && !s.hud_gpu && !s.hud_vram)
+    ImGui::SameLine();
+    changed |= ImGui::Checkbox("CPU##hud", &s.hud_cpu);
+    ImGui::SameLine();
+    changed |= ImGui::Checkbox("Graphs##hud", &s.hud_graph);
+    HelpMarker("Draws a rolling one-minute line graph under each readout, so a "
+               "dip or a climb is visible over time rather than just the instant "
+               "value.");
+    if (s.hud_enabled && !s.hud_fps && !s.hud_gpu && !s.hud_vram && !s.hud_cpu)
       Muted("Nothing is selected, so nothing will show.");
     // Separate switch, because it is a separate display: these bars are in the
     // Textures section of this menu, not on screen during play.

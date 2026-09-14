@@ -212,6 +212,13 @@ struct Ng2Settings {
   bool hud_gpu = true;
   bool hud_vram = true;
 
+  // Process CPU across all cores, and a small rolling line graph under each
+  // readout (frame rate / CPU / GPU / video memory over the last minute). Both
+  // only ever show when the readouts are on (hud_enabled / F8), so an update
+  // that adds them changes nothing until the player turns the HUD on.
+  bool hud_cpu = true;
+  bool hud_graph = true;
+
   // The live CPU/GPU/VRAM bars drawn INSIDE the settings, beside the texture
   // switches. Separate from the three above, which are the on-screen readout:
   // they answer different questions. The readout is for playing, these are for
@@ -351,6 +358,8 @@ struct Ng2Settings {
         << "hud_fps=" << (hud_fps ? 1 : 0) << "\n"
         << "hud_gpu=" << (hud_gpu ? 1 : 0) << "\n"
         << "hud_vram=" << (hud_vram ? 1 : 0) << "\n"
+        << "hud_cpu=" << (hud_cpu ? 1 : 0) << "\n"
+        << "hud_graph=" << (hud_graph ? 1 : 0) << "\n"
         << "hud_menu_bars=" << (hud_menu_bars ? 1 : 0) << "\n"
         // Nine more with the same fault, found by the ROUNDTRIP sweep rather
         // than by anyone noticing: each was parsed on load and never written,
@@ -438,6 +447,8 @@ struct Ng2Settings {
     else if (k == "hud_fps") hud_fps = Truthy(v);
     else if (k == "hud_gpu") hud_gpu = Truthy(v);
     else if (k == "hud_vram") hud_vram = Truthy(v);
+    else if (k == "hud_cpu") hud_cpu = Truthy(v);
+    else if (k == "hud_graph") hud_graph = Truthy(v);
     else if (k == "hud_menu_bars") hud_menu_bars = Truthy(v);
     else if (k == "present_effect") present_effect = v;
     else if (k == "cas_sharpness") cas_sharpness = float(std::atof(v.c_str()));

@@ -180,6 +180,27 @@ class Ng2App : public rex::ReXApp {
       const rex::PathConfig& defaults,
       std::function<void(rex::PathConfig)> resume) override {
     const bool path_from_cli = !REXCVAR_GET(game_data_root).empty();
+
+    // Remember a game folder given on the command line, so a later launch with
+    // NO arguments finds it instead of opening the setup screen. That argless
+    // launch is exactly what the self-updater's relaunch is: without this, an
+    // install whose game folder lived only on --game_data_root (a shortcut or a
+    // script) would come back from an update on the setup screen and look like
+    // it had lost its settings - the fault Fable II hit and fixed the same way.
+    // Portable installs are unaffected: the setup screen already persists
+    // game_path and keeps game/ beside the executable.
+    if (path_from_cli) {
+      const std::string cli_root = REXCVAR_GET(game_data_root);
+      if (ng2::InspectFolder(std::filesystem::path(cli_root)).Usable() &&
+          (!settings_.configured || settings_.game_path != cli_root)) {
+        settings_.game_path = cli_root;
+        settings_.configured = true;
+        settings_.Save();
+        REXLOG_INFO("Settings: remembered the command-line game folder {}",
+                    cli_root);
+      }
+    }
+
     const bool game_ok = ng2::InspectFolder(settings_.ResolvedGamePath()).Usable();
 
     // Four reasons to stop: never configured, the player asked for it with
