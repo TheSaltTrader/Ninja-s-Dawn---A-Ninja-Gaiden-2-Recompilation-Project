@@ -90,6 +90,40 @@ endif()
 # next to the executable. It is runtime-loaded, never linked.
 rexglue_setup_target(ng2 GPU_PLUGINS xenos)
 
+# Post-codegen guard for the local recompilation crash patches. These two fixes
+# (local/diag/patch_missed_regs.py + patch_scanguard.py) edit the *generated*
+# translated source, so a codegen regeneration overwrites them. That happened
+# once and silently shipped two crashes back into v1.0.17 (a null write on
+# Ninpo/a late boss, and the chapter 12->13 transition). Wiring the re-apply
+# into the build graph after codegen and before the recomp compile makes that
+# regression impossible: whenever codegen refreshes codegen.build.stamp, the
+# patches are re-applied (idempotent - each script skips a file already carrying
+# its marker) before the generated .cpp are compiled.
+if(TARGET ng2_codegen AND TARGET ng2_recomp)
+    find_program(NG2_PYTHON NAMES python python3)
+    if(NG2_PYTHON)
+        set(_ng2_gen "${CMAKE_CURRENT_SOURCE_DIR}/generated/default")
+        add_custom_command(
+            OUTPUT "${_ng2_gen}/local_patches.stamp"
+            DEPENDS "${_ng2_gen}/codegen.build.stamp"
+                    "${CMAKE_CURRENT_SOURCE_DIR}/local/diag/patch_missed_regs.py"
+                    "${CMAKE_CURRENT_SOURCE_DIR}/local/diag/patch_scanguard.py"
+            COMMAND "${NG2_PYTHON}" "${CMAKE_CURRENT_SOURCE_DIR}/local/diag/patch_missed_regs.py"
+            COMMAND "${NG2_PYTHON}" "${CMAKE_CURRENT_SOURCE_DIR}/local/diag/patch_scanguard.py"
+            COMMAND "${CMAKE_COMMAND}" -E touch "${_ng2_gen}/local_patches.stamp"
+            COMMENT "Re-applying NG2 post-codegen crash patches (missed_regs, scanguard)"
+            VERBATIM)
+        add_custom_target(ng2_local_patches
+            DEPENDS "${_ng2_gen}/local_patches.stamp")
+        add_dependencies(ng2_recomp ng2_local_patches)
+    else()
+        message(WARNING
+            "python not found: NG2 post-codegen crash patches will NOT be auto-"
+            "re-applied. After any codegen regeneration, run by hand: "
+            "local/diag/patch_missed_regs.py and local/diag/patch_scanguard.py")
+    endif()
+endif()
+
 target_compile_definitions(ng2 PRIVATE NG2_VERSION="${NG2_VERSION}")
 
 # DXGI, for reading the video-memory budget in src/ng2_hwdetect.cpp.

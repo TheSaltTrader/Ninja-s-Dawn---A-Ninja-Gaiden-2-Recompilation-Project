@@ -3,6 +3,24 @@
 Versions are cut with `tools/make_release.py`, which refuses to package a
 version that has no section here.
 
+## v1.0.18 - 2026-09-14
+
+### Fixed - two crashes that slipped back into v1.0.17
+
+Two recompilation fixes that live as post-generation patches were silently lost
+when the translated game code was last regenerated, so v1.0.17 shipped without
+them. Both are restored:
+
+- **A crash when using Ninpo / during a late boss.** A code fragment reached by
+  a branch inside one function had its saved registers re-initialised to zero
+  instead of carried across, so it wrote through a null pointer. Restored the
+  register hand-off (`patch_missed_regs`).
+- **A crash at the Chapter 12 -> 13 transition.** The end-of-chapter effect-list
+  scanners were not null-guarded, so a freed (null) list walked off into
+  unmapped memory. Restored the guard (`scanguard`).
+
+Ultrawide (3D) and everything else in v1.0.17 are unchanged.
+
 ## v1.0.17 - 2026-09-14
 
 ### Added - Ultrawide (3D) field of view
