@@ -3,6 +3,25 @@
 Versions are cut with `tools/make_release.py`, which refuses to package a
 version that has no section here.
 
+## v1.0.20 - 2026-09-14
+
+### Fixed - Scene-transition fades are now ultrawide
+
+The black fades that bracket every in-engine scene - chapter intros, boss-defeat
+scenes, in-engine cutscenes, area transitions - now fill the full ultrawide
+screen. Before, a fade showed as a centred 16:9 black band with the FOV-widened
+3D leaking through on the two sides.
+
+NG2 draws a fade as a full-screen 2D solid fill. Ultrawide compresses 2D UI to a
+centred 16:9 band so the HUD does not stretch - and that was shrinking the fade
+too. The fade is now told apart from the HUD by its rendering signature: a 2D UI
+draw that samples no texture (a solid fill). Measurement across gameplay, combat,
+menus and cards showed the fade is the ONLY such draw - the HUD, menus and
+chapter cards are all textured - so the fade is left uncompressed and covers the
+whole screen while everything else stays 16:9. This is general: any in-engine
+fade drawn this way is widened automatically, on any chapter. Verified in-game
+(fade-in and fade-out) with the HUD, weapons menu and chapter cards unaffected.
+
 ## v1.0.19 - 2026-09-14
 
 ### Improved - Ultrawide uses the game's own pause and menu state
