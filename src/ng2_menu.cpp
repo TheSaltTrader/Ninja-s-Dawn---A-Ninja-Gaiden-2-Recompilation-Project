@@ -472,6 +472,17 @@ bool DrawSettings(Ng2Settings& s, const PageOptions& opts) {
              "stretching it to fill.");
     changed |= ImGui::Checkbox("##letterbox", &s.letterbox);
 
+    RowStart("Ultrawide (3D)",
+             "Tell the game the monitor's real aspect so the 3D field of view "
+             "widens to match - more of the world across the width, with correct "
+             "proportions and no distortion. The full-screen 2D screens (chapter "
+             "cards, menus, credits) are built for 16:9 and will stretch at other "
+             "aspects; the in-game HUD is fine. Applies on the next launch.");
+    changed |= ImGui::Checkbox("##ultrawide", &s.ultrawide);
+    if (s.ultrawide)
+      Muted("Applies at the next launch. 2D menus and chapter cards stretch; "
+            "the 3D and the in-game HUD are correct.");
+
     RowStart("Hide the pointer after",
              "Seconds of mouse stillness over the window before the pointer "
              "disappears. 0 keeps it visible.");

@@ -230,6 +230,17 @@ struct Ng2Settings {
   bool present_dither = false;
   bool letterbox = true;
 
+  // True ultrawide. The guest is normally told a 16:9 display so its 3D view
+  // stays 16:9 and is pillarboxed on a wider screen. With this on, the guest is
+  // told the monitor's real aspect instead, and Ninja Gaiden II's 3D field of
+  // view WIDENS to match (verified in gameplay) - correct proportions, more of
+  // the world across the width, no distortion. Only the reported display aspect
+  // changes; the render surface stays native, which is what keeps the EDRAM
+  // resolves working (forcing a wide render surface black-screens the 3D).
+  // Off by default: the 2D full-screen screens (chapter cards, menus, credits)
+  // are composed for 16:9 and stretch at other aspects; the in-game HUD is fine.
+  bool ultrawide = false;
+
   // --- Comfort ------------------------------------------------------------
   // Seconds of mouse stillness over the window before the pointer hides.
   // 0 = never hide. Borrowed from re:Blue, which does the same thing.
@@ -346,6 +357,7 @@ struct Ng2Settings {
         << "antialias=" << antialias << "\n"
         << "present_dither=" << (present_dither ? 1 : 0) << "\n"
         << "letterbox=" << (letterbox ? 1 : 0) << "\n"
+        << "ultrawide=" << (ultrawide ? 1 : 0) << "\n"
         << "game_path=" << game_path << "\n"
         << "dlc_path=" << dlc_path << "\n"
         // Read by Apply() but never written back until now, so every change
@@ -459,6 +471,7 @@ struct Ng2Settings {
     else if (k == "cas_sharpness") cas_sharpness = float(std::atof(v.c_str()));
     else if (k == "present_dither") present_dither = Truthy(v);
     else if (k == "letterbox") letterbox = Truthy(v);
+    else if (k == "ultrawide") ultrawide = Truthy(v);
     else if (k == "cursor_hide_seconds") cursor_hide_seconds = std::atoi(v.c_str());
     else if (k == "keyboard_control") keyboard_control = Truthy(v);
     else if (k == "check_for_updates") check_for_updates = Truthy(v);

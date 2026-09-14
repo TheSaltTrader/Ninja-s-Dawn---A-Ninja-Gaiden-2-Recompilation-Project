@@ -781,10 +781,22 @@ class Ng2App : public rex::ReXApp {
     // size as before, an ultrawide is told a display of its own height.
     int guest_w = settings_.window_width;
     int guest_h = settings_.window_height;
-    if (guest_w * 9 > guest_h * 16)
+    if (settings_.ultrawide) {
+      // True ultrawide: tell the game the monitor's real aspect so its 3D field
+      // of view widens to match (verified). Scaled to ~1080 tall so the video
+      // mode stays a sane size; the render surface is left native, which is
+      // what keeps the EDRAM resolves valid.
+      int mw = 0, mh = 0;
+      float sc = 1.0f;
+      if (ng2::MonitorWorkArea(settings_.monitor, mw, mh, sc) && mw > 0 && mh > 0) {
+        guest_h = 1080;
+        guest_w = 1080 * mw / mh;
+      }
+    } else if (guest_w * 9 > guest_h * 16) {
       guest_w = guest_h * 16 / 9;
-    else if (guest_w * 9 < guest_h * 16)
+    } else if (guest_w * 9 < guest_h * 16) {
       guest_h = guest_w * 9 / 16;
+    }
     guest_w &= ~1;
     guest_h &= ~1;
     REXCVAR_SET(video_mode_width, guest_w);
@@ -796,6 +808,22 @@ class Ng2App : public rex::ReXApp {
     // as set. By name, so a runtime without the option simply ignores it.
     if (rex::cvar::GetFlagInfo("video_mode_explicit"))
       rex::cvar::SetFlagByName("video_mode_explicit", "true");
+
+    // Ultrawide / FOV experiment (env only): force a non-16:9 guest video mode
+    // so the game reports a wider display, to see whether its 3D field of view
+    // follows the display aspect (native ultrawide) rather than staying 16:9.
+    // Overrides the 16:9 clamp above and matches the internal render size to it.
+    if (const char* fv = std::getenv("NG2_FORCE_VMODE")) {
+      int fw = 0, fh = 0;
+      if (std::sscanf(fv, "%dx%d", &fw, &fh) == 2 && fw > 1 && fh > 1) {
+        // Only the reported display aspect - NOT the render surface, which is
+        // 16:9-bound in this title (forcing it wide breaks EDRAM resolves). The
+        // question this answers: does the 3D FOV follow the display aspect?
+        REXCVAR_SET(video_mode_width, fw);
+        REXCVAR_SET(video_mode_height, fh);
+        REXLOG_INFO("Display: NG2_FORCE_VMODE {}x{} (aspect/FOV test)", fw, fh);
+      }
+    }
 
     // The title paces itself off the reported display refresh rate, so this is
     // the frame-rate control. Clamped to 30-144 rather than unlocked: the game
@@ -1130,6 +1158,15 @@ class Ng2App : public rex::ReXApp {
                   "oscillation scan loop. These are debugging tools.");
       ng2::StartGuestProfiler();
       ng2::StartOscillationLoop();
+    }
+
+    // NG2_FIND_PROJ: one-shot hunt for the perspective projection matrix and the
+    // guest function that builds it, for the FOV / ultrawide work. Automated:
+    // pair it with NG2_QUIT_AFTER so a scripted run boots, captures, and exits.
+    if (const char* fp = std::getenv("NG2_FIND_PROJ"); fp && *fp) {
+      REXLOG_WARN("NG2_FIND_PROJ is set - hunting the projection matrix and its "
+                  "builder. Debugging tool.");
+      ng2::FindProjection();
     }
 
 
