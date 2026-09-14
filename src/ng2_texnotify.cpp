@@ -132,6 +132,11 @@ void PerfHudOverlay::OnDraw(ImGuiIO& io) {
     const ImVec4 warn(0.98f, 0.82f, 0.35f, 1.0f);
     const ImVec4 bad(0.98f, 0.45f, 0.40f, 1.0f);
     const ImVec4 label(0.72f, 0.78f, 0.74f, 1.0f);
+    // Fixed per-stat bar colours so each bar is told apart at a glance,
+    // independent of the value: FPS blue, CPU and GPU red, VRAM green.
+    const ImVec4 blue(0.40f, 0.66f, 0.98f, 1.0f);
+    const ImVec4 red = bad;
+    const ImVec4 green = good;
 
     // A single-value bar under a readout, coloured to match the number on a dim
     // track - the instantaneous style of the Fable II overlay. Only drawn when
@@ -152,7 +157,7 @@ void PerfHudOverlay::OnDraw(ImGuiIO& io) {
       ImGui::TextColored(label, "FPS");
       ImGui::SameLine();
       ImGui::TextColored(c, "%5.1f", p.fps);
-      Bar(p.fps / 60.0f, c);
+      Bar(p.fps / 60.0f, blue);
     }
     if (s->hud_cpu) {
       static const float cores =
@@ -165,7 +170,7 @@ void PerfHudOverlay::OnDraw(ImGuiIO& io) {
       ImGui::TextColored(c, "%5.0f%%", p.cpu_percent);
       ImGui::SameLine();
       ImGui::TextColored(label, " %.1f of %.0f", busy, cores);
-      Bar(p.cpu_percent / 100.0f, c);
+      Bar(p.cpu_percent / 100.0f, red);
     }
     if (s->hud_gpu) {
       ImGui::TextColored(label, "GPU");
@@ -173,7 +178,7 @@ void PerfHudOverlay::OnDraw(ImGuiIO& io) {
       if (p.gpu_valid) {
         const ImVec4 c = p.gpu_percent < 80.0f ? good : (p.gpu_percent < 95.0f ? warn : bad);
         ImGui::TextColored(c, "%5.0f%%", p.gpu_percent);
-        Bar(p.gpu_percent / 100.0f, c);
+        Bar(p.gpu_percent / 100.0f, red);
       } else {
         // Never a zero that looks like an idle GPU.
         ImGui::TextColored(label, "    n/a");
@@ -187,7 +192,7 @@ void PerfHudOverlay::OnDraw(ImGuiIO& io) {
         const ImVec4 c = frac < 0.7f ? good : (frac < 0.9f ? warn : bad);
         ImGui::TextColored(c, "%.1f / %.1f GB", p.vram_mb / 1024.0f,
                            p.vram_total_mb / 1024.0f);
-        Bar(frac, c);
+        Bar(frac, green);
       } else {
         ImGui::TextColored(label, "n/a");
       }
