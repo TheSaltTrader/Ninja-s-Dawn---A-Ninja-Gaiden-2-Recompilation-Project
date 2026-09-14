@@ -2,14 +2,23 @@
 
 #include <windows.h>
 
+#include <algorithm>
 #include <atomic>
+#include <cctype>
 #include <cmath>
 #include <chrono>
+#include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <deque>
+#include <filesystem>
+#include <fstream>
+#include <mutex>
+#include <sstream>
 #include <string>
 #include <vector>
 
+#include <rex/filesystem.h>
 #include <rex/logging.h>
 
 namespace ng2 {
@@ -174,6 +183,193 @@ bool RealPadActive() {
   return false;
 }
 
+// --- Live pad file (pad_script.txt) ------------------------------------------
+//
+// A live control channel that mirrors Fable II's, driven by AI Vision's
+// hand_padscript tool. The tool writes commands to <exe dir>/pad_script.txt;
+// this driver polls that file (every 100 ms, stat only), reads all lines,
+// deletes it, and plays the queued commands one at a time - each held for its
+// time, then a 0.1 s gap - so a RUNNING game can be driven with no relaunch. An
+// <exe dir>/pad_script.accepts file carrying this pid tells the tool the
+// channel is live (the file outlives a hard-exit, so the pid is checked).
+// Grammar, one per line, lower-cased, # comments:
+//   a b x y start back up down left right lb rb [:hold_s]   (0.2 s default)
+//   l:x,y[:secs]  r:x,y[:secs]   sticks in -1..1            (0.5 s default)
+//   lt[:secs]  rt[:secs]         triggers
+//   wait:secs                    idle
+//   release                      clear the queue
+struct PadCmd {
+  uint16_t buttons = 0;
+  float lx = 0, ly = 0, rx = 0, ry = 0;
+  float lt = 0, rt = 0;
+  double hold = 0.2;
+  bool wait_only = false;
+};
+
+std::mutex g_padfile_mu;
+std::deque<PadCmd> g_padfile_q;
+double g_padfile_cmd_start = -1.0;
+bool g_padfile_cmd_logged = false;
+double g_padfile_last_poll = -1.0;
+bool g_padfile_accepts_written = false;
+
+std::filesystem::path PadDir() { return rex::filesystem::GetExecutableFolder(); }
+
+std::string Lower(std::string s) {
+  for (char& c : s) c = char(std::tolower(static_cast<unsigned char>(c)));
+  return s;
+}
+std::string Trim(const std::string& s) {
+  const auto b = s.find_first_not_of(" \t\r\n");
+  if (b == std::string::npos) return "";
+  const auto e = s.find_last_not_of(" \t\r\n");
+  return s.substr(b, e - b + 1);
+}
+
+// Parse one line. Returns true and fills `out` for a real command; sets `clear`
+// for "release"; returns false for blank/comment/unknown.
+bool ParsePadLine(const std::string& raw, PadCmd& out, bool& clear) {
+  clear = false;
+  std::string s = raw;
+  const auto hash = s.find('#');
+  if (hash != std::string::npos) s = s.substr(0, hash);
+  s = Lower(Trim(s));
+  if (s.empty()) return false;
+  if (s == "release") {
+    clear = true;
+    return false;
+  }
+  std::vector<std::string> parts;
+  {
+    std::stringstream ss(s);
+    std::string p;
+    while (std::getline(ss, p, ':')) parts.push_back(p);
+  }
+  if (parts.empty()) return false;
+  const std::string& tok = parts[0];
+  if (tok == "wait") {
+    out.wait_only = true;
+    out.hold = parts.size() > 1 ? std::atof(parts[1].c_str()) : 0.5;
+    return true;
+  }
+  if ((tok == "l" || tok == "r") && parts.size() >= 2) {
+    float x = 0, y = 0;
+    std::sscanf(parts[1].c_str(), "%f,%f", &x, &y);
+    if (tok == "l") {
+      out.lx = x;
+      out.ly = y;
+    } else {
+      out.rx = x;
+      out.ry = y;
+    }
+    out.hold = parts.size() > 2 ? std::atof(parts[2].c_str()) : 0.5;
+    return true;
+  }
+  if (tok == "lt" || tok == "rt") {
+    (tok == "lt" ? out.lt : out.rt) = 1.0f;
+    out.hold = parts.size() > 1 ? std::atof(parts[1].c_str()) : 0.5;
+    return true;
+  }
+  if (const uint16_t m = ButtonMask(tok)) {
+    out.buttons = m;
+    out.hold = parts.size() > 1 ? std::atof(parts[1].c_str()) : 0.2;
+    return true;
+  }
+  return false;
+}
+
+void PollPadFile() {
+  const double now = Now();
+  if (now - g_padfile_last_poll < 0.1)
+    return;
+  g_padfile_last_poll = now;
+  std::error_code ec;
+  const auto path = PadDir() / "pad_script.txt";
+  if (!std::filesystem::exists(path, ec))
+    return;
+  std::ifstream f(path);
+  if (!f)
+    return;
+  std::vector<std::string> lines;
+  std::string ln;
+  while (std::getline(f, ln)) lines.push_back(ln);
+  f.close();
+  std::filesystem::remove(path, ec);  // consumed
+  std::lock_guard<std::mutex> lk(g_padfile_mu);
+  int n = 0;
+  for (const auto& raw : lines) {
+    PadCmd c;
+    bool clear = false;
+    if (ParsePadLine(raw, c, clear)) {
+      g_padfile_q.push_back(c);
+      ++n;
+    } else if (clear) {
+      g_padfile_q.clear();
+      g_padfile_cmd_start = -1.0;
+    }
+  }
+  if (n)
+    REXLOG_INFO("[padfile] {} command(s) queued", n);
+}
+
+// The current pad-file contribution, advancing the queue as time passes.
+void PadFileState(uint16_t& buttons, float& lx, float& ly, float& rx, float& ry,
+                  float& lt, float& rt) {
+  std::lock_guard<std::mutex> lk(g_padfile_mu);
+  if (g_padfile_q.empty()) {
+    g_padfile_cmd_start = -1.0;
+    return;
+  }
+  const double now = Now();
+  if (g_padfile_cmd_start < 0.0) {
+    g_padfile_cmd_start = now;
+    g_padfile_cmd_logged = false;
+  }
+  const PadCmd& c = g_padfile_q.front();
+  const double elapsed = now - g_padfile_cmd_start;
+  if (elapsed < c.hold) {
+    if (!g_padfile_cmd_logged) {
+      g_padfile_cmd_logged = true;
+      REXLOG_INFO("[padfile] buttons 0x{:04X} l({:.1f},{:.1f}) for {:.2f} s",
+                  c.buttons, c.lx, c.ly, c.hold);
+    }
+    if (!c.wait_only) {
+      buttons |= c.buttons;
+      lx += c.lx;
+      ly += c.ly;
+      rx += c.rx;
+      ry += c.ry;
+      lt = std::max(lt, c.lt);
+      rt = std::max(rt, c.rt);
+    }
+  } else if (elapsed < c.hold + 0.1) {
+    // the 0.1 s gap between commands - report nothing
+  } else {
+    g_padfile_q.pop_front();
+    g_padfile_cmd_start = -1.0;
+  }
+}
+
+void ClearPadFileQueue() {
+  std::lock_guard<std::mutex> lk(g_padfile_mu);
+  g_padfile_q.clear();
+  g_padfile_cmd_start = -1.0;
+}
+
+void WritePadAcceptsOnce() {
+  if (g_padfile_accepts_written)
+    return;
+  g_padfile_accepts_written = true;
+  std::error_code ec;
+  const auto path = PadDir() / "pad_script.accepts";
+  std::ofstream f(path, std::ios::trunc);
+  if (f) {
+    f << "ng2recomp pad script v1 pid=" << GetCurrentProcessId() << "\n";
+    f.close();
+    REXLOG_INFO("Pad file: live channel ready ({})", path.string());
+  }
+}
+
 // A single device, so its handle is a constant. Distinct from the SDK's own
 // driver ids.
 constexpr rex::input::DeviceId kSkipDevice =
@@ -184,7 +380,10 @@ class AutoSkipDriver final : public rex::input::InputDriver {
   AutoSkipDriver() : InputDriver(nullptr, 0) {}
   ~AutoSkipDriver() override = default;
 
-  X_STATUS Setup() override { return X_STATUS_SUCCESS; }
+  X_STATUS Setup() override {
+    WritePadAcceptsOnce();
+    return X_STATUS_SUCCESS;
+  }
 
   void EnumerateDevices(std::vector<rex::input::DeviceInfo>& out) override {
     rex::input::DeviceInfo info;
@@ -204,10 +403,18 @@ class AutoSkipDriver final : public rex::input::InputDriver {
     std::memset(out_state, 0, sizeof(*out_state));
     // The packet number has to move or the guest may treat the state as stale.
     out_state->packet_number = ++packet_;
+    // Announce the live channel here rather than in Setup(): AddDriver does not
+    // call Setup() in this SDK, but the guest always polls this device.
+    WritePadAcceptsOnce();
     // Checked here, at the guest's own polling rate, so a real press stops the
     // synthetic ones within a frame rather than within a sampling interval.
-    if (RealPadActive())
+    const bool real = RealPadActive();
+    if (real) {
       NoteRealInput();
+      ClearPadFileQueue();  // a real press abandons any queued live commands
+    } else {
+      PollPadFile();  // live channel (pad_script.txt), throttled to 100 ms
+    }
     // A launch-time pad script (NG2_PAD_SCRIPT) plays independently of the
     // chapter arm, so a scripted run can navigate menus with no human.
     uint16_t buttons = ScriptButtons(Now());
@@ -215,7 +422,16 @@ class AutoSkipDriver final : public rex::input::InputDriver {
       const double phase = std::fmod(Now(), kPressPeriod);
       if (phase < kPressHold) buttons |= kButtonA | kButtonStart;
     }
+    float lx = 0, ly = 0, rx = 0, ry = 0, lt = 0, rt = 0;
+    if (!real)
+      PadFileState(buttons, lx, ly, rx, ry, lt, rt);
     out_state->gamepad.buttons = buttons;
+    out_state->gamepad.thumb_lx = int16_t(std::clamp(lx, -1.0f, 1.0f) * 32767.0f);
+    out_state->gamepad.thumb_ly = int16_t(std::clamp(ly, -1.0f, 1.0f) * 32767.0f);
+    out_state->gamepad.thumb_rx = int16_t(std::clamp(rx, -1.0f, 1.0f) * 32767.0f);
+    out_state->gamepad.thumb_ry = int16_t(std::clamp(ry, -1.0f, 1.0f) * 32767.0f);
+    out_state->gamepad.left_trigger = uint8_t(std::clamp(lt, 0.0f, 1.0f) * 255.0f);
+    out_state->gamepad.right_trigger = uint8_t(std::clamp(rt, 0.0f, 1.0f) * 255.0f);
     return X_ERROR_SUCCESS;
   }
 
@@ -228,6 +444,12 @@ class AutoSkipDriver final : public rex::input::InputDriver {
       out_caps->type = 0x01;
       out_caps->sub_type = 0x01;
       out_caps->gamepad.buttons = 0xF3FF;  // all buttons, so a script can use any
+      out_caps->gamepad.left_trigger = 0xFF;
+      out_caps->gamepad.right_trigger = 0xFF;
+      out_caps->gamepad.thumb_lx = int16_t(0x7FFF);
+      out_caps->gamepad.thumb_ly = int16_t(0x7FFF);
+      out_caps->gamepad.thumb_rx = int16_t(0x7FFF);
+      out_caps->gamepad.thumb_ry = int16_t(0x7FFF);
     }
     return X_ERROR_SUCCESS;
   }
