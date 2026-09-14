@@ -87,6 +87,35 @@ TOOLS = [
     ("ai_upscale.py", True),         # imported by the above for --ai
     ("get_upscaler.py", True),       # downloads Real-ESRGAN on request
 ]
+# Folders copied whole into the release's tools/. The AI upscaler engine
+# (Real-ESRGAN ncnn-vulkan + its models, BSD-3, third party) lives at
+# tools/upscaler beside the scripts, kept out of git; shipping it makes the
+# AI option - the default since v1.0.14 - work without the Download step.
+TOOL_DIRS_SHIPPED = [("upscaler", True)]
+
+
+def copy_tool_dirs(dest_tools):
+    """Copy each shipped tool folder (whole tree) into dest_tools."""
+    for folder, required in TOOL_DIRS_SHIPPED:
+        source = None
+        for base in TOOL_DIRS:
+            cand = os.path.join(base, folder)
+            if os.path.isdir(cand):
+                source = cand
+                break
+        if source is None:
+            if required:
+                die("tools/%s is required in a release and was not found in %s"
+                    % (folder, " or ".join(TOOL_DIRS)))
+            print("  tools/%-18s (not found, skipped)" % folder)
+            continue
+        target = os.path.join(dest_tools, folder)
+        if os.path.isdir(target):
+            shutil.rmtree(target)
+        shutil.copytree(source, target)
+        total = sum(os.path.getsize(os.path.join(r, f))
+                    for r, _d, fs in os.walk(target) for f in fs)
+        print("  tools/%-18s %s   [folder]" % (folder + "/", human(total)))
 
 # What an install must already contain before --update will write into it. Any
 # one of these is enough: a folder with a game rip, or with our executable in
@@ -129,6 +158,7 @@ def update_install(folder, version):
             continue
         shutil.copy2(source, os.path.join(folder, "tools", tool))
         print("  tools/%-18s %s" % (tool, human(os.path.getsize(source))))
+    copy_tool_dirs(os.path.join(folder, "tools"))
 
     with open(os.path.join(folder, "VERSION.txt"), "w") as f:
         f.write("ng2recomp v%s\n" % version)
@@ -572,6 +602,7 @@ def main():
         shutil.copy2(source, os.path.join(dest, "tools", tool))
         print("  tools/%-18s %s"
               % (tool, human(os.path.getsize(os.path.join(dest, "tools", tool)))))
+    copy_tool_dirs(os.path.join(dest, "tools"))
 
     with open(os.path.join(dest, "ng2_settings.cfg"), "w", newline="\r\n") as f:
         f.write(SETTINGS_TEMPLATE)
@@ -617,8 +648,13 @@ def main():
 
     write_provenance(os.path.join(dest, "provenance.txt"), version)
 
-    # No game data, ever.
+    # No game data, ever. The AI upscaler's network weights (tools/upscaler/
+    # models/*.bin + .param) are the one .bin the release carries on purpose:
+    # they are the engine's, not the game's, and live only under that folder.
+    engine_dir = os.path.normcase(os.path.join(dest, "tools", "upscaler"))
     for dirpath, _, filenames in os.walk(dest):
+        if os.path.normcase(dirpath).startswith(engine_dir):
+            continue
         for name in filenames:
             if name in FORBIDDEN_EXCEPTIONS:
                 continue

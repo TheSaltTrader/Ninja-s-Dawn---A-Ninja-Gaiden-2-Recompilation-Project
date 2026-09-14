@@ -34,3 +34,6 @@ docs/texpack/*.png
 *.cdb
 *.tex
 *.dds
+
+# third-party AI upscaler engine + models (Real-ESRGAN ncnn-vulkan; shipped in the release zip, not in git)
+tools/upscaler/

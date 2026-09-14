@@ -122,7 +122,7 @@ struct Ng2Settings {
   // Off until the upscaler has been downloaded - it is a 43 MB third-party
   // binary under its own licence, deliberately not shipped with the port so
   // that having it on the machine stays the player's decision.
-  bool texture_ai = false;
+  bool texture_ai = true;
 
   // How much of the model's detail to lay over the original, 0..1.
   //

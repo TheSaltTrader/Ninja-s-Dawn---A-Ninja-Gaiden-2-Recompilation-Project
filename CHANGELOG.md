@@ -3,6 +3,24 @@
 Versions are cut with `tools/make_release.py`, which refuses to package a
 version that has no section here.
 
+## v1.0.14 - 2026-09-13
+
+### Added - the AI upscaler ships in the zip, and is the default
+
+The Textures page has offered Real-ESRGAN since the pack tool existed,
+but a fresh install had to fetch the engine with the Download button
+first, and until then every upscale fell back to Lanczos. The release now
+carries the engine at `tools/upscaler/` (Real-ESRGAN ncnn-vulkan with the
+x4plus model and its siblings - a local model that runs on your GPU, no
+account, no network; BSD-3, third party), and AI at detail strength 0.75
+is the default for new settings. Existing settings files keep whatever
+they say. The choice came out of the ACME Texture Upscaler comparisons
+and a trial on real game textures in the Fable II port the same day: the
+AI wins clearly on hard surfaces (wood grain, rivets, edges) and the
+strength blend keeps it from turning soft organic textures to speckle.
+The Download button stays for installs that lack the folder. The runtime
+and GPU plugin are the stock pair, unchanged from v1.0.13.
+
 ## v1.0.13 - 2026-09-12
 
 ### Fixed - streamed textures (like chapter 10) can now be upscaled

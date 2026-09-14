@@ -37,6 +37,11 @@ Optional, and only if you want the extra features:
 | | **Python 3** on PATH | The texture-pack tools. Without it the texture buttons say so and stay disabled. |
 | | **A 43 MB Real-ESRGAN download** (one button in the settings) | The AI texture option. Deliberately not bundled — it is third-party software under its own licence, and whether to have it on your machine stays your decision. |
 
+Since v1.0.14 the AI upscaler (Real-ESRGAN ncnn-vulkan, the x4plus model)
+ships in the zip at `tools/upscaler/` and is the Textures page's default at
+detail strength 0.75. It is a local model that runs on your GPU: no account,
+no key, no network. Lanczos remains the fallback.
+
 ### Where to get the game
 
 Nowhere in this project, and please do not ask. Dump your own disc, or extract
