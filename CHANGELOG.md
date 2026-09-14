@@ -3,6 +3,30 @@
 Versions are cut with `tools/make_release.py`, which refuses to package a
 version that has no section here.
 
+## v1.0.19 - 2026-09-14
+
+### Improved - Ultrawide uses the game's own pause and menu state
+
+Ultrawide (3D) now decides 16:9 versus ultrawide from Ninja Gaiden II's own
+state instead of only counting 3D-versus-2D draws each frame - a count that
+could not tell a paused weapons menu (the world is still drawn behind it) from
+an in-engine cinematic or a Ninpo cast (whose 2D effects spike the count, which
+is what used to make them briefly flip to 16:9).
+
+- **The pause / weapons (START) menu is now correctly 16:9 while cinematics and
+  Ninpo stay ultrawide.** Two game globals that are set only while the pause menu
+  is open - found by live memory analysis and confirmed across combat, jumps and
+  Ninpo casts - drive the switch: opening the menu pillarboxes to 16:9 and
+  closing it returns to ultrawide, and a Ninpo cast or an in-engine cutscene no
+  longer flashes 16:9.
+- **No more 16:9 flip during boss fights or Ninpo.** The old draw-count ratio
+  guess that caused those is gone.
+
+Scene-transition fades still show 16:9 (pillarboxed) - making them fill an
+ultrawide screen without stretching the HUD is queued as a follow-up, because
+the game draws a fade as a 2D layer at its own 16:9 extent. Ultrawide (3D), the
+v1.0.18 crash fixes, and everything else are unchanged.
+
 ## v1.0.18 - 2026-09-14
 
 ### Fixed - two crashes that slipped back into v1.0.17
