@@ -5,7 +5,10 @@
 #include <atomic>
 #include <cmath>
 #include <chrono>
+#include <cstdlib>
 #include <cstring>
+#include <string>
+#include <vector>
 
 #include <rex/logging.h>
 
@@ -43,6 +46,93 @@ double Now() {
   using clock = std::chrono::steady_clock;
   static const auto t0 = clock::now();
   return std::chrono::duration<double>(clock::now() - t0).count();
+}
+
+// --- Scripted playback (NG2_PAD_SCRIPT) --------------------------------------
+//
+// A launch-time script that drives the guest pad through menus with no human -
+// the same in-process approach Fable II uses. Because the SDK ORs every device
+// assigned to a player, these presses reach player 1 even when a real
+// controller is connected (an idle real pad does not disarm it; RealPadActive
+// only yields on genuine stick/button activity). Format, comma-separated:
+//   "autoskip:N"  hammer A+Start until N seconds (skips intros/prompts)
+//   "T:button"    press <button> at T seconds for a short window
+// buttons: a b x y start back up down left right lb rb ls rs.
+uint16_t ButtonMask(const std::string& n) {
+  if (n == "a") return 0x1000;
+  if (n == "b") return 0x2000;
+  if (n == "x") return 0x4000;
+  if (n == "y") return 0x8000;
+  if (n == "start") return 0x0010;
+  if (n == "back") return 0x0020;
+  if (n == "up") return 0x0001;
+  if (n == "down") return 0x0002;
+  if (n == "left") return 0x0004;
+  if (n == "right") return 0x0008;
+  if (n == "lb") return 0x0100;
+  if (n == "rb") return 0x0200;
+  if (n == "ls") return 0x0040;
+  if (n == "rs") return 0x0080;
+  return 0;
+}
+
+struct ScriptPress {
+  double t;
+  uint16_t mask;
+  bool fired = false;
+};
+std::vector<ScriptPress> g_script;
+double g_autoskip_until = -1.0;
+bool g_script_parsed = false;
+bool g_has_script = false;
+constexpr double kScriptHold = 0.18;  // how long each scripted press is held
+
+void ParsePadScriptOnce() {
+  if (g_script_parsed) return;
+  g_script_parsed = true;
+  const char* s = std::getenv("NG2_PAD_SCRIPT");
+  if (!s || !*s) return;
+  const std::string in(s);
+  size_t i = 0;
+  while (i < in.size()) {
+    const size_t comma = in.find(',', i);
+    const std::string tok =
+        in.substr(i, comma == std::string::npos ? std::string::npos : comma - i);
+    i = (comma == std::string::npos) ? in.size() : comma + 1;
+    const size_t colon = tok.find(':');
+    if (colon == std::string::npos) continue;
+    const std::string a = tok.substr(0, colon), b = tok.substr(colon + 1);
+    if (a == "autoskip") {
+      g_autoskip_until = std::atof(b.c_str());
+    } else {
+      const uint16_t m = ButtonMask(b);
+      if (m) g_script.push_back({std::atof(a.c_str()), m});
+    }
+  }
+  g_has_script = (g_autoskip_until > 0.0) || !g_script.empty();
+  if (g_has_script)
+    REXLOG_INFO("Pad script: {} presses, autoskip until {:.0f}s (NG2_PAD_SCRIPT)",
+                g_script.size(), g_autoskip_until);
+}
+
+uint16_t ScriptButtons(double now) {
+  ParsePadScriptOnce();
+  if (!g_has_script) return 0;
+  uint16_t b = 0;
+  if (now < g_autoskip_until) {
+    const double phase = std::fmod(now, kPressPeriod);
+    if (phase < kPressHold) b |= kButtonA | kButtonStart;
+  }
+  for (auto& p : g_script) {
+    if (now >= p.t && now < p.t + kScriptHold) {
+      if (!p.fired) {
+        p.fired = true;
+        REXLOG_INFO("[padscript] {:.1f} s: buttons 0x{:04X}", now, p.mask);
+      }
+      b |= p.mask;
+    }
+  }
+  return b;
 }
 
 // Is the player actually touching a controller?
@@ -118,11 +208,14 @@ class AutoSkipDriver final : public rex::input::InputDriver {
     // synthetic ones within a frame rather than within a sampling interval.
     if (RealPadActive())
       NoteRealInput();
-    if (!AutoSkipActive())
-      return X_ERROR_SUCCESS;
-    const double phase = std::fmod(Now(), kPressPeriod);
-    if (phase < kPressHold)
-      out_state->gamepad.buttons = kButtonA | kButtonStart;
+    // A launch-time pad script (NG2_PAD_SCRIPT) plays independently of the
+    // chapter arm, so a scripted run can navigate menus with no human.
+    uint16_t buttons = ScriptButtons(Now());
+    if (AutoSkipActive()) {
+      const double phase = std::fmod(Now(), kPressPeriod);
+      if (phase < kPressHold) buttons |= kButtonA | kButtonStart;
+    }
+    out_state->gamepad.buttons = buttons;
     return X_ERROR_SUCCESS;
   }
 
@@ -134,7 +227,7 @@ class AutoSkipDriver final : public rex::input::InputDriver {
       std::memset(out_caps, 0, sizeof(*out_caps));
       out_caps->type = 0x01;
       out_caps->sub_type = 0x01;
-      out_caps->gamepad.buttons = kButtonA | kButtonStart;
+      out_caps->gamepad.buttons = 0xF3FF;  // all buttons, so a script can use any
     }
     return X_ERROR_SUCCESS;
   }
