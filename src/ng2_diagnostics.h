@@ -45,4 +45,9 @@ void StartGuestProfiler();
 void ScanOscillating();
 void StartOscillationLoop();
 
+// NG2_FIND_PROJ: locate the perspective projection matrix in guest memory and
+// the guest function that builds it, for the FOV / ultrawide hook. Log-only;
+// runs once on a background thread.
+void FindProjection();
+
 }  // namespace ng2
