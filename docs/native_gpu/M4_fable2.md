@@ -257,12 +257,31 @@ established the object layouts by reading them live (`peek.py`):
   buffer 2, vertex shader 6, pixel shader 7) — the reference's
   `D3DCOMMON_TYPE` values.
 
+## M4-a — the shadow window renders (2026-09-15 14:51)
+
+`fable2recomp/src/native_gpu_present.cpp` (branch `native-gpu`): with
+`ngpu_shadow=true` the Present hook creates a second window on the game's
+render thread, a Plume D3D12 device + swap chain on it, and clears/presents
+once per guest Present (message pump in the same hook). Result in the market
+run: `[ngpu] shadow window up: Plume D3D12 device + swap chain (1262x673)`,
+then `3000 native frames presented` in lockstep with the guest at **59 fps —
+the same fps as without it** (the per-frame fence wait costs nothing
+measurable at this frame rate). Plume (`NativeGPU/build/plume/plume.lib`,
+MSVC /MD) links into the clang++-built executable without CRT conflicts;
+CMake turns the backend on when the library exists (`FABLE2_NATIVE_GPU`).
+The run then died in the draw dump (an unmapped guest read on the render
+thread), fixed by page-checked reads.
+
 ## Next
 
 1. Draw dump 2 with the corrected fields (six words per fetch slot, index
-   buffer address/size, the device's own vs/ps at +0x3198/+0x3194, microcode
-   files from physical memory) → the object-key match rate and the shader
-   set of one market frame; then the shadow window (M4-a, `ngpu_shadow`).
+   buffer address/size, the device's own vs/ps at +0x3198/+0x3194, the shader
+   containers from obj+872 + physical memory) → the object-key match rate
+   and the shader set of one market frame.
+2. M4-b: one DrawIndexedVertices drawn natively in the shadow window — the
+   VB/IB bytes from guest memory (vertex fetch pair at device+0x778, the IB
+   object's physical address), one shader pair translated with XenosRecomp
+   from the dumped .xvu files, constants from device+0x780.
 2. Name the remaining entry points from the census (Create*/Lock*/Unlock*),
    then the draw dump (VB, IB, shader pair, start/count per draw) at the draw
    entry points — also what the NG2 frame-interpolation work needs.
