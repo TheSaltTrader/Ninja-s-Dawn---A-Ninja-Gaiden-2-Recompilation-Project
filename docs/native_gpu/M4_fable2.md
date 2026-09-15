@@ -345,6 +345,28 @@ CMake turns the backend on when the library exists (`FABLE2_NATIVE_GPU`).
 The run then died in the draw dump (an unmapped guest read on the render
 thread), fixed by page-checked reads.
 
+## M4-b — native draws in the shadow window (built 15:18, run pending)
+
+`native_gpu_present.cpp` with `ngpu_native_draws=true`: the DrawIndexedVertices
+hook records every list/strip draw of the frame natively. Per draw it reads
+the IB object (device+0x3094 → +0x18 physical address, 16-bit big-endian
+indices from `start`), the vertex stream `ngpu_pos_stream` (default 1) from
+its fetch-constant pair at device+0x778 − 8·stream (address | 3, size in
+dwords | endian) with the stride byte at device+0x30F0 + stream, converts
+the indices and the POSITION0 floats (offset `ngpu_pos_offset`) into one
+96 MB per-frame upload buffer, and draws with hand-written test shaders
+(`src/ngpu_shaders/ngpu_vs.hlsl` / `ngpu_ps.hlsl`, compiled to signed DXIL
+by `tools/ngpu_shaders.cmd` with XenosRecomp's dxc): the vertex shader does
+the four dp4s against c0..c3 read from device+0x780 (the game's own
+g_WorldViewProjection, byte-swapped) as root constants, the pixel shader a
+flat per-draw colour shaded by depth; D32 depth buffer, no culling. The
+window is kept topmost (`ngpu_shadow_topmost`) so a monitor capture shows
+it while the game runs behind. Expected: the non-instanced world geometry
+(the 14 shader classes with `g_WorldTransform` in c4..c6 folded into c0..c3
+by the engine, or not — to be seen) lands where the game draws it; the
+instanced meshes (POSITION1..3 rows in the per-frame stream) draw at the
+origin until the instance rows are applied.
+
 ## Next
 
 1. Draw dump 2 with the corrected fields (six words per fetch slot, index
