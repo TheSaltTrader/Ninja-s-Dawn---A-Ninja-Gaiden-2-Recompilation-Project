@@ -427,6 +427,15 @@ vertices 0..max_index for every draw, and Fable's draws index into large
 shared buffers, so each draw converted tens of thousands of vertices. Run 6
 converts only min_index..max_index and rebases the indices.
 
+## Native draws run 6 (16:31) — still 1.3 fps: the write-combined upload heap
+
+Converting only the indexed range did not help (1.3 fps). The remaining
+per-draw cost was reading the index buffer back out of the UPLOAD heap: the
+rebase pass (`idx[i] -= min_index`) read write-combined memory, and every
+uncached read is a bus transaction — 2,000 draws × ~1,000 indices per frame.
+Run 7 assembles the indices in ordinary memory and copies them to the upload
+heap once (vertices were already written sequentially).
+
 ## M4-b — native draws in the shadow window (built 15:18)
 
 `native_gpu_present.cpp` with `ngpu_native_draws=true`: the DrawIndexedVertices
