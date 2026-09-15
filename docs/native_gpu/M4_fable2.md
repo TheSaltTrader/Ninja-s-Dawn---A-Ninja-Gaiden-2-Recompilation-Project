@@ -345,7 +345,37 @@ CMake turns the backend on when the library exists (`FABLE2_NATIVE_GPU`).
 The run then died in the draw dump (an unmapped guest read on the render
 thread), fixed by page-checked reads.
 
-## M4-b — native draws in the shadow window (built 15:18, run pending)
+## Draw dump 3 — vertex declarations, pixel shaders, the first native-draw run (15:38)
+
+- **Vertex declaration object** (device+0x2E2C, common word type 5, e.g.
+  0x42127EA0 / 0x422280E0 / 0x43107C50): element count at +0x18, elements
+  from +0x34 as three words each — `stream << 16 | offset`, the Xenos format
+  word (format in the low 6 bits: 0x39 = 32_32_32_FLOAT, 0x26 =
+  32_32_32_32_FLOAT, 0x25 = 32_32_FLOAT, 0x21 = 32, 0x1A = 16_16_16_16),
+  `usage << 16 | usageIndex << 8` (D3DDECLUSAGE: 0 POSITION, 3 NORMAL, 5
+  TEXCOORD). Seen: `{POSITION0 float3 @0, TEXCOORD0 float2 @12}` (stride 20),
+  twelve float4s at 0x10 steps (POSITION0, NORMAL0, TEXCOORD0..9), and the
+  instanced shape `{POSITION0 float3 stream 0 @0, POSITION1 stream 1 @0
+  (fmt 0x21), POSITION2/POSITION3 float4 stream 2 @0/@0x10}` — stream 2 is the
+  32-byte instance-row stream whose stride byte (device+0x30F0+2 = 8, in
+  dwords) is the only non-zero one: the mesh streams' strides come from the
+  declaration, not the device. Many draws have device+0x2E2C = 0 (their
+  declaration is bound elsewhere; to find).
+- **Pixel shader objects** (common word type 7, e.g. 0x43178550) keep their
+  container at **+0x28** (magic 0x102A1100) and the physical part at
+  **+0x18**; vertex shader objects at +872 / +0x20. 281 SetPixelShader vs
+  3,453 SetVertexShader calls per two frames; the tracked (vs, ps) pair per
+  draw is now in the `D` lines.
+- Native draws run 1: the shadow window rendered (topmost, captured), the
+  pipelines and the 96 MB upload buffer came up (`native draws ready`), the
+  game held 56–58 fps, but every draw was skipped: the stream chosen by the
+  cvar (1) has stride byte 0. The index data read through the physical
+  mapping is right (`2d8e 2d8f 2d90 ffff ...` — 16-bit indices with 0xFFFF
+  strip restarts, which Plume's strip pipelines cut; the native path expands
+  strips to lists anyway). Run 2 reads the declaration for POSITION0's stream,
+  offset and stride.
+
+## M4-b — native draws in the shadow window (built 15:18)
 
 `native_gpu_present.cpp` with `ngpu_native_draws=true`: the DrawIndexedVertices
 hook records every list/strip draw of the frame natively. Per draw it reads
