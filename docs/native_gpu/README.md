@@ -45,6 +45,14 @@ Facts established so far:
 
 Results: see `M3_ng2.md` / `M3_fable2.md` (generated).
 
+Other tools in `tools/native_gpu/` (all read a RUNNING game through
+ReadProcessMemory; guest = host - 0x100000000): `scan_tables.py` finds
+function-pointer tables (`--funcs <game>` = exact recompiled addresses),
+`find_word.py` finds who holds a value (device pointer globals), `peek.py`
+hex-dumps guest memory, `entry_points.py` builds the per-entry-point feature
+table from the recompiled code, `gen_trace_hooks.py` generates the call-census
+tracer (hook TOML + C++) for a game project.
+
 ## Route decision (after M3)
 
 - **Route A** — native backend inside ReXGlue: keep its recompilation and
@@ -59,6 +67,9 @@ Results: see `M3_ng2.md` / `M3_fable2.md` (generated).
 ## Milestones
 
 - [x] M0–M2 (spike): recon, Plume builds and renders here (`NativeGPU/spike/m1b_clear`), XenosRecomp recon.
-- [~] **M3** — this branch: recon tool + reports.
-- [ ] M4 — hook the minimal set and push one hardcoded draw through guest → HLE → Plume.
+- [x] **M3** — this branch: recon tool + reports (`M3_FINDINGS.md`).
+- [~] M4 — Fable II first (`M4_fable2.md`): device found at guest 0x44142480
+  with its D3DRS/D3DSAMP dispatch tables; call-census tracer over 223 hooks
+  (fable2recomp branch `native-gpu`, also unpushed); then Present/Clear/one
+  draw through Plume.
 - [ ] M5 — one real scene rendering natively (spike success criterion).
