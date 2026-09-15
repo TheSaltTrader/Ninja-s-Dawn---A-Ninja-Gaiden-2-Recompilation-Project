@@ -142,7 +142,14 @@ def analyze(game_dir, other_dir=None, out_path=None):
             clusters.append(cur); cur = [a]
     if cur: clusters.append(cur)
     clusters = [c for c in clusters if len(c) >= 3]
-    ranges = [(c[0], c[-1]) for c in clusters]
+    # The Direct3D library is the cluster(s) holding the Vd* kernel callers; other
+    # seed clusters are the ENGINE's own inline PM4 (tiling, fences) and are
+    # reported separately - a native port must intercept those too.
+    vd_addrs = {int(n[4:], 16) for n in vd_callers}
+    lib_clusters = [c for c in clusters if any(c[0] <= a <= c[-1] for a in vd_addrs)] or clusters
+    engine_clusters = [c for c in clusters if c not in lib_clusters]
+    ranges = [(c[0], c[-1]) for c in lib_clusters]
+    engine_ranges = [(c[0], c[-1]) for c in engine_clusters]
     def in_lib(name):
         a = int(name[4:], 16)
         return any(lo <= a <= hi for lo, hi in ranges)
@@ -158,8 +165,11 @@ def analyze(game_dir, other_dir=None, out_path=None):
     g = os.path.basename(os.path.normpath(game_dir))
     lines.append(f"# Native GPU M3 recon - {g}\n")
     lines.append(f"functions: {len(funcs)}   shared-fingerprint with {os.path.basename(os.path.normpath(other_dir)) if other_dir else '-'}: {len(shared)}\n")
-    lines.append("library address ranges (seed clusters): " + ", ".join(f"{lo:08X}-{hi:08X}" for lo, hi in ranges) + "
-")
+    lines.append("Direct3D library address range(s) (clusters holding the Vd* callers): " + ", ".join(f"{lo:08X}-{hi:08X}" for lo, hi in ranges) + chr(10))
+    if engine_ranges:
+        lines.append("engine-side PM4 emitter clusters (inline XDK code in game functions): " + ", ".join(f"{lo:08X}-{hi:08X}" for lo, hi in engine_ranges) + chr(10))
+    eng_emit = [n for n in emitters if not in_lib(n)]
+    lines.append(f"engine functions that emit PM4 themselves (outside the library): {len(eng_emit)}" + chr(10))
     lines.append(f"PM4 type-3 emitters: {len(emitters)}   Vd* callers: {len(vd_callers)}   library functions in range: {len(lib)} "
                  f"(shared {sum(1 for n in lib if n in shared)})   API surface (library functions called by engine code): {len(api)}\n")
     lines.append("\n## PM4 emitters (function, shared?, opcodes, #engine callers)\n")
