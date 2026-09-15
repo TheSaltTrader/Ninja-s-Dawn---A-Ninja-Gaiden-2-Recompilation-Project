@@ -220,8 +220,8 @@ without writing PM4) were hooked too. Per frame in the market:
 
 | function | per frame | what it is |
 | --- | --- | --- |
-| `sub_821B6C60` | 3,600 | dirty bit 19, writes device+0x34D4 and mask +0x18; (dev, 0, 0, 0, 0, 1) — the hottest setter, ~1.5 per draw: SetStreamSource / SetIndices family (to be read) |
-| `sub_82232510` | 1,060 | **SetVertexShader**(dev, shader, ...): stores the object at **device+0x3198**, dirty bit 19 |
+| `sub_821B6C60` | 3,600 | **SetStreamSource**(dev, stream, vertexBuffer, offset, stride, dirtyBit): reads the VB object's physical address (+0x18) and size (+0x1C), writes the **vertex fetch constant pair for stream i at device+0x778 − 8·i** (= Xenos vertex fetch constant 95 − i, the top of the 192-word block), the VB object at device+0x30AC + 4·i, the stride byte at +0x30F0 + i, and ORs the caller's bit into the mask at +0x18 |
+| `sub_82232510` | 1,060 | **SetVertexShader**(dev, shader): stores the object at **device+0x3198**, sets dirty bit 19, then walks the shader's literal-constant table (obj+872) and CLEARS those registers' bits in the vertex-constant dirty mask (+0x00) — the shader's LOAD packets own them |
 | `sub_82208BB0` | 215 | **SetPixelShader**(dev, shader, ...): stores at **device+0x3194**, dirty bits 17, 20 |
 | `sub_82221858` | 1,500 | the flush that emits `IM_LOAD` for the dirty shaders (its third argument is a pointer to the shader's variant-table entry, not a type) |
 | `sub_821F9D00` | 136 | **SetViewport**(dev, viewport*): dirty bits 21..26, writes +0x3180 |
