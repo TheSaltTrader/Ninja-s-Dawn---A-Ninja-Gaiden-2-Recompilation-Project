@@ -436,6 +436,14 @@ uncached read is a bus transaction — 2,000 draws × ~1,000 indices per frame.
 Run 7 assembles the indices in ordinary memory and copies them to the upload
 heap once (vertices were already written sequentially).
 
+## Native draws run 7 (16:36) — still 1.6 fps; instrumenting
+
+Assembling the indices in ordinary memory changed nothing (1.6 fps), so the
+cost is not the upload heap either. Run 8 carries per-frame timers (index
+build, vertex conversion, the Plume calls, the shader/device lookups, the
+execute + present + fence wait) logged every 60 frames as `[ngpu] frame
+cost`, to name the ~600 ms before guessing again.
+
 ## M4-b — native draws in the shadow window (built 15:18)
 
 `native_gpu_present.cpp` with `ngpu_native_draws=true`: the DrawIndexedVertices
