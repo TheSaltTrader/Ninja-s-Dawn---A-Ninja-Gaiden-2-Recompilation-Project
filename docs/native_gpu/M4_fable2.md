@@ -213,13 +213,56 @@ prologue (Sonic's XDK: `samplerStates` at 0x480, constants at 0x780/0x1780
 too), so **UnleashedRecomp's field offsets are directly reusable** for the
 fetch constants and float constants.
 
+## Census 3 + draw dump 1 — the shadow-only setters and the objects (`M4_fable2_census3.md`, `M4_fable2_dump1.md`)
+
+The 29 functions `dirty_setters.py` found (OR into the dirty mask at +0x10
+without writing PM4) were hooked too. Per frame in the market:
+
+| function | per frame | what it is |
+| --- | --- | --- |
+| `sub_821B6C60` | 3,600 | dirty bit 19, writes device+0x34D4 and mask +0x18; (dev, 0, 0, 0, 0, 1) — the hottest setter, ~1.5 per draw: SetStreamSource / SetIndices family (to be read) |
+| `sub_82232510` | 1,060 | **SetVertexShader**(dev, shader, ...): stores the object at **device+0x3198**, dirty bit 19 |
+| `sub_82208BB0` | 215 | **SetPixelShader**(dev, shader, ...): stores at **device+0x3194**, dirty bits 17, 20 |
+| `sub_82221858` | 1,500 | the flush that emits `IM_LOAD` for the dirty shaders (its third argument is a pointer to the shader's variant-table entry, not a type) |
+| `sub_821F9D00` | 136 | **SetViewport**(dev, viewport*): dirty bits 21..26, writes +0x3180 |
+| `sub_82286CE8` | 63 | **SetRenderTarget**(dev, surface, surface): writes the RB_SURFACE_INFO shadow block (+0x2880) |
+| `sub_82264590` | 42 | **SetDepthStencilSurface**-like (dev, surface, 0, 1280, 720, ...): writes +0x2880.., the depth-control shadow (+0x2934) |
+| `sub_822869A0` | 210 | render-target-related setter, bit 20, writes +0x2E54.. (4 words) |
+| `sub_8223B130` | 2,100 | not a device method (r3 = a 0x70xxxxxx object): a 3-word write helper |
+
+**The first draw dump** (3 frames at frame 3000, 7,421 draws = 2,473 per
+frame: 6,014 DrawIndexedVertices, 1,056 DrawVertices, 351 UP; primitives
+TRIANGLESTRIP 5,375, TRIANGLELIST 1,899, POINTLIST 75, QUADLIST 72)
+established the object layouts by reading them live (`peek.py`):
+
+- **Fetch constants**: slots 0..19 are texture fetches (word 0 = `0x84000002`,
+  type bits 2); slots 26..31 hold the **vertex fetch constants as 2-word
+  pairs** (`address | 3`, `size/endian`), e.g. `1F3E2003/1000FA02` — so the
+  vertex streams sit at the top of the 192-word block, as Xenos numbers
+  vertex fetch constants (95 downwards). The dump now prints all six words of
+  every slot and the report keys draws on every (address|3) pair.
+- **Index buffer object** (device+0x3094 → e.g. 0x40C29508): +0 common word
+  `0x20400002` (type 2 = index buffer), +4 refcount, +8 id, +0x18 **physical
+  address** (`0xFD5BB180`), +0x1C **byte size** (0x36A = 437 indices × 2 —
+  exactly the draw's count), +0x20 a code pointer, +0x24 end address.
+- **Shader object** (e.g. 0x4D06EF50): +0 `0x00400006` (type 6 = vertex
+  shader; 7 = pixel), +0x20 physical microcode base (`0xFD619280`), +0x30 a
+  register-count word, +0x44.. (offset, size) pairs, +0x380 the 8-byte
+  variant entries `SetShader` receives a pointer to; the variant record at
+  obj+[entry] carries the microcode offset (+872), length (+876), register
+  counts (+880..888) and the constant list (+892) — the "table" the loader
+  walks is rec+872. Microcode lives in **physical** memory
+  (`physical_membase + (addr & 0x1FFFFFFF)`), which the dump now reads.
+- The XDK resource common word's low nibble is the resource type (index
+  buffer 2, vertex shader 6, pixel shader 7) — the reference's
+  `D3DCOMMON_TYPE` values.
+
 ## Next
 
-1. **Draw dump** (census 3): a hook on the three draw entry points that
-   records, per draw, (prim, base, start, count, the index buffer object,
-   the 32 fetch-constant slots, the last SetShader pair, the last
-   LoadShaderConstants table) — the object-identity record the NG2
-   frame-interpolation session needs and the HLE's first input.
+1. Draw dump 2 with the corrected fields (six words per fetch slot, index
+   buffer address/size, the device's own vs/ps at +0x3198/+0x3194, microcode
+   files from physical memory) → the object-key match rate and the shader
+   set of one market frame; then the shadow window (M4-a, `ngpu_shadow`).
 2. Name the remaining entry points from the census (Create*/Lock*/Unlock*),
    then the draw dump (VB, IB, shader pair, start/count per draw) at the draw
    entry points — also what the NG2 frame-interpolation work needs.

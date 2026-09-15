@@ -19,12 +19,22 @@ for line in open(path, encoding="utf-8", errors="replace"):
     if not m:
         continue
     f = int(m.group(1))
-    fcs = dict((int(a), (b, c, d)) for a, b, c, d in re.findall(r" fc(\d+)=([0-9A-F]+)/([0-9A-F]+)/([0-9A-F]+)", m.group(18)))
+    fcs = {}
+    for a, words in re.findall(r" fc(\d+)=([0-9A-F/]+)", m.group(18)):
+        fcs[int(a)] = tuple(words.split("/"))
     d = {"kind": m.group(2), "prim": int(m.group(3)), "count": int(m.group(6)), "ib": m.group(8),
          "vs": m.group(10), "ps": m.group(11), "ct": m.group(12), "rt": m.group(15), "fc": fcs}
-    # object key: the vertex-fetch slots (word 0 = base address | endian/size bits) + ib + shaders
-    vfetch = tuple(sorted((i, w[0]) for i, w in fcs.items() if i >= 16))
-    tfetch = tuple(sorted((i, w[0]) for i, w in fcs.items() if i < 16))
+    # object key: the vertex-fetch constants = every 2-word (address|type 3, size) pair in the
+    # 192-word fetch block whose type bits are 3 (slot words are read in pairs), + ib + shaders;
+    # texture fetches = the 6-word slots whose word 0 has type bits 2.
+    vfetch, tfetch = [], []
+    for i, w in sorted(fcs.items()):
+        if int(w[0], 16) & 3 == 2:
+            tfetch.append((i, w[1] if len(w) > 1 else w[0]))
+        for k in range(0, len(w) - 1, 2):
+            if int(w[k], 16) & 3 == 3:
+                vfetch.append((i * 6 + k, w[k]))
+    vfetch = tuple(vfetch); tfetch = tuple(tfetch)
     d["key"] = (vfetch, d["ib"], d["vs"], d["ps"])
     d["key_tex"] = (vfetch, tfetch, d["ib"], d["vs"], d["ps"])
     frames[f].append(d)
