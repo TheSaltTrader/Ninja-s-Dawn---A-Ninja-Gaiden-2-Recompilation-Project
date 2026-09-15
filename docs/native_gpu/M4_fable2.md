@@ -526,15 +526,22 @@ origin until the instance rows are applied.
 
 ## Next
 
-1. Draw dump 2 with the corrected fields (six words per fetch slot, index
-   buffer address/size, the device's own vs/ps at +0x3198/+0x3194, the shader
-   containers from obj+872 + physical memory) → the object-key match rate
-   and the shader set of one market frame.
-2. M4-b: one DrawIndexedVertices drawn natively in the shadow window — the
-   VB/IB bytes from guest memory (vertex fetch pair at device+0x778, the IB
-   object's physical address), one shader pair translated with XenosRecomp
-   from the dumped .xvu files, constants from device+0x780.
-2. Name the remaining entry points from the census (Create*/Lock*/Unlock*),
-   then the draw dump (VB, IB, shader pair, start/count per draw) at the draw
-   entry points — also what the NG2 frame-interpolation work needs.
-3. Present → Plume swap chain, Clear, one DrawIndexedPrimitive natively.
+1. **Read watched guest pages without faulting.** ReXGlue's memory has the
+   watch API the plugin uses (`include/rex/system/xmemory.h`:
+   `TriggerPhysicalMemoryCallbacks(..., is_write, unwatch_exact_range,
+   unprotect)`, `IsHostPageWriteWatched`, `QueryProtect`): resolve the watch
+   on an index buffer's range once per frame before copying it (under the
+   global critical region as the header requires), and the ~1 ms per draw
+   goes away — the timers put everything else at 0.5 ms per frame for ~175
+   draws, so the native path should then cost nothing at the game's 55–60 fps.
+2. **Shader variants.** The market's main mesh shaders (`4D05F5D0`,
+   `4D063B40`, ...) keep no fetch instruction in the block at obj+0x20;
+   `SetShader` receives a pointer to a variant entry (obj+0x380.. or an
+   external table such as 0x43004990), so the microcode in use is the
+   variant's. Resolve the entry → microcode address in `sub_82221858`'s
+   second path and the dump's `M` line, then the remaining ~1,450 draws per
+   frame render too.
+3. More position formats (2_10_10_10, 16_16_16_16 int) and the instance
+   rows (POSITION1..3 from streams 1/2) for the instanced classes.
+4. Then M5: XenosRecomp fixes for Fable's containers (duplicate inputs,
+   SV_Position export, the 8 crashers) so the draws use the game's shaders.
