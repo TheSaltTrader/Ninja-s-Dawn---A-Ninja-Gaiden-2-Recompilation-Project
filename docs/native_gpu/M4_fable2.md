@@ -419,6 +419,14 @@ format 32 (big-endian halfs in memory order) for POSITION0. About half of
 the shaders show no fetch row at all with this filter (tiny post-process
 shaders that fetch nothing, or a fetch encoding the filter does not cover).
 
+## Native draws run 5 (16:05) — the draws ran, the frame rate did not
+
+With half-float positions accepted, 9 shader classes resolved and the native
+draws started — and the game dropped to 1.7 fps: the draw path converted
+vertices 0..max_index for every draw, and Fable's draws index into large
+shared buffers, so each draw converted tens of thousands of vertices. Run 6
+converts only min_index..max_index and rebases the indices.
+
 ## M4-b — native draws in the shadow window (built 15:18)
 
 `native_gpu_present.cpp` with `ngpu_native_draws=true`: the DrawIndexedVertices
