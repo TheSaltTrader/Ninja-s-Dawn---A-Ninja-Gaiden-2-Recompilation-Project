@@ -144,13 +144,83 @@ live, the v0.2.12 figure). Facts the census established:
   HIGHPRECISIONBLENDENABLE1..3, clip-plane, and the display/scaler init
   entries — created once at boot before the tracer's first census, or unused).
 
+## Census 2 — every PM4 writer hooked (`M4_fable2_census2.md`)
+
+Hooking the 78 direct callers of the ring make-space helper found the real
+per-frame API. Peak calls per frame in the market (10-s peak / 60), with the
+name each function earned from its disassembly:
+
+| function | per frame | what it is (evidence) |
+| --- | --- | --- |
+| `sub_822655F0` | 4,300 | **SetPredication**(dev, mask): stores the mask at device+0x31A4, emits `SET_BIN_MASK_LO` (0xC0006000); called from the engine's draw wrapper `sub_8217E0B8` around every draw (tiling) |
+| `sub_82221B90` | 2,450 | **LoadShaderConstants**(dev, table, base, base2, n): walks a table of (count, start) pairs and emits `LOAD_ALU_CONSTANT` (0xC002xx2F00) packets whose address points into guest memory — the per-object constants (WVP etc.) never enter the device shadow |
+| `sub_8221D1B0` | 2,100 | fetch-constant flush: iterates a 64-bit dirty mask, `sub_8228EF80`(dev, reg 0x4800 + 6·i, device+0x480 + 24·i, n, 6) → type-0 writes of the 6-dword fetch constants |
+| `sub_8221DFC0` | 1,900 | **DrawIndexedVertices**(dev, primType, baseVertexIndex, startIndex, indexCount): flushes the five dirty masks (see the device map), reads the index buffer object at device+0x3094 (+0 address\|format, +24 size) and emits `DRAW_INDX` 0xC0032201 (predicated) |
+| `sub_82221858` | 1,500 | **SetVertexShader / SetPixelShader**(dev, shader, type): emits `IM_LOAD` (0xC0012700) with the shader object's code address (+64 → header, +40..+52 sizes) \| type |
+| `sub_8221B010` / `sub_8221AE18` | 1,250 each | the register/fetch flush pair for the dirty16 mask (bits 11..14 = fetch constants; `sub_8221B010` calls `sub_8221AE18` first) |
+| `sub_82221740` | 1,100 | SetPredication variant that reads the device from the global `g_pDevice` (0x83360364): `SET_BIN_MASK_LO/HI` |
+| `sub_822154B0` | 1,050 | render-target/predication flush (compares device+0x3098.. pending vs +0x31B8.. current EDRAM surfaces; `SET_BIN_MASK`, `SET_CONSTANT` 0xC0012D01) |
+| `sub_82213AD8` | 970 | ring reserve(dev, dwords) → write pointer (the second space helper) |
+| `sub_822192E8` / `sub_822194B8` | 580 | **SetRenderTarget / SetDepthStencilSurface**(dev, surface, index): type-0 writes of RB_SURFACE_INFO (0x2000), RB_COLOR_INFO, RB_DEPTH_INFO |
+| `sub_8221C898` | 390 | register writer (`li 0x2200` = RB_DEPTHCONTROL block) |
+| `sub_8227D150` | 360 | ? (dev, 1, 0, 4, obj) |
+| `sub_8221C3E8` | 335 | **DrawVertices**(dev, primType, startVertex, count) — non-indexed (QUADLIST 0xD in the samples: the UI) |
+| `sub_8220BD40` | 290 | (obj, dst, 16, ...) — a resource copy/lock helper |
+| `sub_8222BFA0` | 240 | constant-table loader variant (also `LOAD_ALU_CONSTANT`, with an `sync`) |
+| `sub_821F9918` | 200 | window scissor (type-0 PA_SC_WINDOW_SCISSOR_TL/BR, packs x/y/w/h from r4..r7) |
+| `sub_82217DB8` | 115 | **DrawVerticesUP / DrawIndexedVerticesUP**(dev, prim, ..., stride, ...) (10 args, `mullw count·stride`) |
+| `sub_82242668` | 100 | draw variant (dev, TRIANGLEFAN=5, 4, ...) |
+| `sub_821EFAC0` | 32 | predicated `DRAW_INDX_2` (0x3601) — a rectangle draw (clears) |
+| `sub_82206888` | 32 | 912 insns, sets every dirty bit: state invalidation after a command-buffer / tiling pass |
+| `sub_82205F68` | 15 | DrawVertices RECTLIST (8) — resolves/clears |
+| `sub_8219CD68` | 14 | `INDIRECT_BUFFER` — command-buffer replay (the second emitter `sub_822866E0` is called from inside the library) |
+| `sub_82196628` / `sub_82196750` | 12 | **Resolve**(dev, flags, dest texture, ...) → the `DRAW_INDX_2` kicks `sub_82B9EEE0`/`sub_82B9F038` |
+| ~20 functions | 1 | frame setup / Present internals (`sub_82193008`, `sub_821B9A08`, `sub_821C6478`, `sub_8227F3B0`, `sub_822A5EE8`, `sub_822A61C0`, ...) |
+
+Totals: ~2,500 CPU-side draws per frame; the plugin counts 4,800–6,100 GPU
+draws per frame in the same scene, so predicated tiling replays each draw
+about twice (two tiles). The XDK's `D3DPRIMITIVETYPE` seen: 4 TRIANGLELIST,
+5 TRIANGLEFAN, 6 TRIANGLESTRIP, 8 RECTLIST, 0xD QUADLIST.
+
+## The device map (this XDK build) — what a draw hook can read
+
+From the draw functions' flush prologue (`ld` of the five masks, then
+`sub_8221DE68`(dev, mask, reg base, source) per block) and the setters:
+
+| device offset | content |
+| --- | --- |
+| +0x00, +0x08 | dirty masks: vertex ALU constants (flushed to reg 0x4000 from +0x780), pixel ALU constants (reg 0x4400 from +0x1780) |
+| +0x10 | dirty mask: registers and fetch constants (the setters OR bits here; bits 11..14 = fetch constants) |
+| +0x18, +0x20, +0x28 | further masks (+0x28 is ANDed with the flushed mask) |
+| +0x30 / +0x38 | ring write pointer / limit |
+| +0x40 / +0x1D4 | SetRenderState / SetSamplerState dispatch tables |
+| **+0x480** | **32 fetch constants × 24 bytes** (textures and vertex streams: word 0/1 carry the base address — the object identity key) |
+| **+0x780** | vertex-shader float constants (0x400 dwords) |
+| **+0x1780** | pixel-shader float constants (0x400 dwords) |
+| +0x2880 | shadow registers 0x2000.. (RB_SURFACE_INFO, COLOR_INFO, DEPTH_INFO...) |
+| +0x28CC | shadow registers 0x2100.. |
+| +0x2920 | shadow registers 0x2180.. (SQ_PROGRAM_CNTL...) |
+| +0x2934 | shadow registers 0x2200.. (RB_DEPTHCONTROL: `SetRenderState_ZENABLE` does `rlwimi` bit 1 here; its D3D value is kept at +0x2E64) |
+| +0x2AC0 | tiling state object (r3 of the SET_BIN_SELECT function) |
+| +0x2E2C | current shader/declaration pointer (5 setters write it with dirty bit 19) |
+| +0x3094 | current index buffer object (DrawIndexedVertices reads +0 and +24 of it) |
+| +0x3098..+0x30A8 vs +0x31B8..+0x31C8 | pending vs current render-target surfaces (compared by the scissor/flush/predication functions) |
+| +0x31A4 | predication mask (`SetPredication` stores r4 here) |
+| +0x33C8 / +0x33CC | the two words `DrawIndexedVertices` reads before its second packet (visibility/occlusion query?) |
+
+This is the reference's `GuestDevice` layout shifted by the dirty-mask
+prologue (Sonic's XDK: `samplerStates` at 0x480, constants at 0x780/0x1780
+too), so **UnleashedRecomp's field offsets are directly reusable** for the
+fetch constants and float constants.
+
 ## Next
 
-1. Census 2 with the ring writers and the dirty-flag setters hooked (285+
-   hooks): find the real draw entry point(s), SetTexture / SetStreamSource /
-   SetIndices / SetVertexShader / SetPixelShader / shader-constant setters
-   (shadow-only writers, found statically by `dirty_setters.py`).
-2. Name the rest from the census (Create*/Lock*/Unlock*/Set*/Draw*),
+1. **Draw dump** (census 3): a hook on the three draw entry points that
+   records, per draw, (prim, base, start, count, the index buffer object,
+   the 32 fetch-constant slots, the last SetShader pair, the last
+   LoadShaderConstants table) — the object-identity record the NG2
+   frame-interpolation session needs and the HLE's first input.
+2. Name the remaining entry points from the census (Create*/Lock*/Unlock*),
    then the draw dump (VB, IB, shader pair, start/count per draw) at the draw
    entry points — also what the NG2 frame-interpolation work needs.
 3. Present → Plume swap chain, Clear, one DrawIndexedPrimitive natively.
