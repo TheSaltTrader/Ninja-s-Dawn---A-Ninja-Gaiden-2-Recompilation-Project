@@ -488,6 +488,20 @@ that makes each query expensive. Run 11 drops the index-buffer page queries
 The captured frame (16:48) shows the street again — walls, floor, the
 building face ahead — from 175 native draws.
 
+## Native draws run 11 (16:54) — it is the pages, not the queries
+
+Without the page queries: `173 draws; index 166 ms` (5.7 fps) — identical.
+Every way of reading the index buffers costs ~1 ms per KB (physical arena
+in run 8, virtual mirror in run 9, streaming loads in run 10, no queries in
+run 11), while the vertex buffers read through the same mappings cost
+0.2 ms per frame. So the index buffers' **pages are watched**: ReXGlue's
+memory tracking (the GPU plugin's guest-page watches for uploads and
+readbacks) protects them and every host access takes the fault handler —
+tens of microseconds each, ~64 per KB. The vertex pages of these meshes are
+not watched. The native path must read watched guest memory through the
+runtime's own access route (the memory-watch API, or a copy the plugin
+already holds) instead of raw host loads — the next engineering item.
+
 ## M4-b — native draws in the shadow window (built 15:18)
 
 `native_gpu_present.cpp` with `ngpu_native_draws=true`: the DrawIndexedVertices
