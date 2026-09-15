@@ -257,6 +257,36 @@ established the object layouts by reading them live (`peek.py`):
   buffer 2, vertex shader 6, pixel shader 7) — the reference's
   `D3DCOMMON_TYPE` values.
 
+## Draw dump 2 — object identity in Fable II (`M4_fable2_dump2.md`)
+
+Two consecutive market frames (3000, 3001; 2,411 + 2,410 draws):
+
+- **The index buffer's physical address is a 100 % stable object key**: 566
+  distinct (ib, vs, ps) keys per frame, every one of them present in the
+  next frame. (The vs/ps fields of that dump were the device words
+  +0x3198/+0x3194, which turned out not to hold the current shaders — mostly
+  0 — so the match is the IB alone; the next dump carries the tracked
+  SetShader pair.)
+- **The vertex streams 0..2 are per-frame**: the pairs in fetch slot 31
+  (device+0x768..0x77F) change address every frame (a ring the engine
+  writes each frame), so a key that includes every vertex fetch pair
+  matches 0 %. Slots 26..30 hold `00000001/00000000` filler. For the native
+  port this means vertex data for those streams is re-uploaded per frame
+  (as the emulation does today) unless the ring's content is hashed; the
+  static geometry identity is the IB.
+- What else changes per frame at the same draw: `rt` (the render target
+  alternates: double-buffered), `vc` (the vertex constants c0..c15 hash —
+  so per-frame view/projection constants DO go through the device shadow;
+  identical between different objects in the same frame, so the per-object
+  transform is elsewhere: another register range or the shader's own
+  literals), texture slots 4/5 (per-frame textures: shadow/previous frame),
+  and slot 16/17 for some draws.
+- 29 distinct shader pairs in the frame (by the flawed field; the count of
+  distinct SetShader objects in the S lines is 41 vertex shaders, whose
+  containers were written as `.xvu`), 371 IBs drawn more than once (max
+  161 times — instancing by repetition, e.g. foliage), 50 point-list, 48
+  quad-list, 1,243 list and 3,480 strip draws.
+
 ## M4-a — the shadow window renders (2026-09-15 14:51)
 
 `fable2recomp/src/native_gpu_present.cpp` (branch `native-gpu`): with

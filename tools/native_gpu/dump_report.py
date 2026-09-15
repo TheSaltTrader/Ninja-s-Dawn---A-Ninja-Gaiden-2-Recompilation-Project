@@ -35,8 +35,12 @@ for line in open(path, encoding="utf-8", errors="replace"):
             if int(w[k], 16) & 3 == 3:
                 vfetch.append((i * 6 + k, w[k]))
     vfetch = tuple(vfetch); tfetch = tuple(tfetch)
-    d["key"] = (vfetch, d["ib"], d["vs"], d["ps"])
-    d["key_tex"] = (vfetch, tfetch, d["ib"], d["vs"], d["ps"])
+    # Fable II streams some vertex data through a per-frame ring (the stream 0..2
+    # pairs in slot 31 change address every frame), so the stable mesh identity
+    # is the index buffer's physical address; "key" = (ib, vs, ps), "key_tex" adds
+    # every vertex fetch pair (which shows how much of the geometry is per-frame).
+    d["key"] = (d["ib"], d["vs"], d["ps"])
+    d["key_tex"] = (vfetch, d["ib"], d["vs"], d["ps"])
     frames[f].append(d)
     kinds[d["kind"]] += 1; prims[d["prim"]] += 1
     for i in fcs: slots[i] += 1
@@ -46,7 +50,7 @@ lines = [f"# draw dump report: {path}", "",
          f"fetch slots used (slot: draws): {dict(sorted(slots.items()))}",
          f"distinct shader pairs: {len(pairs)}  (top: {pairs.most_common(5)})", ""]
 fs = sorted(frames)
-lines.append("| frame | draws | distinct keys (vfetch,ib,vs,ps) | keys also in next frame | match % | with textures in key | match % |")
+lines.append("| frame | draws | distinct keys (ib,vs,ps) | keys also in next frame | match % | keys with every vertex fetch pair | match % |")
 lines.append("| --- | --- | --- | --- | --- | --- | --- |")
 for a, b in zip(fs, fs[1:]):
     ka = {d["key"] for d in frames[a]}; kb = {d["key"] for d in frames[b]}
