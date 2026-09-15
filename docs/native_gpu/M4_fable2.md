@@ -456,6 +456,26 @@ tracking, faulting per access). Run 9 reads the indices through the guest
 virtual address the game hands the GPU (0xFDxxxxxx) with one memcpy into
 ordinary memory.
 
+## Native draws run 9 (16:44) — **the market renders natively** (M4-b reached)
+
+Reading the indices through the guest virtual mirror halved the cost
+(`138 draws; index 133.9 ms`) and the game ran at 6.8 fps — enough to see
+it: the shadow window shows the market street's walls, floor and the
+buildings ahead as flat-shaded surfaces in correct perspective, drawn from
+the game's own index and vertex buffers through its own view-projection.
+143 of ~1,950 draws per frame render (the 9 shader classes whose POSITION0
+fetch the scan resolves: 28-byte half-float vertices in streams 0/1/3,
+36-byte and 20-byte variants); 1,469 are skipped because their vertex
+shader's dumped physical block contains no fetch-shaped row at all (e.g.
+`4D05F5D0`, `4D063B40` — the market's main mesh shaders: their microcode is
+evidently not the block at obj+0x20 but a **variant** the `SetShader` entry
+pointer selects, the next thing to resolve), and 344 tripped the stream
+size check (relaxed in run 10).
+
+The remaining per-draw cost is the read of guest memory the host maps
+write-combined: run 10 copies index and vertex bytes with `MOVNTDQA`
+streaming loads.
+
 ## M4-b — native draws in the shadow window (built 15:18)
 
 `native_gpu_present.cpp` with `ngpu_native_draws=true`: the DrawIndexedVertices
