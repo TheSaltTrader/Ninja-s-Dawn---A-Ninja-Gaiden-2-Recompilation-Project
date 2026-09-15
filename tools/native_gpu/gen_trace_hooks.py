@@ -14,7 +14,9 @@ device+0x1D4). Outputs, for the game project:
 The hooks change nothing (no return/jump), so the game runs as before; the
 census tells which entry points a frame really uses and what they receive.
 
-usage: gen_trace_hooks.py <M3 json> <tables.txt> <table guest addr hex> <game_dir> [--ring <ringcallers.json>] [--dirty <dirty.json>]
+usage: gen_trace_hooks.py <M3 json> <tables.txt> <table guest addr hex> <game_dir> [--ring <ringcallers.json>] [--dirty <dirty.json>] [--dump]
+--dump: the draw/shader/constant/render-target/present hooks also call the
+hand-written draw dump (src/native_gpu_dump.cpp, DUMP table below).
 --dirty: also hook the shadow-state setters dirty_setters.py found (functions
 that set bits in the device's 64-bit dirty mask at +0x10 without writing PM4).
 --ring: also hook every direct caller of the ring-buffer make-space helper
@@ -192,9 +194,41 @@ cpp += ['};',
         '}',
         '}  // namespace',
         '']
+# --dump: these entry points also feed the hand-written draw dump
+# (src/native_gpu_dump.cpp) - the names are Fable II TU1's; other games pass
+# their own table through --dump-map <json> {addr_hex: callback}.
+DUMP = {
+    0x8221DFC0: "ngpu::OnDrawIndexed(r3.u32, r4.u32, r5.u32, r6.u32, r7.u32)",
+    0x8221C3E8: "ngpu::OnDrawVertices(r3.u32, r4.u32, r5.u32, r6.u32)",
+    0x82217DB8: "ngpu::OnDrawUP(r3.u32, r4.u32, r5.u32, r6.u32, r7.u32, r8.u32, r9.u32, r10.u32)",
+    0x82221858: "ngpu::OnSetShader(r3.u32, r4.u32, r5.u32)",
+    0x82221B90: "ngpu::OnLoadConstants(r3.u32, r4.u32, r5.u32, r6.u32, r7.u32)",
+    0x822192E8: "ngpu::OnSetRenderTarget(r3.u32, r4.u32, r5.u32)",
+    0x82BA34D8: "ngpu::OnPresent(r3.u32)",
+}
+if "--dump-map" in sys.argv:
+    DUMP = {int(k, 16): v for k, v in json.load(open(sys.argv[sys.argv.index("--dump-map") + 1])).items()}
+dump = "--dump" in sys.argv
+if dump:
+    cpp.insert(cpp.index('#include <rex/cvar.h>'), '#include "native_gpu_dump.h"')
+    for a in DUMP:
+        if a not in labels:
+            items.append((a, "dump"))
+    items.sort()
+    cpp[cpp.index(next(l for l in cpp if l.startswith("constexpr int kHooks")))] = f"constexpr int kHooks = {len(items)};"
+    # the entry table must match the (possibly grown) item list
+    start = cpp.index("const Entry kEntries[kHooks] = {") + 1
+    end = cpp.index("};", start)
+    cpp[start:end] = [f'  {{0x{a:08X}, "{label}"}},' for a, label in items]
+    toml = toml[:5]
+    for a, label in items:
+        toml += ["[[midasm_hook]]", f"address = 0x{a:08X}", f'name = "ngpu_{a:08X}"',
+                 "registers = [" + ", ".join(f'"{r}"' for r in regs) + "]", f"# {label}", ""]
+    open(f"{game}/config/hooks/native_gpu_trace.toml", "w").write("\n".join(toml))
 for i, (a, label) in enumerate(items):
+    extra = (" " + DUMP[a] + ";") if dump and a in DUMP else ""
     cpp.append(f'void ngpu_{a:08X}(PPCRegister& r3, PPCRegister& r4, PPCRegister& r5, PPCRegister& r6, '
                f'PPCRegister& r7, PPCRegister& r8, PPCRegister& r9, PPCRegister& r10) '
-               f'{{ Trace({i}, r3, r4, r5, r6, r7, r8, r9, r10); }}')
+               f'{{ Trace({i}, r3, r4, r5, r6, r7, r8, r9, r10);{extra} }}')
 open(f"{game}/src/native_gpu_trace.cpp", "w").write("\n".join(cpp) + "\n")
 print("wrote", f"{game}/config/hooks/native_gpu_trace.toml", f"{game}/src/native_gpu_trace.cpp")
