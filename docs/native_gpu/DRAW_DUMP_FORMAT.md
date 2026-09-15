@@ -17,8 +17,9 @@ Output: `ngpu_dump_<serial>.txt` beside the executable (one file per window).
 All numbers are guest values, hex is big-endian as the game sees it.
 
 ```
-D f<frame> <kind> prim=<p> base=<b> start=<s> count=<c> ib=<obj>:<w0>/<w6> vs=<obj> ps=<obj> ct=<table>+<base>:<n> rt=<surface>:<i> pred=<mask> fc<i>=<w0>/<w1>/<w2> ...
+D f<frame> <kind> prim=<p> base=<b> start=<s> count=<c> ib=<obj>:<w0>/<w6> vs=<obj> ps=<obj> ct=<table>+<base>:<n> rt=<surface>:<i> pred=<mask> vc=<hash> fc<i>=<w0>/<w1>/<w2> ...
 S f<frame> shader=<obj> type=<t> code=<addr>
+M shader=<obj> type=<t> code=<addr> len=<bytes> hdr40=.. hdr48=.. hdr52=.. hdr56=.. hdr64=..
 C f<frame> table=<t> base=<b> base2=<b2> n=<n> list=<addr> len=<bytes>
 R f<frame> surface=<s> index=<i> w0=<word>
 F <frame>
@@ -38,9 +39,18 @@ F <frame>
   bit 0 clear / set (the `S` lines show every call; `code` is the object's
   +64 word, the microcode header).
 - `ct` — the last `LoadShaderConstants` (`sub_82221B90`) table pointer, its
-  base and count: the packet loads ALU constants from **guest memory**
-  (table entries are (count, start) pairs, data follows), so the per-object
-  transform is at that address at draw time, not in device+0x780.
+  base and count. Reading `SetShader` further showed the table is the
+  **shader object's own literal-constant table** (`obj+872`, base `[obj+32]`):
+  SetShader calls the loader itself, so the `LOAD_ALU_CONSTANT` packets carry
+  shader literals, and the per-object transforms go through the device
+  shadow (`vc` below) — the reference's model after all.
+- `vc` — FNV-1a hash of vertex float constants c0..c15 (device+0x780, 256
+  bytes) at the draw: changes per object when the transform is written
+  through the device shadow.
+- **M** — first sight of a shader's microcode: the blob (`code`, `len` bytes:
+  `[obj+24] + [hdr+40]`, `[hdr+44]`, hdr = `obj + [obj+64]`) is written to
+  `ngpu_shaders/<code>_<v|p>.bin` beside the executable, once per address —
+  the input for the offline shader translation.
 - `rt` — the last `SetRenderTarget` surface and index.
 - `pred` — the tiling predication mask at device+0x31A4.
 - `fc<i>` — every fetch constant slot (32 × 24 bytes at device+0x480) whose
