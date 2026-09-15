@@ -476,6 +476,18 @@ The remaining per-draw cost is the read of guest memory the host maps
 write-combined: run 10 copies index and vertex bytes with `MOVNTDQA`
 streaming loads.
 
+## Native draws run 10 (16:48) — streaming loads changed nothing
+
+`175 draws; index 165 ms` with MOVNTDQA copies (5.4 fps): the guest memory
+is not the slow part. What is left in that section is two `VirtualQuery`
+calls on the 0xFD.. mirror per draw; the vertex path makes the same two
+calls on its pages for 0.2 ms per frame, so the mirror's address range must
+be a fragmented VAD (per-page protections from the plugin's memory watches)
+that makes each query expensive. Run 11 drops the index-buffer page queries
+(the object is a live guest buffer whose bounds the IB object states).
+The captured frame (16:48) shows the street again — walls, floor, the
+building face ahead — from 175 native draws.
+
 ## M4-b — native draws in the shadow window (built 15:18)
 
 `native_gpu_present.cpp` with `ngpu_native_draws=true`: the DrawIndexedVertices
