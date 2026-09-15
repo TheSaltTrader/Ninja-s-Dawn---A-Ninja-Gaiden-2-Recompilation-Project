@@ -444,6 +444,18 @@ build, vertex conversion, the Plume calls, the shader/device lookups, the
 execute + present + fence wait) logged every 60 frames as `[ngpu] frame
 cost`, to name the ~600 ms before guessing again.
 
+## Native draws run 8 (16:42) — the timers name it: reading the index buffer
+
+`[ngpu] frame cost: 137 draws; index 255.4 ms, vertices 0.2 ms, plume calls
+0.2 ms, other 0.0 ms, execute+present wait 0.1 ms`. Everything is free except
+reading the game's index bytes: ~1.9 ms per draw for a few hundred indices,
+through the physical arena (`physical_membase + (addr & 0x1FFFFFFF)`), while
+the vertex bytes read the same way cost nothing — so the index buffer pages
+are special (a watched/handled mapping, most likely the plugin's GPU-memory
+tracking, faulting per access). Run 9 reads the indices through the guest
+virtual address the game hands the GPU (0xFDxxxxxx) with one memcpy into
+ordinary memory.
+
 ## M4-b — native draws in the shadow window (built 15:18)
 
 `native_gpu_present.cpp` with `ngpu_native_draws=true`: the DrawIndexedVertices
