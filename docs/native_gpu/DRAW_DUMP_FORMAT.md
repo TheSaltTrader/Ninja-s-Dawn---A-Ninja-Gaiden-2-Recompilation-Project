@@ -17,12 +17,13 @@ Output: `ngpu_dump_<serial>.txt` beside the executable (one file per window).
 All numbers are guest values, hex is big-endian as the game sees it.
 
 ```
-D f<frame> <kind> prim=<p> base=<b> start=<s> count=<c> ib=<obj>:<w0>/<w6> vs=<obj> ps=<obj> ct=<table>+<base>:<n> rt=<surface>:<i> pred=<mask> vc=<hash> fc<i>=<w0>/<w1>/<w2> ...
+D f<frame> <kind> prim=<p> base=<b> start=<s> count=<c> ib=<obj>:<w0>/<w6> vs=<obj> ps=<obj> ct=<table>+<base>:<n> rt=<surface>:<i> pred=<mask> vc=<hash> vd=<decl obj> fc<i>=<w0>/<w1>/<w2>/<w3>/<w4>/<w5> ...
 S f<frame> shader=<obj> entry=<ptr> common=<word>
 M shader=<obj> type=<6|7> entry=<ptr> magic=<0x102A11xx> vsize=<n> psize=<n> phys=<addr> ctab=+<o> dtab=+<o> shdr=+<o>
 C f<frame> table=<t> base=<b> base2=<b2> n=<n> list=<addr> len=<bytes>
 R f<frame> surface=<s> index=<i> w0=<word>
 F <frame>
+VD decl=<obj> <64 words of the vertex declaration object>
 ```
 
 - **D** — one draw. `kind`: `DI` = DrawIndexedVertices (`sub_8221DFC0`:
@@ -56,6 +57,9 @@ F <frame>
   `ngpu_shaders/<obj>_<v|p>.xvu` = the virtual part (from obj+872) followed by
   the physical part (from the physical address) — the compiled-shader file
   layout XenosRecomp's `ShaderContainer` parses.
+- `vd` — the current vertex declaration object (device+0x2E2C); its first 64
+  words are written once per distinct object as a **VD** line — the element
+  list the native input layout is built from.
 - `rt` — the last `SetRenderTarget` surface and index.
 - `pred` — the tiling predication mask at device+0x31A4.
 - `fc<i>` — every fetch constant slot (32 × 24 bytes at device+0x480) whose
