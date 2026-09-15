@@ -406,6 +406,19 @@ stride 5, offset 3 dwords` (TEXCOORD0) — at +0x224 of the block, not at
 0x40 + 9·12. Run 4 takes the first float3/float4 fetch row in the block as
 POSITION0 (cached per shader object).
 
+## Native draws run 4 (16:00) — Fable's mesh vertices are half-float
+
+The float3/float4 fetch scan found POSITION0 in 16 of 211 dumped vertex
+shaders only. Scanning every fetch format shows the real mesh layouts:
+the common Fable II vertex is **28 bytes: POSITION0 as 16_16_16_16_FLOAT
+(format 32) at offset 0, two 8_8_8_8 (normal/tangent) at dwords 3 and 4, a
+16_16_FLOAT texcoord at dword 5**, in stream 0; variants with 36-byte
+(stride 9) and 24-byte (stride 6) vertices, and the instanced classes with
+POSITION1 in stream 1 and POSITION2/3 as float4 in stream 2. Run 5 accepts
+format 32 (big-endian halfs in memory order) for POSITION0. About half of
+the shaders show no fetch row at all with this filter (tiny post-process
+shaders that fetch nothing, or a fetch encoding the filter does not cover).
+
 ## M4-b — native draws in the shadow window (built 15:18)
 
 `native_gpu_present.cpp` with `ngpu_native_draws=true`: the DrawIndexedVertices
