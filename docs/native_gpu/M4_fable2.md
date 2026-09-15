@@ -392,6 +392,20 @@ the format, the offset and the stride (dwords). Run 3 resolves POSITION0
 from the current vertex shader that way (`PositionFromShader`, cached per
 shader object).
 
+## Native draws run 3 (15:53) — the fetch instruction is found by shape
+
+Resolving POSITION0 through the container (`code + element.address·12`)
+found nothing: the runtime's physical block at [obj+0x20] does not keep the
+container's offsets (its first words are already ALU instructions, no
+0x40-byte header). Scanning the block for vertex-fetch-shaped rows (dword 0:
+opcode 0 and the must-be-one bit 19; dword 1: format bits 16..21; dword 2:
+stride and offset in dwords) found, for `4CDF70E0`, exactly the declaration
+the `VD` lines showed for that shader's mesh class: `k = 95 → stream 0,
+float3, stride 5 dwords (20 B), offset 0` (POSITION0) followed by `float2,
+stride 5, offset 3 dwords` (TEXCOORD0) — at +0x224 of the block, not at
+0x40 + 9·12. Run 4 takes the first float3/float4 fetch row in the block as
+POSITION0 (cached per shader object).
+
 ## M4-b — native draws in the shadow window (built 15:18)
 
 `native_gpu_present.cpp` with `ngpu_native_draws=true`: the DrawIndexedVertices
