@@ -287,6 +287,35 @@ Two consecutive market frames (3000, 3001; 2,411 + 2,410 draws):
   161 times — instancing by repetition, e.g. foliage), 50 point-list, 48
   quad-list, 1,243 list and 3,480 strip draws.
 
+## The shaders translate — XenosRecomp on the dumped containers (15:00)
+
+XenosRecomp (built with clang-cl: its `pch.h` uses `__builtin_bswap*`;
+`NativeGPU/build_xenosrecomp.cmd`) in single-file mode turns a dumped `.xvu`
+into HLSL: `XenosRecomp <file>.xvu out.hlsl XenosRecomp/shader_common.h`.
+The first Fable II vertex shader (`4CDF70E0_v.xvu`, 1,756 bytes) gave 12 KB of
+HLSL and settled three things:
+
+- **The containers carry reflection data**: the constant table names the
+  registers — `float4 g_WorldViewProjection[4] : packoffset(c0)` — so the
+  translator's constant-buffer generation works on Fable's shaders as is,
+  and c0..c3 is the view-projection.
+- **Per-object transforms travel in a vertex stream, not in constants**: the
+  input declaration has `POSITION1`, `POSITION2`, `POSITION3` (three float4
+  rows = a per-instance world matrix) besides `POSITION0`/`NORMAL0`/
+  `TEXCOORD0..2`/`BLENDINDICES0`/`BLENDWEIGHT0`. That is why the vertex
+  fetch pairs of streams 0..2 change every frame (the engine writes the
+  instance rows into a per-frame ring) and why the c0..c15 hash is the same
+  for different objects in one frame. For the NG2 frame-interpolation work:
+  Fable's object transform is in the vertex data of the per-frame stream,
+  not in the constant registers.
+- Translator gaps seen so far: the instance inputs are emitted four times
+  (a duplicate-declaration bug on this vertex declaration shape — Sonic never
+  had it); `4CE926A0_v.xvu` crashes the recompiler; one shader makes it loop
+  forever (killed after 290 s CPU). 11 of the first 13 translated. The
+  directory mode (dxc → DXIL/SPIR-V cache) produced nothing: it needs the
+  dxc DLLs beside the executable — to sort out when a shader pair is
+  compiled for the first native draw.
+
 ## M4-a — the shadow window renders (2026-09-15 14:51)
 
 `fable2recomp/src/native_gpu_present.cpp` (branch `native-gpu`): with
