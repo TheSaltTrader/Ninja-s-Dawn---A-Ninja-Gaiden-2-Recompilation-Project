@@ -91,13 +91,66 @@ call and falls through to the recompiled body when it does not — one file per
 entry point, no table patching, and the emulated path stays available per
 function during bring-up.
 
+## Census 1 — the market, 150 s, hero 2 (`M4_fable2_census1.md`)
+
+Tracer cost: none measurable (guest fps 55–60 in the market with 223 hooks
+live, the v0.2.12 figure). Facts the census established:
+
+- **The D3DRS enum reconstruction is verified in full.** Every state setter
+  arrives with r8 = 0x40 + D3DRS value (the dispatch slot offset the generic
+  `D3DDevice_SetRenderState(dev, state, value)` computes before `bctr`), and
+  every r8 matches the name the generator assigned: ZENABLE 0x68 (40),
+  COLORWRITEENABLE1 0x118 (216), VIEWPORTENABLE 0x170 (304),
+  HIGHPRECISIONBLENDENABLE 0x174 (308), ALPHATOMASKENABLE 0x190 (336),
+  HISTENCILENABLE 0x1A8 (360), HIZENABLE 0x1C0 (384), BUFFER2FRAMES 0x1D0
+  (400). Samplers likewise: r8 = 0x1D4 + 4·D3DSAMP (ADDRESSU 0x1D4 ..
+  TRILINEARTHRESHOLD 0x20C). So the engine reaches the setters through the
+  **generic dispatch**, not direct inline calls — either hook point works.
+- **Per-frame state traffic** (peak 10-s window / 60): HIGHPRECISIONBLENDENABLE
+  2,500, HIZENABLE 1,700, ALPHATESTENABLE 275, ALPHAREF 215, STENCILREF 190,
+  sampler ADDRESSU/V 150 each, MIN/MAG/MIPFILTER 100 each, SRC/DESTBLEND 90,
+  ALPHABLENDENABLE 65, ZFUNC 55, CULLMODE 47, COLORWRITEENABLE 45, ZWRITE 45,
+  ZENABLE 10; ~45 states are set exactly once per frame (the WRAP*, POINT*,
+  STENCILFAIL... reset block); 24 setters ran once at boot only.
+- **A state setter writes the shadow register and the dirty flags, never the
+  ring**: `SetRenderState_ZENABLE` = `stw r4,0x2E64(r3)` (the D3D value),
+  `rlwimi` into the packed register at device+0x2934 (DB_DEPTHCONTROL),
+  `ld/std 16(r3)` with bits 11 and 17 set (the 64-bit dirty flags live at
+  device+0x10, not +0x00 as in Sonic's XDK). The draw flushes dirty ranges.
+- **Present** `sub_82BA34D8` once per frame (542–600 per 10 s = the fps), with
+  `sub_82BA2F68` (WAIT_REG_MEM), `sub_82BA3148` (REG_RMW), `sub_82BA95E0`
+  (VdQueryVideoMode), `sub_82BAED78` (EDRAM retrain), `sub_82BAAA28` (clock
+  gating) and `sub_82BA1EE0` in lockstep — the swap path.
+- `sub_82BA1FA8` (r3 = 0x701BF2B0, the ring status block, not the device) is
+  the **GPU wait spin** — 1.3–2.2 M polls per 10 s: the game thread waiting for
+  the command thread, i.e. the frame-rate bottleneck the emulation profile
+  already named.
+- `sub_82B9EEE0` + `sub_82B9F038` (the DRAW_INDX_2 kicks, 12/frame, args
+  (dev, 0, surface-like pointer, 0, 0/1, 0x80, 0x20000, 0x5C8)) are the
+  **Resolve** draws (their caller `sub_82196750` takes the device and a
+  parameter block with rects and writes device+0x2898 first). The real
+  per-object draws — thousands per frame by the setter counts — come from a
+  function the address-cluster library definition missed: the fix is
+  **census 2**, which also hooks the 78 direct callers of the ring make-space
+  helper `sub_821E8EC0` (five clusters: 82193008–82242668 (37),
+  822655F0–822C91F0 (13), 82A7FDE0–82A8ABB8 (3), 82B6F1D0, 82B9EEE0–82BAEA88
+  (24)) — every PM4 writer, whatever its address.
+- Other named: `sub_82BA4FB8` (SET_BIN_SELECT, r3 = device+0x2AC0, 9/frame) =
+  the tiling-pass selector; `sub_82BAA848` (EVENT_WRITE_SHD, 2/frame) =
+  frame fence write; `sub_82B98F00` (device, 15/frame, args 0,0,0x4040,0x4A,
+  0x37E0) = a per-pass setup call, to be read; `sub_82B997A8` (2.7 M calls
+  while loading, ptr/ptr/size) = the XDK's write-combined memcpy, not API.
+- 69 of the 223 hooks never fired in this run (the CCW_STENCIL*, blend-alpha,
+  HIGHPRECISIONBLENDENABLE1..3, clip-plane, and the display/scaler init
+  entries — created once at boot before the tracer's first census, or unused).
+
 ## Next
 
-1. Run the census through boot → menu → the hero-1 save → 60 s in Bowerstone
-   (pad script), read the `[ngpu]` lines: which entry points run per frame,
-   their argument shapes (r3 = 0x44142480 for device methods, resource
-   pointers otherwise), and the per-frame counts that size the HLE.
-2. Name the rest of the 111 from the census (Create*/Lock*/Unlock*/Set*/Draw*),
+1. Census 2 with the ring writers and the dirty-flag setters hooked (285+
+   hooks): find the real draw entry point(s), SetTexture / SetStreamSource /
+   SetIndices / SetVertexShader / SetPixelShader / shader-constant setters
+   (shadow-only writers, found statically by `dirty_setters.py`).
+2. Name the rest from the census (Create*/Lock*/Unlock*/Set*/Draw*),
    then the draw dump (VB, IB, shader pair, start/count per draw) at the draw
    entry points — also what the NG2 frame-interpolation work needs.
 3. Present → Plume swap chain, Clear, one DrawIndexedPrimitive natively.

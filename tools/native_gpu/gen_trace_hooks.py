@@ -14,7 +14,13 @@ device+0x1D4). Outputs, for the game project:
 The hooks change nothing (no return/jump), so the game runs as before; the
 census tells which entry points a frame really uses and what they receive.
 
-usage: gen_trace_hooks.py <M3 json> <tables.txt> <table guest addr hex> <game_dir>
+usage: gen_trace_hooks.py <M3 json> <tables.txt> <table guest addr hex> <game_dir> [--ring <ringcallers.json>] [--dirty <dirty.json>]
+--dirty: also hook the shadow-state setters dirty_setters.py found (functions
+that set bits in the device's 64-bit dirty mask at +0x10 without writing PM4).
+--ring: also hook every direct caller of the ring-buffer make-space helper
+(M4_<game>_ringcallers.json, from the census notes) - the PM4 writers the
+address-cluster definition of the library missed (Fable: 78 functions in five
+clusters, the real draw entry points among them).
 """
 import json, re, sys
 
@@ -91,6 +97,14 @@ for fn in sorted(surface):
     tag = " ".join(t for t in (f"sites={sites}", ops, imps) if t)
     add(a, f"lib {tag}")
 
+if "--ring" in sys.argv:
+    rj = json.load(open(sys.argv[sys.argv.index("--ring") + 1]))
+    for fn in rj["direct"]:
+        add(int(fn[4:], 16), "ring")
+if "--dirty" in sys.argv:
+    dj = json.load(open(sys.argv[sys.argv.index("--dirty") + 1]))
+    for fn, info in dj["setters"].items():
+        add(int(fn[4:], 16), "dirty bits=" + ",".join(str(b) for b in info["bits"]) + " writes=" + ",".join(str(w) for w in info["writes"][:6]))
 items = sorted(labels.items())
 print(f"{len(items)} hooks: {n_state} state setters + {len(items) - n_state} library entry points")
 
