@@ -375,6 +375,23 @@ thread), fixed by page-checked reads.
   strips to lists anyway). Run 2 reads the declaration for POSITION0's stream,
   offset and stride.
 
+## Native draws run 2 (15:48) — the first native triangle, and where the layout lives
+
+With POSITION0's stream/offset/stride taken from the declaration object,
+**one draw per frame rendered natively**: a dark wedge in the shadow window
+(captured), drawn from the game's own index and vertex bytes through its
+own c0..c3 — the first geometry of the native path. The other ~1,950 draws
+per frame were skipped as "without a declaration": device+0x2E2C is 0 for
+them. That is the XDK's normal case: the vertex declaration is **bound into
+the vertex shader** (`SetVertexShader` alone selects the layout), and the
+shader's container lists its vertex elements as `{vfetch instruction
+address:12, usage:4, usageIndex:4}` (XenosRecomp's `VertexElement`); the
+vertex fetch instruction at `code + address·12` (3 big-endian dwords) names
+the fetch constant (`constIndex·3 + constIndexSelect` → stream = 95 − k),
+the format, the offset and the stride (dwords). Run 3 resolves POSITION0
+from the current vertex shader that way (`PositionFromShader`, cached per
+shader object).
+
 ## M4-b — native draws in the shadow window (built 15:18)
 
 `native_gpu_present.cpp` with `ngpu_native_draws=true`: the DrawIndexedVertices
