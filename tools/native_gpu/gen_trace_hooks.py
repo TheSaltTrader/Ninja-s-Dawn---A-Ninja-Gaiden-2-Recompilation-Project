@@ -202,6 +202,8 @@ DUMP = {
     0x8221C3E8: "ngpu::OnDrawVertices(r3.u32, r4.u32, r5.u32, r6.u32)",
     0x82217DB8: "ngpu::OnDrawUP(r3.u32, r4.u32, r5.u32, r6.u32, r7.u32, r8.u32, r9.u32, r10.u32)",
     0x82221858: "ngpu::OnSetShader(r3.u32, r4.u32, r5.u32)",
+    0x82232510: "ngpu::OnSetShader(r3.u32, r4.u32, 0)",   # SetVertexShader (device+0x3198)
+    0x82208BB0: "ngpu::OnSetShader(r3.u32, r4.u32, 0)",   # SetPixelShader (device+0x3194)
     0x82221B90: "ngpu::OnLoadConstants(r3.u32, r4.u32, r5.u32, r6.u32, r7.u32)",
     0x822192E8: "ngpu::OnSetRenderTarget(r3.u32, r4.u32, r5.u32)",
     0x82BA34D8: "ngpu::OnPresent(r3.u32)",

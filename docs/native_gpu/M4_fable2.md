@@ -308,6 +308,20 @@ HLSL and settled three things:
   for different objects in one frame. For the NG2 frame-interpolation work:
   Fable's object transform is in the vertex data of the per-frame stream,
   not in the constant registers.
+- All 38 containers run through the single-file mode: **30 translate, 8
+  crash or hang** the recompiler (`4CE926A0 4CFEE5D0 4D051540 4D052F90
+  4D0608E0 4D088BE0 4D097CB0 4D0A9E70`; a hang is an infinite loop in its
+  control-flow handling — kill the process). The 30 HLSL files
+  (`NativeGPU/build/fable2_shaders/hlsl/`) name Fable's vertex constant
+  layout: `g_WorldViewProjection[4]` c0 (all 30), `g_WorldTransform[3]` c4
+  (14 — so a constant world transform exists too, for non-instanced
+  meshes), `g_WorldPositionAndReciprocalScale` c7 (15), `g_EyePosition` c9
+  (10), `g_RepeatedMeshConstants` c13 (5), `g_TreeConstants[3]` c15 (5),
+  `g_AmbientLightReferenceDirection` c19 (11), `g_PRTConstants[12]` c28
+  (8). Vertex inputs: `POSITION0` 29, `POSITION1..3` 19–21 (the instance
+  rows), `TEXCOORD0` 20, `NORMAL0` (uint4, packed) 18, `TEXCOORD1` 11,
+  `TEXCOORD2` 9, `BLENDINDICES0` 7, `POSITION4` 5, `COLOR0/1` 5,
+  `BLENDWEIGHT0` 3.
 - Translator gaps seen so far: the instance inputs are emitted four times
   (a duplicate-declaration bug on this vertex declaration shape — Sonic never
   had it); `4CE926A0_v.xvu` crashes the recompiler; one shader makes it loop
