@@ -39,6 +39,21 @@ def main():
             continue
         text = text.replace("in uint4 i%s%s : %s%s" % (USAGE_VAR.get(f[1], f[1]), f[2], f[1], f[2]),
                             "in float4 i%s%s : %s%s" % (USAGE_VAR.get(f[1], f[1]), f[2], f[1], f[2]))
+        # the sidecar records the declared type, and the runtime checks it
+        # against the fetch format when it builds the input layout
+        layout_fixed = True
+
+    if layout_fixed:
+        lines = open(layout_path, encoding="utf-8").read().splitlines()
+        for i, line in enumerate(lines):
+            g = line.split()
+            if len(g) >= 13 and g[0] == "vfetch" and g[12] == "uint4" and int(g[6]) in (31, 32, 36, 37, 38, 57):
+                g[12] = "float4"
+                lines[i] = " ".join(g)
+        open(layout_path, "w", encoding="utf-8", newline="
+").write("
+".join(lines) + "
+")
 
     scales = []
     try:
