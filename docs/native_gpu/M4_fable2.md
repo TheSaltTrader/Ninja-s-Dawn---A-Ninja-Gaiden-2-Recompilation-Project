@@ -2217,3 +2217,32 @@ biggest draws (30,720 indices, vertex shader E4D8ABB13DE22341, pixel shader
 60E8DEF931549772) go to surface 10000410, pitch 1040 = a 1024-wide shadow map
 padded to the EDRAM tile, not to the presented target (14010500, 1280x720,
 1,475 draws).
+
+### Runs 229-233: the ground is absent, not unlit and not occluded
+
+Four captures settle what the street is doing:
+
+- Run 229, with the two quad passes off (`ngpu_draw_up=false`,
+  `ngpu_draw_vertices=false`): the pale blue-grey that filled the lower half of
+  every earlier capture disappears and the street is black. The pale wash is a
+  full-screen quad pass, not the ground.
+- Run 230, the same with `ngpu_ps_debug=16`: the street area carries no
+  shader's colour at all. Nothing is drawn there. (Run 227's maroon street was
+  that full-screen quad, which is why the tower shared its colour.)
+- Run 233, the same again with `ngpu_depth_test=false`: still black, so the
+  ground is not being rejected by the depth test either.
+- Run 231's census of the frame's native targets shows where the other passes
+  go: 1280x720 colour 00030000 with 1,427 draws (presented), 1280x720 colour
+  000C0000 with 158 draws, 1040x1040 colour 00020000 with 372 draws (the
+  1024-wide shadow map padded to the EDRAM tile), plus 320x180 and 640x360
+  targets. `ngpu_present_rt=<colour>` presents any of them: the 000C0000 pass
+  (run 232) holds a different view - rooftops, a hillside, a red panel - so it
+  is the distant-scenery or impostor-atlas pass, not the street.
+
+So the street's draws never reach the native path at all. The coverage metric
+cannot see this: it counts only the three hooked entry points, so geometry
+submitted through an unhooked one is missing from both its numerator and its
+denominator. The next step is to compare the ring parser's DRAW packet count
+per frame against the draws we issue - the ring is the ground truth for what
+the GPU was actually told to draw - and hook whatever entry point accounts for
+the difference.
