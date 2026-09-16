@@ -667,6 +667,25 @@ the stream's fetch address against the object's address + 0x1000. Runs
 19-21 with the cache partly engaged stayed at 37-40 fps (their "range" and
 "bypass" failures came from strides taken off the wrong block).
 
+## Run 22 (19:28) - M4-c: every indexed draw native at the game's 60 fps
+
+Build 34 (host page offset, the vertex shader's own block, the cache
+through the runtime's physical numbers): the market walk runs at
+**58-60 fps** (the cap; 38 fps in runs 17-21, 4 fps in run 15) with
+**~1,815 native draws per frame - every DrawIndexedVertices, none
+skipped** (`0 skipped ... 1815 without a declaration`), all 31 vertex
+shaders resolved on their first sight (`(ok)` 31, `(not found)` 0). The
+native path costs about 1.7 ms per frame: `index 1.1 ms (decode 0.6),
+vertices 0.4 ms, plume calls 0.1 ms, execute+present wait 0.1 ms`;
+the cache serves ~2,460 hits per frame from 26 MB (1,292 entries), ~650
+draws per frame bypass it as dynamic (rewritten within 300 frames) and
+take the per-draw path, 33 fall outside their buffer's size.
+
+The shadow window shows one flat colour: with real indices the
+post-process and UI passes' full-screen quads cover the scene (depth
+LESS_EQUAL, no render-target separation). Run 23 skips draws under 12
+indices (`ngpu_min_indices`) to look at the world.
+
 ## Shader translation, second pass (17:50) — the translator sees the wrong bytes for many shaders
 
 XenosRecomp with duplicate vertex-input declarations removed (a local
