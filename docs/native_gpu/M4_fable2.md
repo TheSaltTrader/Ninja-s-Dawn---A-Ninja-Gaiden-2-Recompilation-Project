@@ -1180,6 +1180,27 @@ where they differ.
   the parser resyncs by parsing forward from 16 KB behind the new pointer
   until the packets parse cleanly.
 
+## Runs 75-79 (00:25-01:05) - the parser works; the missing pixel shaders
+
+- Run 75/76 (builds 85-86): the "bad" parse at every draw was the trailing
+  packet: the XDK leaves the next packet's header (`C0006000`, count 1)
+  right at the write pointer, so a packet that runs past the pointer now
+  ends the stream successfully and the cursor stays on it. With that the
+  parser is healthy - ~30-60 k packets and ~900-1900 shader loads per
+  frame, one resync per segment switch, a dozen bad packets, the guest at
+  59 fps. Resync tries are capped (512 starts from 16 KB back).
+- The pixel codes the ring loads mostly matched no registered container:
+  a diff against a same-size container showed a *different shader*, not a
+  patched one. Cause: `SetShaders(dev, VS, PS)` (`sub_82221858`, the pair
+  the engine's draws use) passed its pixel shader to the hook as the
+  vertex shader's "entry", never as the current pixel shader, so every
+  engine draw was paired with the last `SetPixelShader` (the background
+  shader `4CE80D10`). Build 87 records it; those 32 pixel-shader objects
+  were then rejected as "not in ngpu_cache" - never dumped, because
+  `DumpMicrocode` wrote only the first argument. Build 88 dumps the pair's
+  pixel shader too; run 78 (`ngpu_dump_at_frame=1`) collects them, the
+  translation + pack follow, run 79 draws with them.
+
 ## Next
 
 1. **Read watched guest pages without faulting.** ReXGlue's memory has the
