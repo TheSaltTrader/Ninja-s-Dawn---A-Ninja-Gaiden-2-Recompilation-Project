@@ -548,6 +548,19 @@ working tree) exports it, so the call is bound by its decorated name at
 runtime — a reminder that the SDK headers and the shipped runtime have
 drifted apart since the plugin work began.
 
+## Native draws run 15 (18:30) — the copy is not the cost either
+
+With the provider watch released before each copy and the copy timed on
+its own: `211 draws; index 192.7 ms (copy 0.1 ms, 0 draws had a watch),
+vertices 45.8 ms`. The guest-memory copy of the indices costs 0.1 ms per
+frame; the watch trigger found no watched page; and yet the index section
+still takes ~190 ms. What remains in that section is the index decode /
+rebase in ordinary memory and the memcpy of the result into the Plume
+upload heap; the vertex section similarly ends in 4-byte float stores into
+the upload heap. Run 16 times those pieces separately — the working
+hypothesis is now the upload heap mapping itself (uncached or
+write-combined writes at word granularity).
+
 ## Shader translation, second pass (17:50) — the translator sees the wrong bytes for many shaders
 
 XenosRecomp with duplicate vertex-input declarations removed (a local
