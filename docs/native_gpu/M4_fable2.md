@@ -897,6 +897,65 @@ by the engine, or not — to be seen) lands where the game draws it; the
 instanced meshes (POSITION1..3 rows in the per-frame stream) draw at the
 origin until the instance rows are applied.
 
+## Runs 44-50 (21:45-22:30) - the noise is streamed texture memory, and the M6 function map corrected
+
+**Noise diagnosis, continued.** The 640x360 GPU-written texture (run 46,
+white) was only part of it: the walls, floor and pillars stayed noise with
+it white, with the 1x1 textures white (`ngpu_tex_min=8`, run 48) and with
+slot 13 fed from slot 0 (`ngpu_slot13=0`, mode 10). The dumped slot-13
+textures decode correctly offline (512x512 DXT1 hair atlas, 128x128 glow),
+so the untiler is right. **Mode 11** (build 64: the slot-13 texture laid
+flat over the screen in screen space, `SampleLevel 0`, whatever the
+texcoords) settled it: the wall textures' *content* is black with rows of
+coloured garbage - the guest memory had not been written yet when the
+texture was first seen. Fable II streams its world textures in after the
+fetch constant exists (all census textures say `mips 0..3 packed`, base at
+the fetch base, so the base level is expected there), and the texture
+cache keyed by fetch constant kept the first, unloaded snapshot forever.
+The Xenos plugin never shows this because its texture cache re-uploads on
+guest writes.
+
+**Fix (build 65, run 50):** every uploaded texture records its guest range
+and the frame it was read in, arms the runtime's write watch on the range
+(`EnablePhysicalMemoryAccessCallbacks`, the vertex cache's callback stamps
+`g_page_tick`), and at the next lookup - once per frame - re-uploads when
+a page is newer than the upload and the writes have settled for two frames
+(or after 60 frames regardless). The old resource and view go to a retired
+list freed at the next BeginFrame (after the frame fence); the descriptor
+index is reused. The fetch constant's component swizzle (dword 3 bits
+1..12, `0x688` identity for DXT, `0x60A` = BGRA for the 8_8_8_8 lookups)
+now becomes a texture view mapping. `ngpu_tex_watch=false` disables it.
+
+**Diagnostic branch bug:** modes 2-10 never bound the per-draw shared
+constants (the static block stayed at b2), so mode 10 proved nothing;
+fixed in build 64. Modes are now exact (`switch` on `int(color.a + 0.5)`):
+11 = slot 13 flat, 12 = slot 0 flat, 13 = slot 13's descriptor index as a
+colour.
+
+**M6 function map, corrected by reading the recompiled bodies:**
+
+| function | what it really is | evidence |
+|---|---|---|
+| `sub_822192E8` (580/frame, hooked as "SetRenderTarget") | **occlusion-query / sample-count issue**: writes RB_MODECONTROL, RB_SURFACE_INFO (0x20000), RB_COLOR_INFO 0, then `RB_SAMPLE_COUNT_ADDR` (0x2325) = `[obj+0x1C] + index*32` (mirror address, +0x1000 page trick); the "surface" objects are query objects (word 1 = 9, word 7 = a 32-byte record array at 0xFFA9Cxxx holding floats) | body in `fable2_recomp.193.cpp:630`; run 48 descriptor dumps |
+| `sub_82206888` | **`D3DDevice_Resolve(dev, flags, pSourceRect, pDestTexture, pDestPoint, DestLevel, DestSliceOrFace, pClearColor, ClearZ=f1, ...)`** - the real XDK resolve: `flags & 7` = render-target index, `flags & 0x70` = source kind (0x10 depth), the current RT surfaces live at `dev+0x3098+4*i`, the depth surface at `dev+0x30A8`; the dest texture's fetch constant sits at `+0x1C` (dwords 0..5 at +28..+48: pitch/tiled, format+base, size, ..., mips) | `fable2_recomp.240.cpp:559` (writes RB_COPY_CONTROL 0x2318 / RB_COPY_DEST_INFO 0x231B) |
+| `sub_82196750` (12/frame) | Fable's resolve wrapper: r5 = an engine object (`C0400002 00000001 ... FCC05040 00010000 820FB130 FCC15080`, two records) - not the XDK signature | run 47/48 dumps |
+| `sub_821F0E00` | a **Clear**-family function (flags in r4: 0x10/0x20/0x40/0x80, RT index in r5, colour/z in f1; writes RB_STENCILREFMASK 0x210D) | `fable2_recomp.153.cpp:1269` |
+| `sub_8221B010` | the pre-draw state commit (SQ_PROGRAM_CNTL 0x5C8 from the shader containers at +872), not a render-target setter | `fable2_recomp.243.cpp:5` |
+| `sub_831F26D0` | the only other RB_COLOR_INFO (0x2001) writer - candidate for the engine's own render-target binding (Fable writes some PM4 itself: the `sub_82B9EEE0/F038` ring writers) | `fable2_recomp.154.cpp:34201`, to read |
+
+The "render-target episodes" that ordered the passes (scene pass = the
+episode with most draws) were therefore *occlusion-query boundaries*; they
+still separate the shadow-map pass from the scene pass empirically, and
+stay until the real RT binding is hooked.
+
+Fetch-constant mip fields, verified against xenia's `xenos.h`: dword 4
+bits 2..5 = mip_min_level, bits 6..9 = mip_max_level (the earlier "mips
+3..0" print used the wrong bits); dword 5 bit 11 = packed mips, bits 12..
+= mip address >> 12. The mip-chain layout rules (32-block-aligned power-of-
+two mip pitches, 4 KB level alignment, the packed tail for levels <= 16
+texels) are in xenia `texture_util.cc GetGuestTextureLayout` /
+`GetPackedMipOffset`; mip uploads are still to do.
+
 ## Next
 
 1. **Read watched guest pages without faulting.** ReXGlue's memory has the
