@@ -502,6 +502,35 @@ not watched. The native path must read watched guest memory through the
 runtime's own access route (the memory-watch API, or a copy the plugin
 already holds) instead of raw host loads — the next engineering item.
 
+## Native draws run 12 (17:55) — variants resolve; the mirror is the slow path
+
+- `TriggerPhysicalMemoryCallbacks` on the index range found nothing to
+  resolve (`other 0.1 ms` per frame) and the index cost stayed at ~150 ms.
+  The difference to the vertex copies (0.5 ms per frame for more bytes) is
+  the mapping: the index object's address is in the 0xE0..0xFF virtual
+  mirror, which the runtime serves as an MMIO-style range, while the vertex
+  fetch addresses are plain physical addresses read through the physical
+  arena. Run 13 reads both through the physical arena.
+- **Shader variants work**: with the flush's entry pointer, POSITION0 is
+  found in the variant's microcode — 17 shader/variant classes resolve (was
+  9), the same shader object giving different layouts per variant
+  (`4D0570D0`: stride 20 in stream 0 with one entry, stride 28 in stream 1
+  with another). 47 remain unresolved (the scan needs the block bounds
+  logged, which run 13 adds).
+
+## Shader translation, second pass (17:50) — the translator sees the wrong bytes for many shaders
+
+XenosRecomp with duplicate vertex-input declarations removed (a local
+change in `reference/XenosRecomp`): of 211 vertex + 54 pixel containers,
+216 translate (49 crash the recompiler) and only **15 compile**. The
+compile errors — registers r34..r52, constants c0/c12/c97 undeclared,
+`iBinormal0` undeclared, "not all elements of SV_Position written" (75) —
+are what decoding the wrong bytes produces. That matches the variant
+finding: for most shaders the block at obj+0x20 is not the microcode the
+game runs, so the `.xvu` files must be rebuilt from the variant record
+(physical base [entry+24], code offset/length from entry+[entry+64]+40/44)
+before the translator is judged.
+
 ## M4-b — native draws in the shadow window (built 15:18)
 
 `native_gpu_present.cpp` with `ngpu_native_draws=true`: the DrawIndexedVertices
