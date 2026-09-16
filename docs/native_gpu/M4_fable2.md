@@ -1731,6 +1731,35 @@ vertex shader: order in the frame, target, RB_DEPTHCONTROL / blend / cull,
 the first constants); run 133 skips all three passes with the UP draws on
 and logs the first sky shader's draws, run 134 adds `ngpu_present_post`.
 
+## Runs 131-134 (06:47-06:59) - the full-screen passes ARE the UP draws
+
+Run 133 skipped all three runtime-translated full-screen shaders and the
+night market came back, the best picture yet (`shot133.png`): stone arch,
+timbered houses, the clock tower, market stalls, lit windows. It also
+dropped the UP draw count to zero - so the 9-13 UP draws that succeed each
+frame *are* those passes (4-vertex quads through DrawIndexedVerticesUP),
+and they cover the scene because their depth test passes everywhere.
+
+Two mistakes found while reading the logs:
+
+- Build 128's stride override never existed: the patch script wrote
+  through a relative path from the wrong working directory, failed with
+  `OSError 22`, and the build (and its "commit") carried no change. Every
+  patch script uses absolute paths (build 131 re-applies it).
+- `ngpu_log_vs` logged *after* the skip test, so run 133 printed nothing
+  about the pass it skipped. Reordered.
+
+Build 131 also applies the likely cause of the coverage: **the viewport's
+depth range**. Xenos maps window z = ndc z * PA_CL_VPORT_ZSCALE (0x2113) +
+PA_CL_VPORT_ZOFFSET (0x2114); Fable inverts depth there (the ring trace
+shows the whole viewport block `T0[210F x6]` written per pass), and the
+native path never applied it - every draw used 0..1 while the game's
+depth test expects the inverted range, so a dome at the far plane lands at
+the near value and passes GREATER_EQUAL against everything.
+`ngpu_viewport_depth` (default on) reads both registers from the shadow and
+sets the D3D12 viewport's min / max depth per draw; run 136 has the passes
+enabled with the fix, run 137 turns the fix off for comparison.
+
 ## Next (state at 02:40, 2026-09-16)
 
 **Where it stands.** The native path (fable2recomp `native-gpu`, build 102)
