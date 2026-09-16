@@ -1298,6 +1298,28 @@ i.e. the depth-only pass's state); build 99 snapshots at the trailing
 DRAW header as well, which is this draw's, and the packet parses again
 in the next range (harmless).
 
+## Runs 91-94 (01:55-02:15) - which source is right for what
+
+- Run 90 (snapshot at the trailing DRAW header, render target from the
+  snapshot too): black - the pass-level surface registers are not
+  rewritten per draw, so the snapshot sent the scene into the shadow-map
+  target. Build 100: the render-target key stays with the device shadow.
+- Run 91 (ring states + ring shaders): geometry warped by overdraw, 512
+  draws at zfunc ALWAYS. Build 101 adds `ngpu_ring_states` /
+  `ngpu_ring_shaders`. Bisect: **a** (states from the shadow, shaders from
+  the ring) = the dark night market again; **b** (states from the ring,
+  hooked shaders) = the overbright translucent pillars; **c** (both off) =
+  the arch with the wrong (window) texture. So the device shadow is right
+  for the render states and the ring's shader loads are right for the
+  shaders; the ring's per-draw state snapshot is not (`ngpu_ring_states`
+  now defaults off). The ring remains authoritative for the fetch
+  constants and the shader pairs.
+- Left vs the forced-depth picture of run 87: the floor's light pools.
+  The additive light draws (blend 01010101) carry colour mask 0 in the
+  shadow read at +0x28DC; run 94 draws with the colour mask ignored
+  (`ngpu_state_mask=23`) and logs the words around +0x28DC against the
+  ring's RB_COLOR_MASK to check that offset.
+
 ## Next
 
 1. **Read watched guest pages without faulting.** ReXGlue's memory has the
