@@ -518,6 +518,20 @@ already holds) instead of raw host loads — the next engineering item.
   with another). 47 remain unresolved (the scan needs the block bounds
   logged, which run 13 adds).
 
+## Native draws run 13 (18:15) — the physical arena is just as slow: re-armed watches
+
+`207 draws; index 189 ms, vertices 45.7 ms` (3.9 fps): reading the index
+buffers through the physical arena costs the same ~1 ms per KB as through
+the mirror, and the vertex copies grew expensive too once every draw's
+whole vertex span was copied (the stream size check was dropped). The
+watch trigger reported nothing and cost nothing. Everything points at the
+pages themselves: they are **data-provider watched** (GPU-written memory,
+the plugin's "readback landed quietly" machinery), and such watches re-arm
+after each access, so every 16-byte load takes the fault handler again.
+Run 14 probes it (the trigger's return value, `QueryProtect` on the range
+and the copy time alone, logged as `[ngpu] ib probe`), with a cvar to
+trigger the watch as a write.
+
 ## Shader translation, second pass (17:50) — the translator sees the wrong bytes for many shaders
 
 XenosRecomp with duplicate vertex-input declarations removed (a local
