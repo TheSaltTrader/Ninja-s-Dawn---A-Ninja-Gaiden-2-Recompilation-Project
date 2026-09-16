@@ -1879,7 +1879,64 @@ What is still wrong is narrower than it looked: the banner and awning quads
 draw in flat pastel colours, which is a material problem, not a geometry or
 depth one.
 
-## Next (state at 02:40, 2026-09-16)
+## Where it stands (07:50, 2026-09-16)
+
+**The native renderer draws Bowerstone Market.** Not a recognisable
+approximation: the bridge and its towers, the canal below with its water
+surface, the market on both banks, the stalls, the stone arch, the clock
+tower's faces, the timbered upper storeys, the people, the sky - through
+the game's own vertex and pixel shaders, its own textures, its own render
+states, into native render targets, with the game's resolves feeding the
+light buffer, bloom chain, impostors and shadow maps. Around 1,500 draws
+per frame go through translated shaders, the whole native path costs 5-6 ms
+a frame, and the guest holds its 60 fps cap (mean 53 over a 150-second
+market walk, the dips being region loads). Best pictures: `shot143.png`
+(exposure 1.0, the clearest look at materials) and `shot141.png` (defaults,
+every pass on).
+
+Six things landed tonight that each turned out to be load-bearing:
+
+1. **The viewport depth range.** Fable inverts depth in the viewport
+   (`PA_CL_VPORT_ZSCALE` -1, `ZOFFSET` 1), not in the projection. The
+   native path had always used 0..1, so every draw was tested against a
+   range the game never uses. This was the single biggest correctness fix.
+2. **Computed-index vertex fetches.** XenosRecomp turned every `vfetch`
+   into an input-assembler attribute, so instancing and repeated-mesh
+   shaders - which compute their own row index - got the wrong rows. They
+   now load from the stream as a structured buffer (`ngpu_vload`), and the
+   "range" fallbacks went from 283 a frame to zero.
+3. **DrawIndexedVerticesUP.** The engine calls the XDK's begin step itself
+   and commits the ring write pointer inline, so there is no call whose
+   exit sees the data complete. The draw is deferred: the device object and
+   the begin's returned ring addresses are snapshotted, and the draw runs
+   at the next draw hook against that snapshot. All 117 a frame now render.
+4. **Runtime shader translation.** Fable patches some vertex shaders per
+   run, so no offline cache can hold them; a cache miss now runs
+   XenosRecomp and dxc in a worker thread and the draw picks the result up
+   about 100 ms later. It immediately revealed the water and decal passes,
+   which no offline dump had ever caught.
+5. **Boolean and loop constants** (c34..c43 from the ring registers) and
+   **integer vertex attributes** fed as UNORM and scaled in the shader.
+6. **Two probe-era gates removed for UP draws** (`ngpu_min_indices`,
+   `ngpu_wvp_only`), which had been silently dropping 110 draws a frame.
+
+**What is still wrong.** The banner and awning quads draw in flat pastel -
+a white placeholder texture multiplied by a vertex colour, so their
+textures are not resolving (build 134 logs their fetch constants; run 147
+answers it). The game's own post-process is still not run natively, so the
+window shows a Reinhard approximation of the HDR target rather than the
+game's tonemap. Stencil is not implemented. Two vertex shaders are still
+rejected: one for a 16-bit float attribute declared as a uint4
+(`format 31 BLENDINDICES`), one other.
+
+**Then.** Present the game's post-processed output instead of approximating
+it, implement stencil, remove the Xenos plugin from the loop so the native
+window becomes the window, and only then measure frame rate - on a quiet
+machine, per the note above.
+
+---
+
+## Appendix: the earlier plan (state at 02:40, 2026-09-16)
 
 **Where it stands.** The native path (fable2recomp `native-gpu`, build 102)
 renders the market through the game's own vertex and pixel shaders,
