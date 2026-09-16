@@ -1249,6 +1249,22 @@ registers = ["r3", "r4", "r5", "r6", "r7", "r8", "r9", "r10"]
 thread-local pending slot; `OnDrawIndexedDone` performs `ShadowDrawIndexed`
 with it.
 
+## Runs 84-86 (01:22-01:40) - the night market
+
+With the completion hook (build 93, declared in the hooks TOML) and type-1
+packets parsed (build 94: two register writes per packet, which the parser
+had treated as failures), run 85 renders the **night market as the game
+means it**: dark timber buildings with lit details, the clock tower, the
+moonlit stone building, people by the arch, light streaks on the stone
+floor (tonemapped at exposure 0.15). The parser runs at ~40 k packets and
+~1,300 shader loads per frame with a dozen bad packets and no resyncs
+inside a segment; 348 of 1,228 pixel-shader loads match a translated
+container by microcode hash. What is still wrong: `RB_DEPTHCONTROL` reads
+0 for the scene draws (the depth-only pre-pass draws carry 0x66), so the
+scene overdraws in submission order and some pillars look translucent;
+build 95 logs the packet type behind every write to the depth, blend and
+colour-mask registers to find where the 0 comes from.
+
 ## Next
 
 1. **Read watched guest pages without faulting.** ReXGlue's memory has the
