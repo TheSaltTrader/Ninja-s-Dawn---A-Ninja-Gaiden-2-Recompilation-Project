@@ -2302,3 +2302,33 @@ moment and deserve one more look under the same camera before being dismissed.
 The concrete next step is a per-draw census of (surface, colour base) for the
 frame, so that every pass is accounted for by where it lands rather than by
 what it looks like.
+
+### Runs 249-254: the ground is submitted, lands in the right target, and draws nothing
+
+Two things changed the picture here. First, a capture of the game's own window
+mid-run (run 249) shows what the view actually is: a stone gate arch on a large
+cobbled plaza, not a bridge over a canal. The missing surface is that plaza,
+and the arch's piers are cut off at the height where it should begin.
+
+Second, `ngpu_probe_x` / `ngpu_probe_y` name a point in normalised screen
+coordinates; every draw whose vertices, transformed on the CPU by its own
+c0..c3, produce a screen-space box containing that point is logged once a
+frame, with the target it binds. Probing the plaza at (0.5, 0.85):
+
+- Geometry IS submitted over the blank area. Several draws cover it, and most
+  of them bind the presented scene target (1280x720, surface 14010500, colour
+  00030000).
+- The tightest box over the point belongs to vertex shader E4D8ABB13DE22341
+  (2,358 indices, box x 0.225..0.718 y 0.340..0.921).
+- Isolating that shader alone (run 252, `ngpu_only_vs`) issues 199 draws and
+  produces a completely black frame, in `ngpu_ps_debug=16` where every draw
+  should paint a flat colour.
+
+So the ground is not missing from submission, is not going to the wrong render
+target, is not depth-rejected, is not colour-masked, and is not occluded. It is
+drawn, into the right place, and produces no pixels. The next thing to look at
+is that shader's own output: whether its translated pixel shader discards, and
+whether its 199 draws split between the scene target and the 1040x1040 shadow
+map in a way that leaves the scene ones degenerate. `ngpu_probe_*` plus
+`ngpu_only_vs` is the pair of instruments for it, with the caveat about signed
+shader ids above.
