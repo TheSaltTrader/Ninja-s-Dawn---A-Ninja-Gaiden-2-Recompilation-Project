@@ -1927,6 +1927,41 @@ both are one experiment each: feed the PS constants from the ring packet
 the same way the fetch constants now are, and dump descriptor 2's decoded
 image.
 
+## Runs 165-173 (09:21-10:05) - quad lists, declaration-bound strides, and the resolve address form
+
+Three fixes in a row, each found by following what the draws were actually
+asking for.
+
+1. **QUADLIST draws were rejected outright.** The draw entry only ever
+   accepted triangle lists and strips, and the old draw census shows 704
+   non-indexed draws per two frames, including the interface and
+   post-process passes as primitive 13. They now expand to two triangles
+   per quad through the same upload-heap index path the deferred draws use
+   (`ngpu_draw_quads`): 23-24 a frame, and the post-process chain's small
+   targets appear in the frame's render-target list for the first time.
+2. **A vfetch with no stride was rejected** ("declaration-bound fetch"):
+   the stride lives in the vertex declaration, which the sidecar cannot
+   see. Three shaders carried it and accounted for ~280 fallback draws a
+   frame - the full-screen passes. The stride is now derived from the
+   shader's own elements (the end of its last element on that stream),
+   which took translated draws from 1,378 to 1,703 and fallbacks from 280
+   to 121.
+3. **Resolved surfaces were never found by the shaders that sample them.**
+   A fetch constant names such a surface by its physical address *plus one
+   page*, with the top bits masked off (`1A110000`), while a resolve is
+   stored under the address its destination descriptor gave
+   (`FA10F000`). The two could not compare equal, so every screen-space
+   texture fell through to the white placeholder - including the depth
+   buffer that Fable's soft-particle shaders sample, which is what sent
+   them flat. Resolves are now indexed by the form a fetch asks for:
+   **3,354-3,533 fetches a frame are served from a resolve**, and textures
+   substituted white went from 2 to **0**.
+
+The banner and awning quads are still flat, so their fault is not the depth
+sampler alone; the texture cache now reports 233 unsupported and 21 failed
+textures where it reported 4 and 0, because surfaces that used to be
+replaced by white now reach the decoder. That is the next thing to look at.
+
 ## Where it stands (07:50, 2026-09-16)
 
 **The native renderer draws Bowerstone Market.** Not a recognisable
