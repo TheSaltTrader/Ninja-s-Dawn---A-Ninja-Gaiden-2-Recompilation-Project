@@ -2258,7 +2258,7 @@ out as the street:
 
 | vertex shader | indices / draws | what it draws |
 | --- | --- | --- |
-| BCC6E2DEF4A3E5C2 | 1,212,465 / 801 | not yet isolated |
+| BCC6E2DEF4A3E5C2 | 1,212,465 / 801 | the whole visible world: towers, buildings, roofs, canal banks - and not the street (run 247) |
 | 2A5207A8748C72CB | 457,260 / 399 | props: windows, bunting, signs, a cart |
 | 36F4DD575DB99917 | 304,767 / 73 | skinned, and still flat |
 | 2D96AFB187B6B7F6 | 303,468 / 124 | not isolated (id overflowed int32) |
@@ -2288,3 +2288,17 @@ Two cautions for whoever picks this up:
   comparable with ours: over one run its median is 287 and its maximum 6,490.
   It cannot be used as an independent total, and an early reading of it that
   suggested most draws were missing does not hold.
+
+Run 247 is the one that settles it. The dominant world shader, 820 draws and
+1.2M indices, paints every building, roof and canal bank in the view, and the
+street is black in its capture too. Five of the six busiest shaders in the
+full-size target have now been isolated and the street is in none of them.
+
+So the street's geometry is not among the draws the native path receives, and
+the remaining question is where it goes instead. The frame has a second
+full-size target (1280x720, RB_COLOR_INFO 000C0000, 158 draws) whose contents -
+rooftops, a hillside, a red panel - were captured from a different camera
+moment and deserve one more look under the same camera before being dismissed.
+The concrete next step is a per-draw census of (surface, colour base) for the
+frame, so that every pass is accounted for by where it lands rather than by
+what it looks like.
