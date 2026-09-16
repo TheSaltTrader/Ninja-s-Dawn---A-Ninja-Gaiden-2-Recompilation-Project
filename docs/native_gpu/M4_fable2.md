@@ -2148,3 +2148,72 @@ FABLE2_TUNE=ngpu_trace=true;ngpu_shadow=true;ngpu_native_draws=true;ngpu_shot_ev
 9. Then: remove the Xenos plugin from the loop (the shadow window becomes
    the window), MSAA, the remaining passes (impostor/shadow correctness),
    and the frame-rate work.
+
+## Runs 206-228: the characters, and what the flat patches were
+
+The user reported missing characters and missing ground. Runs 206-228 chased
+both.
+
+**The characters were never collapsing.** What covered the scene with flat
+patches of skin and cloth was Fable's *impostor pass*: the engine renders each
+character a second time, orthographically, to bake the texture of the billboard
+it uses for that character at distance. Those draws have no offscreen target in
+the native path yet, so they landed on the presented image, lying over the
+street. Their transform gives them away - the last row of the world-view-
+projection is exactly (0,0,0,1), where a scene-camera draw has a perspective
+row. `ngpu_skip_impostor` (default on) leaves them out; `ngpu_skin_debug` 6 and
+7 keep one side or the other for a capture, and the frame log counts both
+(run 226: 184 through the scene camera, 166 orthographic). With the pass out,
+a standing, clothed character is visible under the arch again.
+
+Everything the skinning path needs was verified correct along the way, and each
+check is worth keeping:
+
+- `ngpu_skin_dump=<bytes>` dumps the first skinned draw of a frame whose bone
+  palette is at least that big: the stream layout, the range every 16-bit field
+  of the position takes over 256 vertices, the range of each blend-index byte,
+  the first palette rows, and the blend done on the CPU. Run 213 gave a proper
+  standing figure (X -0.355..0.429, Y -0.250..0.259, Z 0.459..2.0) from a
+  64-bone palette with no index past its end.
+- The same dump then reads the bytes *the views point at* - upload heap or
+  vertex cache - and the bytes at the fetch constant's own address. Run 217:
+  identical, stream by stream. Run 218: the index buffer is right too (22,272
+  expanded indices, highest 4,322, for 4,323 vertices).
+
+Two real defects were found and fixed on the way:
+
+- The shared constants block was bound only on the pixel-shader path. It
+  carries the vertex shader's boolean and loop constants *and* the descriptor
+  of every stream a computed fetch indexes, so a skinned draw that fell short
+  of a translated pixel shader read stream slot 0 - another mesh's vertex
+  buffer as its bone palette. It is now resolved once per draw and bound
+  whatever pipeline the draw ends up with.
+- The vertex cache held one copy per fetch offset, so a buffer bound at dozens
+  of offsets filled the 256 MB cache and flushed it every other frame (192
+  flushes in run 205, 0 in run 208). `ngpu_cache_base` caches each buffer once
+  from its own start and moves the vertex buffer view instead.
+
+**Refuted: the 16-bit half order.** The 8-in-32 swap leaves the input assembler
+reading the low half of each dword first, which looks wrong until you notice
+the microcode already carries the compensating swizzle at every use site
+(`iPosition0.yxw`, `ngpu_vload(...).yxwz`). Run 208's palette decodes to a
+clean identity in the existing order once that swizzle is applied. Changing it
+transposes what was already right.
+
+**fix_hlsl.py had not parsed since commit 4f51263** - an editing accident left
+a string literal broken across a newline - so translate_all.sh had been calling
+it and silently getting nothing for every shader. Rewritten whole.
+
+## The ground
+
+Still open, but narrowed. In a flat-colour-per-pixel-shader capture (run 227,
+`ngpu_ps_debug=16`) the street area carries the *same* colour as the clock
+tower, so geometry is drawn there; it is not a hole. In the normal render that
+area comes out the same pale blue-grey as the sky, which is what an untextured
+surface tinted by the atmospheric pass would look like. The next step is to
+check what the street's material samples in slot 13 - `ngpu_ps_debug` 21 shows
+that descriptor index - and whether it is the white placeholder. The frame's
+biggest draws (30,720 indices, vertex shader E4D8ABB13DE22341, pixel shader
+60E8DEF931549772) go to surface 10000410, pitch 1040 = a 1024-wide shadow map
+padded to the EDRAM tile, not to the presented target (14010500, 1280x720,
+1,475 draws).
