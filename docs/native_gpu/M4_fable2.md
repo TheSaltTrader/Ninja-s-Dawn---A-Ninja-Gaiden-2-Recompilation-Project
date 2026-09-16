@@ -1201,6 +1201,28 @@ where they differ.
   pixel shader too; run 78 (`ngpu_dump_at_frame=1`) collects them, the
   translation + pack follow, run 79 draws with them.
 
+## Runs 80-82 (01:00-01:20) - the real material shaders render
+
+- Run 79 (the 143 new containers translated and packed) still paired the
+  draws with the background shader: `DevicePixelShader` preferred the
+  device field (+0x3194, which only `SetPixelShader` writes) over the hook.
+  Build 89 prefers the hooked SetShaders pair, applies REG_RMW packets in
+  the parser; run 80 then rejected most of the real pixel shaders - 24 of
+  them "sample a cube map" (a placeholder rejection). Build 90 adds **cube
+  maps** (six tiled faces, each a level-0 image padded to 4 KB, a
+  Texture2D array of 6 with a TextureCube view in their own 256-entry heap;
+  the cube table at c16..23 of the shared constants).
+- Run 81: **1059 of 1059 draws through the game's own pixel shaders**, 37
+  pixel shaders loaded, 3 rejected (not in the cache). The picture shows
+  the market's materials for the first time (the stone arch, a cart,
+  torch sparks, the floor) but overexposed and with every draw at
+  `RB_DEPTHCONTROL = 0` (no depth test): the parser's register file starts
+  at zero, so the XDK's read-modify-write updates of the depth control
+  produced 0. Build 91 seeds the register file from the device shadow at
+  every resync (registers 0x2000.., 0x2100.., 0x2180.., 0x2200.. and the
+  fetch constants) and the scene blit applies exposure then a Reinhard
+  curve instead of a clamp.
+
 ## Next
 
 1. **Read watched guest pages without faulting.** ReXGlue's memory has the
