@@ -1760,6 +1760,35 @@ the near value and passes GREATER_EQUAL against everything.
 sets the D3D12 viewport's min / max depth per draw; run 136 has the passes
 enabled with the fix, run 137 turns the fix off for comparison.
 
+## Runs 136-137 (07:03-07:08) - the viewport depth range confirmed
+
+    [ngpu] viewport depth: scale -1 offset 1 -> min 1 max 0
+
+Fable inverts depth in the viewport, exactly as suspected. Run 137 (the fix
+off) is the sky covering the whole screen; run 136 (on) renders the market
+with the sky behind it (`shot136.png`, `shot137.png`). That is the single
+biggest correctness fix since the native targets: every draw until now
+tested depth against a range the game never used.
+
+What run 136 still shows wrong: geometry that used to be hidden now draws
+over the market in flat, wrong colours (the stall roofs and awnings), and
+the ground is missing where the sky shows through. The depth *clear* value
+now has to match the inverted range (it follows the frame's zfunc
+histogram, so it should), and the draws that appear are ones whose depth
+previously failed - so the next comparison is the same scene with the three
+full-screen passes skipped (run 139).
+
+The failure histogram also named the UP draws' real blockers, and they are
+both from the probe era, before shaders were translated: `ngpu_min_indices`
+(12) drops a 6-index quad, and `ngpu_wvp_only` drops shaders without a
+world-view-projection constant - 102 and 8 of ~120 UP draws per frame.
+Build 132 lets a deferred UP draw past both.
+
+The per-draw log also corrected a guess: `F693EBF7D3C98B56` is not a sky
+dome - it draws 36 indices (a box) into the small 04020118 target with
+depth writes off, twelve times per frame. It is used by the UP path too,
+which is why skipping it in run 133 also removed UP draws.
+
 ## Next (state at 02:40, 2026-09-16)
 
 **Where it stands.** The native path (fable2recomp `native-gpu`, build 102)
