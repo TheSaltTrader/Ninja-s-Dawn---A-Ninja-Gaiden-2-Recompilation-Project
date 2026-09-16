@@ -561,6 +561,23 @@ the upload heap. Run 16 times those pieces separately — the working
 hypothesis is now the upload heap mapping itself (uncached or
 write-combined writes at word granularity).
 
+## Native draws run 16 (18:38) — found: VirtualQuery on the physical arena
+
+Fine-grained timers: `index 177.5 ms (disable 0.0, copy 0.1, decode 0.2,
+upload memcpy 0.0), vertices 44.4 ms (copy 4.6, convert+store 39.9)`. The
+index bucket's parts add up to 0.4 ms; the ~177 ms was the part of that
+bucket I had not timed — the two `VirtualQuery` page checks on the
+**vertex** range (the bucket boundary sat after them). The runtime's
+per-page protections cut the physical arena's address space into thousands
+of regions, so each query costs ~0.4 ms there, while the same query on the
+index buffer's mirror was cheap (which is why removing those in run 11
+changed nothing). The provider watch, the memory type and the copies were
+all innocent: the "1 ms per KB" was 2 queries per draw. Run 17 remembers
+verified pages in a bitmap (one query per page, ever). The remaining real
+cost is the half-float conversion + upload stores at ~40 ms per frame for
+~400k vertices — to be replaced by uploading the raw 16-bit vertex data and
+declaring R16G16B16A16_FLOAT input (only the byte order needs a pass).
+
 ## Shader translation, second pass (17:50) — the translator sees the wrong bytes for many shaders
 
 XenosRecomp with duplicate vertex-input declarations removed (a local
