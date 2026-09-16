@@ -94,7 +94,25 @@ def main():
         if not m:
             continue
         base, w, h, fmt, endian, tiling, pitch = m.group(1), int(m.group(2)), int(m.group(3)), int(m.group(4)), int(m.group(5)), m.group(6), int(m.group(7))
-        if fmt not in (18, 20):
+        if fmt not in (6, 18, 20):
+            continue
+        if fmt == 6:
+            # 8_8_8_8: 1x1 blocks of 4 bytes; four byte-order guesses of the untiled data
+            raw = open(os.path.join(src_dir, f), "rb").read()
+            pitch_px = max(pitch, w)
+            if tiling == "tiled":
+                pitch_px = (pitch_px + 31) & ~31
+            til = untile(raw, w, h, pitch_px, 4, 2) if tiling == "tiled" else b"".join(raw[y * pitch_px * 4:(y * pitch_px + w) * 4] for y in range(h))
+            stem = os.path.join(out_dir, f"{base}_{w}x{h}_f6")
+            for tag, order in (("rgba", (0, 1, 2, 3)), ("bgra", (2, 1, 0, 3)), ("argb", (1, 2, 3, 0)), ("abgr", (3, 2, 1, 0))):
+                img = Image.new("RGB", (w, h))
+                px = img.load()
+                for y in range(h):
+                    for x in range(w):
+                        o = (y * w + x) * 4
+                        px[x, y] = (til[o + order[0]], til[o + order[1]], til[o + order[2]])
+                img.save(stem + f"_{tiling}_{tag}.png")
+            print("decoded", f, "(8888)")
             continue
         bpb = 8 if fmt == 18 else 16
         log2 = 3 if fmt == 18 else 4
