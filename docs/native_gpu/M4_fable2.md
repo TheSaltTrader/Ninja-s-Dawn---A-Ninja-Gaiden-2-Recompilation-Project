@@ -956,6 +956,32 @@ two mip pitches, 4 KB level alignment, the packed tail for levels <= 16
 texels) are in xenia `texture_util.cc GetGuestTextureLayout` /
 `GetPackedMipOffset`; mip uploads are still to do.
 
+## Runs 51-52 (22:22-22:33) - the noise was the upload heap, not the textures
+
+Run 51 dumped every large texture at first upload: the 1024x1024 DXT1 at
+172B0000 decodes offline into a perfect market atlas (banners, wood,
+awnings) from the very bytes the runtime staged, and the forced refresh
+(`ngpu_tex_refresh=120`, 4,880 re-uploads) changed the noise pattern every
+time without ever producing a texture. So the guest memory was right and
+the GPU got something else. Cause: `SharedConstantsFor` took its 768-byte
+block from the upload heap *before* resolving the draw's textures, and the
+texture uploads it triggered staged their rows further up the heap - then
+the function set `upload_used = block + 768`, rewinding the cursor below
+the fresh rows; the next allocations (pixel constants, per-draw vertex
+copies) overwrote them before the GPU executed the copy. Zero constants =
+black rows, vertex data = coloured rows: the "black with noise rows" of
+mode 11, and different garbage per refresh. Textures that happened to be
+created early enough survived (the small character textures, the lightmap
+atlases). Fix in build 67: gather the indices first, allocate the block
+last. The write-watch re-upload (build 65) stays - it is the right thing
+for streamed and dynamic textures - and the "streamed after first sight"
+story of the previous section was wrong.
+
+Run 52 (build 67, also the first with whole mip chains): no noise
+anywhere. The scene is dark with blotchy blue/white patches on walls and
+floor, which looks like the mip levels (level 0 near the hero is crisp,
+distant surfaces black) - run 53 isolates it with `ngpu_tex_mips=false`.
+
 ## Next
 
 1. **Read watched guest pages without faulting.** ReXGlue's memory has the
