@@ -1643,6 +1643,24 @@ wrapper hook (moved to the begin hook). The chain after build 123: run 122
 dumps them, they are translated and packed, runs 123 / 124 draw them
 (124 presents the last 8888 target).
 
+## Runs 122-124 (04:49-04:57) - the UI shaders' containers change every run
+
+Build 123 (data through `Host()`, dump at the begin hook): every UP call
+still fails, now with indices like 49024 (0xBF80 = the top of -1.0f): the
+two out pointers were swapped - r10 receives the *index* area and the
+stack one the *vertex* area, which comes first in the ring (4 x 20 bytes,
+then the 12 index bytes). Swapped in build 124.
+
+The UI vertex shader stays "not in ngpu_cache" although run 122 dumped it
+(187 containers, 186 compile, packed): its object is a new one each run
+(`4C276D80`, `4C276EF0`, `4C277530`, `4C276FB0`, `4C2799F0`) and its
+*container* hash changes with it - the engine writes into the container -
+while the code hash (`XXH3` of the microcode block, the key the ring
+matching uses) does not. `pack_cache.py` now writes
+`<codehash>_v.code` -> container hash aliases and the runtime falls back
+to them when the container hash misses (build 124, the cache repacked from
+run117 + run120 + run123). Runs 125 / 126 test it.
+
 ## Next (state at 02:40, 2026-09-16)
 
 **Where it stands.** The native path (fable2recomp `native-gpu`, build 102)
