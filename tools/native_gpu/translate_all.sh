@@ -6,7 +6,7 @@
 #   translate_all.sh <ngpu_shaders dir> <out dir> [glob]   (glob default: *.xvu)
 IN="$1"; OUT="$2"; GLOB="${3:-*.xvu}"
 X=/c/Users/renoi/ClaudeCode/NativeGPU/build/xenosrecomp/XenosRecomp/XenosRecomp.exe
-H=/c/Users/renoi/ClaudeCode/NativeGPU/reference/XenosRecomp/XenosRecomp/shader_common.h
+H="${XENOS_COMMON:-/c/Users/renoi/ClaudeCode/NativeGPU/reference/XenosRecomp/XenosRecomp/shader_common.h}"
 D=/c/Users/renoi/ClaudeCode/NativeGPU/reference/XenosRecomp/thirdparty/dxc-bin/bin/x64/dxc.exe
 mkdir -p "$OUT/hlsl" "$OUT/dxil"
 : > "$OUT/errors.txt"; : > "$OUT/failed.txt"
