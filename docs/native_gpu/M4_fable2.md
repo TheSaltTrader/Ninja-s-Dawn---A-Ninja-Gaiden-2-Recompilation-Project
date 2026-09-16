@@ -686,6 +686,35 @@ post-process and UI passes' full-screen quads cover the scene (depth
 LESS_EQUAL, no render-target separation). Run 23 skips draws under 12
 indices (`ngpu_min_indices`) to look at the world.
 
+## Shader translation, third pass (19:40) - 126 of 132 compile
+
+The containers dumped by run 22 (read through the host page offset: 72
+vertex, 60 pixel) translate 132/132 with no recompiler crash and compile
+**126/132** with dxc (69/72 vertex, 57/60 pixel), from 15 this afternoon:
+
+| fix | where | effect |
+| --- | --- | --- |
+| correct container bytes | `native_gpu_dump.cpp` (Host offset) | no crashes; 40 compile |
+| `g_SpecConstants()` returns 0 (no permutations) | `NativeGPU/fable2_shader_common.h` | +68 (spec-constant externs need the lib profile) |
+| 32 sampler slots per dimension + fallback `s<slot>` declarations; 1D fetches through the 2D heap at (x, 0.5) | XenosRecomp local branch `fable2` (0721ff9) | +8 |
+| vertex stage samples level 0 (`XSAMPLE` macro: `SampleLevel` in vs, `Sample` in ps) | `fable2_shader_common.h` | +10 (vertex texture fetches: displacement, instancing) |
+
+Left: integer / boolean constants the code uses without a definition
+(`i0`, `i16`, `b129`, `b136` - loop counts and flow-control booleans the
+game sets through SetVertexShaderConstantI/B; 4 shaders) and two shaders
+using temporaries past the header's register count (`r32`, `r33`).
+`translate_all.sh` takes the header from `XENOS_COMMON`; outputs in
+`NativeGPU/build/fable2_run22d`.
+
+The vertex shaders' constant tables (census of the 72): 57 have
+`g_WorldViewProjection` at c0..c3, then `g_WorldTransform` c4..c6,
+`g_WorldPositionAndReciprocalScale` c7, `g_EyePosition` c9,
+`g_InstanceOffsetSize` c12, `g_RepeatedMeshConstants` c13, `g_TreeConstants`
+c15..c17, `g_PRTConstants` c28..c39, `g_VertexAtmosphericParameters`
+c108..c111, `g_KeyFrame*` c116..c175 (particles); the 15 without a c0 matrix
+are the screen-space / sky / post shaders (`g_ScreenToViewportTransform`,
+`g_ProjectToTexture`). Build 36's `ngpu_wvp_only` draws only through the 57.
+
 ## Shader translation, second pass (17:50) — the translator sees the wrong bytes for many shaders
 
 XenosRecomp with duplicate vertex-input declarations removed (a local
