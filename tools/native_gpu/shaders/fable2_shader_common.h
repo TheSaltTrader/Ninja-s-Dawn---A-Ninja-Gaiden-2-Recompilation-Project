@@ -263,8 +263,8 @@ float4 ngpu_vload(StructuredBuffer<uint> b, uint a, uint fmt, uint sgn, uint int
     case 38: return float4(asfloat(w0), asfloat(w1), asfloat(w2), asfloat(w3));
     case 37: return float4(asfloat(w0), asfloat(w1), 0.0, 1.0);
     case 36: return float4(asfloat(w0), 0.0, 0.0, 1.0);
-    case 32: return float4(f16tof32(w0 >> 16), f16tof32(w0), f16tof32(w1 >> 16), f16tof32(w1));
-    case 31: return float4(f16tof32(w0 >> 16), f16tof32(w0), 0.0, 1.0);
+    case 32: return float4(f16tof32(w0), f16tof32(w0 >> 16), f16tof32(w1), f16tof32(w1 >> 16));
+    case 31: return float4(f16tof32(w0), f16tof32(w0 >> 16), 0.0, 1.0);
     case 6:
     {
         uint4 u = uint4(w0 & 0xFF, (w0 >> 8) & 0xFF, (w0 >> 16) & 0xFF, w0 >> 24);
@@ -274,14 +274,14 @@ float4 ngpu_vload(StructuredBuffer<uint> b, uint a, uint fmt, uint sgn, uint int
     }
     case 26:
     {
-        uint4 u = uint4(w0 >> 16, w0 & 0xFFFF, w1 >> 16, w1 & 0xFFFF);
+        uint4 u = uint4(w0 & 0xFFFF, w0 >> 16, w1 & 0xFFFF, w1 >> 16);
         int4 i = (int4(u << 16)) >> 16;
         if (integer) return sgn ? float4(i) : float4(u);
         return sgn ? max(float4(i) / 32767.0, -1.0) : float4(u) / 65535.0;
     }
     case 25:
     {
-        uint2 u = uint2(w0 >> 16, w0 & 0xFFFF);
+        uint2 u = uint2(w0 & 0xFFFF, w0 >> 16);
         int2 i = (int2(u << 16)) >> 16;
         float2 v = integer ? (sgn ? float2(i) : float2(u)) : (sgn ? max(float2(i) / 32767.0, -1.0) : float2(u) / 65535.0);
         return float4(v, 0.0, 1.0);

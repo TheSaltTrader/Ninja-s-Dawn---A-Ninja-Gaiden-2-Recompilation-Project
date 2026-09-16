@@ -10,11 +10,7 @@
 2. An attribute fetched in a float format but declared by its usage name as
    uint4 (blend indices) is redeclared float4, in the HLSL and in the
    sidecar, so the runtime's input layout agrees with the shader.
-3. 16-bit attributes: the runtime byte-swaps a whole stream 8-in-32, which
-   leaves the input assembler reading each pair of halves backwards - it
-   takes the low half as component 0 while the Xenos takes the guest's
-   first, now high, half. A swizzle at the top of main puts them back.
-4. Integer-valued 8/16-bit inputs (fetch formats 6, 25, 26 with the integer
+3. Integer-valued 8/16-bit inputs (fetch formats 6, 25, 26 with the integer
    number format) that the recompiler declares as float4 are fed by the
    runtime as UNORM (D3D12 has no integer-to-float input conversion); the
    scale back to the integer values is inserted at the top of main().
@@ -26,7 +22,6 @@ import sys
 # recompiler usage name -> input variable name
 USAGE_VAR = {"BLENDINDICES": "BlendIndices", "BLENDWEIGHT": "BlendWeight", "POSITION": "Position", "NORMAL": "Normal", "TEXCOORD": "TexCoord", "COLOR": "Color", "TANGENT": "Tangent", "BINORMAL": "Binormal"}
 FLOAT_FORMATS = (31, 32, 36, 37, 38, 57)
-HALF_FORMATS = (25, 26, 31, 32)
 
 
 def read_layout(path):
@@ -66,24 +61,7 @@ def main():
 
     inserts = []
 
-    # 3. 16-bit attributes, halves back in the Xenos order. A computed fetch
-    #    is decoded by ngpu_vload instead, so it is left alone.
-    seen = set()
-    for line in layout:
-        f = line.split()
-        if len(f) < 13 or f[0] != "vfetch" or f[12] == "1":
-            continue
-        sem, idx, fmt, computed = f[1], f[2], int(f[6]), f[-1]
-        if computed == "1" or fmt not in HALF_FORMATS or (sem, idx) in seen:
-            continue
-        m = re.search(r"in (?:float4|uint4) (\w+) : " + re.escape(sem + idx) + r"\b", text)
-        if not m:
-            continue
-        seen.add((sem, idx))
-        swizzle = ".yxwz" if fmt in (26, 32) else ".yxzw"
-        inserts.append("\t%s = %s%s;\n" % (m.group(1), m.group(1), swizzle))
-
-    # 4. integer values fed as UNORM, scaled back
+    # 3. integer values fed as UNORM, scaled back
     for line in layout:
         f = line.split()
         # vfetch SEM idx stream off stride fmt num comp sgn swz mini type computed
