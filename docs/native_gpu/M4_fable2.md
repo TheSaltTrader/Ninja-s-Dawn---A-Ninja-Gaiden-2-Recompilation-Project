@@ -1837,6 +1837,27 @@ either the ground is never drawn natively or it draws black. Run 142 paints
 TEXCOORD0 as colour to say which; run 143 raises the exposure to see
 whether the ground is there but dark.
 
+## Runs 142-143 (07:33-07:40) - what is left in the picture
+
+Run 143 (exposure 1.0, the three full-screen passes skipped) is the
+clearest look at the native renderer so far (`shot143.png`): the stone
+arch, the clock tower's faces, the timbered upper storeys and the market
+stalls all carry their real textures. Two faults stand out.
+
+- **The ground is black.** Run 142 paints TEXCOORD0 as colour and the
+  ground is black there too, which is consistent both with "no draw covers
+  it" and with "a draw covers it whose tc0 is zero" (a terrain shader
+  using tc1/tc2 for its lightmap). The per-frame skip counters rule out the
+  entry gates: 2,011 native draws, 39 skipped, none for stride, stream,
+  declaration or the world-view-projection filter. Pixel-shader debug mode
+  25 (build 134) paints a screen-space grid over every translated draw, so
+  it answers coverage independently of any shader input.
+- **The UP quads carry pastel flat colours** - the banners, awnings and
+  signs. Pastel is what a white placeholder texture multiplied by a vertex
+  colour looks like, so their textures are probably not resolving. Build
+  134 logs the first UP draws' fetch constants and the descriptor each one
+  resolved to.
+
 ## Next (state at 02:40, 2026-09-16)
 
 **Where it stands.** The native path (fable2recomp `native-gpu`, build 102)
