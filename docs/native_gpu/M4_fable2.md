@@ -1879,6 +1879,24 @@ What is still wrong is narrower than it looked: the banner and awning quads
 draw in flat pastel colours, which is a material problem, not a geometry or
 depth one.
 
+## Runs 145-147 (07:45-07:51) - coverage, and what the UP quads sample
+
+Run 146 (pixel-shader debug mode 25, a screen-space grid over every
+translated draw) covers essentially the whole frame, so the dark regions of
+the normal renders are dark *materials* at night, not missing geometry.
+
+The third runtime-translated pass, `1D7465E63ADDFF64`, is 768 indices with a
+modulate blend (source DEST_COLOR, destination ZERO) and depth writes off,
+drawn into the second scene target: a decal or darkening pass, not a
+full-screen cover either.
+
+The UP texture log says every deferred UP draw sees the same four fetch
+constants - slots 0 to 3 all `80400002 1FC40086`, all resolving to
+descriptor 2 - in every draw of every frame. Either these quads genuinely
+share one atlas, or the snapshot is carrying one texture state for all 117
+of them. Runs 148 and 149 sample that texture directly (debug mode 3) and
+show the texcoords (mode 2) to tell those apart.
+
 ## Where it stands (07:50, 2026-09-16)
 
 **The native renderer draws Bowerstone Market.** Not a recognisable
