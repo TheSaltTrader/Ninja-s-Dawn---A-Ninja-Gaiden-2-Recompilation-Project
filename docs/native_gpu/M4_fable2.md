@@ -1789,6 +1789,25 @@ dome - it draws 36 indices (a box) into the small 04020118 target with
 depth writes off, twelve times per frame. It is used by the UP path too,
 which is why skipping it in run 133 also removed UP draws.
 
+## Runs 138-139 (07:15-07:21) - every UP draw renders
+
+Build 132: **117 of 117 UP draws per frame, none failing** - the whole
+DrawIndexedVerticesUP path (the market's banners, signs, awnings, the
+sky and water passes) reaches the GPU. Run 139 (the three full-screen
+passes skipped, so only the geometry UP draws remain) shows the market
+with its ground, the stone arch and the stalls, and the new quads on top
+of them in flat pastel colours (`shot139.png`): they are positioned
+correctly, so the ring copy's vertices are right, but their material is
+not - white placeholder textures and/or the wrong constants.
+
+The likeliest cause is timing: the device snapshot is taken at the XDK
+begin's exit, and the XDK may flush the texture fetch constants after it,
+in which case each quad samples its predecessor's texture.
+`ngpu_up_live_tex` (build 133) reads device+0x480.. live at flush time
+instead, to tell the two apart (run 140). Run 141 re-tests
+`ngpu_vs_textures`, which was turned off in run 118 for a "flat plane"
+that was almost certainly the sky pass under the old depth range.
+
 ## Next (state at 02:40, 2026-09-16)
 
 **Where it stands.** The native path (fable2recomp `native-gpu`, build 102)
