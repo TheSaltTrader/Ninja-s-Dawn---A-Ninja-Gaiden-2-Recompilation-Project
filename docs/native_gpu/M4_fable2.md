@@ -578,6 +578,17 @@ cost is the half-float conversion + upload stores at ~40 ms per frame for
 ~400k vertices — to be replaced by uploading the raw 16-bit vertex data and
 declaring R16G16B16A16_FLOAT input (only the byte order needs a pass).
 
+## Native draws run 17 (18:42) — 38 fps with ~300 native draws per frame
+
+With the page checks cached: `294 draws; index 6.9 ms (decode 0.4), vertices
+9.0 ms (copy 6.3, convert+store 2.7), plume calls 0.1 ms, execute+present
+wait 0.9 ms` and the game at **38.6 fps** (from 4.4) while the emulated path
+still renders the real frame. ~300 draws per frame now render natively
+(the variant resolution keeps adding shader classes). The native path costs
+~17 ms per frame here, almost all of it copying whole vertex spans out of
+guest memory and the residual page checks; run 18 uploads half-float
+positions as 16-bit data (R16G16B16A16_FLOAT input, byte swap only).
+
 ## Shader translation, second pass (17:50) — the translator sees the wrong bytes for many shaders
 
 XenosRecomp with duplicate vertex-input declarations removed (a local
