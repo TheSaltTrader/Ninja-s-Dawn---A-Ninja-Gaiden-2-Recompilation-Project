@@ -207,6 +207,7 @@ DUMP = {
     0x82221B90: "ngpu::OnLoadConstants(r3.u32, r4.u32, r5.u32, r6.u32, r7.u32)",
     0x822192E8: "ngpu::OnSetRenderTarget(r3.u32, r4.u32, r5.u32)",
     0x82BA34D8: "ngpu::OnPresent(r3.u32)",
+    0x82196750: "ngpu::OnResolve(r3.u32, r4.u32, r5.u32, r6.u32, r7.u32, r8.u32, r9.u32, r10.u32)",
 }
 if "--dump-map" in sys.argv:
     DUMP = {int(k, 16): v for k, v in json.load(open(sys.argv[sys.argv.index("--dump-map") + 1])).items()}
