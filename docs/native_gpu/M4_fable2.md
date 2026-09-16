@@ -1265,6 +1265,24 @@ scene overdraws in submission order and some pillars look translucent;
 build 95 logs the packet type behind every write to the depth, blend and
 colour-mask registers to find where the 0 comes from.
 
+## Runs 87-88 (01:35-01:45) - the market with occlusion; the state at the DRAW packet
+
+Build 95's register-source log showed the zeros are genuine type-0 writes:
+the game writes `RB_DEPTHCONTROL` 0x00708766 / 0x00008777 / 0 in pairs,
+and the per-shader histogram (build 96) has one shader drawing under
+eight different depth controls - i.e. the XDK writes more state *after*
+the DRAW packet inside `DrawIndexedVertices` (a post-draw reset), which
+the exit hook then reads as the draw's state. Run 87 with
+`ngpu_force_depth=1` (every draw tests and writes GREATER_EQUAL) renders
+the **market with correct occlusion**: the cobbled floor with light
+pools and the compass rose, the hero at the centre, the buildings and
+clock tower behind, the moonlit stone facade (`shot87.png`). Build 97
+makes that the default the proper way: the parser snapshots the state
+registers (0x2000.., 0x2100.., 0x2200.., the 32 fetch constants) and the
+last-loaded shaders **at every DRAW packet** (opcodes 0x22/0x34/0x35/0x36),
+and the draw uses that snapshot rather than the register file's final
+state.
+
 ## Next
 
 1. **Read watched guest pages without faulting.** ReXGlue's memory has the
