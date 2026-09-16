@@ -1962,6 +1962,44 @@ sampler alone; the texture cache now reports 233 unsupported and 21 failed
 textures where it reported 4 and 0, because surfaces that used to be
 replaced by white now reach the decoder. That is the next thing to look at.
 
+## Runs 174-192 (10:19-11:30) - coverage, and the pastel explained
+
+Instrumenting what the game issues against what the native path draws turned
+the remaining work into a measurable list. The game issues about 2,400 draws
+a frame (1,900 indexed, 340 non-indexed, 120 user-pointer).
+
+**The flat pastel surfaces were never a shader fault.** They are the *probe
+renderer* - the path from before the game's own shaders were translated,
+which paints each draw a pseudo-random pastel colour. Every draw the
+translated path could not serve fell through to it, so the failures were
+being painted over the scene rather than reported. With the fallback off
+(`ngpu_probe_fallback`), the picture is clean and honest: what cannot be
+drawn properly is left undrawn and counted. `shot186.png` is the first shot
+with no pastel in it at all - the bridge arch's masonry, the clock tower's
+roundels, the timbered banks, the canal.
+
+That honesty immediately exposed the real gaps, and each was a one-line
+cause once named:
+
+| what | draws a frame |
+| --- | --- |
+| the world-view-projection filter (probe era) | 160 |
+| a minimum index count of 12 (probe era) | 38 |
+| index buffers the runtime could not translate | 274 |
+| index buffers the cache bypasses (pages rewritten every frame) | 262 |
+
+The last two are the same lesson as the resolved surfaces: an address the
+runtime cannot translate still works through the game's own conversion, and
+a buffer the cache refuses can be copied per draw into the upload heap the
+way the vertex streams already are. Coverage went 78% -> 86% -> 93% while
+the frame held its rate.
+
+Also in this stretch: the main menu renders natively with correct layout and
+readable text (`shot176.png`), and a per-attribute vertex byte swap was
+tried and reverted - it is correct in principle for vertices that mix 32-bit
+and 16-bit fields, but it walks every vertex once per attribute and cost the
+guest all but two frames a second (`ngpu_elem_swap`, off).
+
 ## Where it stands (07:50, 2026-09-16)
 
 **The native renderer draws Bowerstone Market.** Not a recognisable
