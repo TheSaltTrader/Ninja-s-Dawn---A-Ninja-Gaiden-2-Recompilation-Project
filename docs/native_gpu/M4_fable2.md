@@ -1897,6 +1897,36 @@ share one atlas, or the snapshot is carrying one texture state for all 117
 of them. Runs 148 and 149 sample that texture directly (debug mode 3) and
 show the texcoords (mode 2) to tell those apart.
 
+## Runs 148-154 (07:52-08:22) - the UP quads' material is not a binding problem
+
+Four hypotheses tested and three killed.
+
+- **Stale textures?** No. `ngpu_up_live_tex` (read the fetch constants live
+  at flush time instead of from the snapshot) changed nothing.
+- **Texture bindings missing from the shadow?** No. The ring does carry
+  texture fetch-constant writes (`T0[4800 x6]`, `T0[4800 x18]`), so build
+  135 gave each deferred UP draw the fetch constants of the ring packet
+  that issued it. Two attempts were needed: the first searched packets
+  parsed *during* the flush and found none, because the regular draw that
+  triggers the flush has already consumed them (run 153: zero parsed in the
+  flush window, 2,779 parsed overall). Searching backward through a
+  256-packet history matches 33 of 34 and 29 of 30 draws (run 154) - and
+  the ring's constants agree with the shadow's on slots 0 to 2. The binding
+  was never wrong.
+- **Missing geometry?** No. Debug mode 25 (a screen-space grid over every
+  translated draw) covers the frame; the dark areas are dark night
+  materials.
+
+What is left, and it is now precise: these quads are drawn with the game's
+own pixel shader, correct positions, and the textures the game bound, yet
+they come out flat pastel - so the fault is in what the *material* reads:
+the pixel-shader constants for these draws (which still come from the
+device snapshot), or a texture that is bound correctly but decoded into a
+flat pale image by the texture cache. That is the next thing to test, and
+both are one experiment each: feed the PS constants from the ring packet
+the same way the fetch constants now are, and dump descriptor 2's decoded
+image.
+
 ## Where it stands (07:50, 2026-09-16)
 
 **The native renderer draws Bowerstone Market.** Not a recognisable
