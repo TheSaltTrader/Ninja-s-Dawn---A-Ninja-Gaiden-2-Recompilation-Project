@@ -1616,6 +1616,21 @@ indices read from the ring copy (16-bit big-endian minus minIndex), the
 vertices through the stream-0 override with 8-in-32. `ngpu_draw_up` runs
 120 and 121 (`ngpu_present_post`).
 
+## Runs 118-119 (04:35-04:40) - the texture-sampling vertex shaders, and a log that rotates
+
+Run 118 (`ngpu_vs_textures`): the four vertex shaders that sample textures
+load (33 loaded, 2 rejected) and draw the same flat pale plane across the
+market that DrawVertices drew in run 107 - a vertex-stage sample gone
+wrong (level 0 through the 2D heap; the displacement / row-texture reads
+collapse the geometry). Off until that fetch is understood.
+
+Run 119 (`ngpu_present_post`, no UP draws yet): inconclusive - the log had
+rotated. `[ngpu] ring pointers at draw` was gated on a counter that only
+moves with `ngpu_ring_fetch`, so on every 300th frame it printed once per
+draw (1,241 lines): the runtime rotates `fable2.log` at 5 MB and the early
+lines (`blit:`, `not used:`, the first UP diagnostics) were lost. Gated on
+the frame's draw count now (build 123).
+
 ## Next (state at 02:40, 2026-09-16)
 
 **Where it stands.** The native path (fable2recomp `native-gpu`, build 102)
