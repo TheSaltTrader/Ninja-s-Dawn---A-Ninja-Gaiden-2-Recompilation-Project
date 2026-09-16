@@ -686,6 +686,32 @@ post-process and UI passes' full-screen quads cover the scene (depth
 LESS_EQUAL, no render-target separation). Run 23 skips draws under 12
 indices (`ngpu_min_indices`) to look at the world.
 
+## Runs 28-30 (19:55-20:02) - M5-a: the game's own vertex shaders drive the native draws
+
+Build 40-42 (`ngpu_xs`): XenosRecomp's translations are packed by container
+hash (`tools/native_gpu/pack_cache.py` -> `ngpu_cache/<XXH3>_v.dxil` +
+`.layout`), the runtime hashes each vertex shader's live container the same
+way (virtual part + physical block through the host page offset), builds a
+pipeline from the sidecar's fetch list (semantic, stream, offset, format ->
+input elements; the recompiler now types normals by fetch format and
+writes the declared input type per fetch, which the runtime checks against
+the element format - run 29 crashed on a mismatch because Plume does not
+check `CreateGraphicsPipelineState`), mirrors the whole vertex streams
+into the persistent cache with the fetch constant's endian swap (8in32),
+uploads the 256 vertex float constants per draw through a space-4 root
+descriptor, and pairs the translated vertex shader with a flat
+push-colour pixel shader (`ngpu_ps_xs.hlsl`).
+
+Run 30: **788 of ~1,490 scene draws per frame go through the game's own
+vertex shaders** (24 shaders loaded, 9 rejected: 4 sample textures in the
+vertex stage, 4 fetch 8_8_8_8 integer texcoords into float inputs, 1 not
+in the cache), 0.7 ms per frame, the game at 59-60 fps, and the window
+shows the market drawn by the real shaders (arch, hero, houses, stalls,
+cart). Fallbacks to the probe path: 362 draws whose streams have no
+vertex buffer object (the per-frame ring streams: instance rows), 170 not
+cached, 22 out of range. Plume gained `R10G10B10A2_UNORM` for the Xenos
+2_10_10_10 attributes (`reference/plume`, rebuilt).
+
 ## Runs 23-26 (19:32-19:45) - M4-d: the market is recognisable in the shadow window
 
 The flat colour of runs 22-23 was not a full-screen quad (`ngpu_min_indices`
