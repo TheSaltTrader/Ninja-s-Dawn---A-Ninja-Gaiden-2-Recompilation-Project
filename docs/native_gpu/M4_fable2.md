@@ -740,6 +740,19 @@ wrap/clamp sampler index. Findings, in order:
   (70 of 224 non-zero). With `ngpu_tex_slots=3` (slots 0-1 only) the noise
   is gone, so it comes from slot 3 or 13 (runs with masks 8192 and 8 split
   them).
+- **Resolved (21:45):** the noise is fetch slot 13 (`g_BackgroundDiffuseTexture`,
+  register 13 = Fable's main-texture register in most pixel shaders) whose
+  texture for the walls is a **640x360 8_8_8_8 GPU-written texture** - the
+  shared plugin's own diag calls it `640x360 fmt 6 GPU-written
+  READBACK-PENDING`. Fable bakes material textures / its light buffer on
+  the GPU at load and reads them back; guest memory holds the emulated
+  GPU's readback, not a tiled texture, so my untiler makes bands of it and
+  the walls sample noise. The DXT atlases the engine binds at slot 0 are
+  not what the material shader samples. Confirmed by `ngpu_ps_debug=9`
+  (slot 13 through my own pixel shader: same noise) and `ngpu_tex_slots`
+  (slot 13 alone: noise; slots 0/1/3 alone: clean). Build 59 leaves
+  screen-derived sizes (1280x720, 640x360, 320x180, 160x90) white; the real
+  fix is M6: the native path owning the game's render targets and resolves.
 - Interpolator packing: the vertex shader exports the lightmap coordinate
   as `oTexCoord5.xy` while the pixel shader reads `iTexCoord0.zw`; the
   interpolator tables carry a component mask per entry (bits 12-15 of the
