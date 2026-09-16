@@ -714,6 +714,24 @@ gpu_shaders.cmd` (absolute path) -> ngpu_vs/ngpu_ps/ngpu_ps_xs.dxil
   render targets / resolve, blend + depth states from the D3DRS shadow, and the DrawVertices /
   DrawVerticesUP paths.
 
+## Run 33 (20:18) - M5-b (placeholders): the game's own pixel shaders run too
+
+Build 45 (`ngpu_xs`): translated pixel shaders (container at object +0x28,
+block at +0x18, hashed like the vertex ones -> `ngpu_cache/<hash>_p.dxil`)
+pair with the translated vertex shaders in per-pair pipelines; four
+descriptor sets stand in for the shaders' register spaces 0..3 (Texture2D /
+Texture3D / TextureCube / Sampler heaps) with a 1x1 white texture and a
+default sampler at index 0 - the index every zeroed shared constant
+selects - and the 224 pixel float constants come from device+0x1780 per
+draw. Run 33: **944 of 945 translated draws use the game's pixel shader**
+(7 pixel shaders loaded, 1 not cached, 43 vertex+pixel pipelines), 1.7 ms
+per frame, 59 fps, no crash; with white textures the lit surfaces come out
+white and the rest keeps the probe path's flat colours. Plume's
+`createGraphicsPipeline` leaves `D3D12GraphicsPipeline::d3d` null when
+D3D12 refuses a state object, so the runtime checks that member (via
+`plume_d3d12.h`, which needs the D3D12MemAlloc include path) and falls
+back to the flat pipeline. Next: real textures from the 32 fetch constants.
+
 ## Runs 28-30 (19:55-20:02) - M5-a: the game's own vertex shaders drive the native draws
 
 Build 40-42 (`ngpu_xs`): XenosRecomp's translations are packed by container
