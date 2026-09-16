@@ -1430,6 +1430,32 @@ containers through the new header) address the first two and the third:
 - `ngpu_range_clamp`: the copy takes the fetch constant's whole size when
   the draw's range overstates it (the shader indexes the rows).
 
+## Build 114 (03:25) - DrawIndexedVerticesUP, and where the non-indexed draws really went
+
+`sub_82217DB8` is DrawIndexedVerticesUP (dev, prim, minIndex, numVertices,
+indexCount, ?, stride, vertexData, [indexData on the stack]) - the UI and
+the post-process quads (prim 4, 4 vertices, 6 indices, stride 20 / 12). The
+XDK copies the vertices and the indices into the ring and emits
+SET_CONSTANT (stream 0) + DRAW_INDX, so the native draw runs at the
+function's exit (`addi r1,r1,224` at **0x822182CC**, r3 = HRESULT; a
+hand-declared hook like the two draw exits) from the ring parser's last
+DRAW packet: the initiator (prim type bits 0..5, index source 6..7, 32-bit
+bit 11, count 16..31), the DMA index base + size word (endianness in bits
+30..31) or DRAW_INDX_2's inline indices. `ShadowDrawUP` rebuilds the index
+list in the upload heap (strips expanded) and drives the translated draw
+with it through a thread-local index override; the vertices come from the
+shadow's stream-0 fetch pair as for any other draw. `ngpu_draw_up` (off by
+default until run 106 shows the counters: `[ngpu] up draws: N calls, M
+drawn, ...`).
+
+Found on the way: the non-indexed support from build 105 (`ib_phys == 0`
+= DrawVertices) had landed in `DrawCached` - the *flat probe* path - not
+in `DrawTranslated`. So every DrawVertices went through the flat probe
+(the "dark quads" of runs 95-96) and never through a translated shader;
+`DrawTranslated` failed them at `CachedIB(0, ...)`. Build 114 moves the
+logic where it belongs, so `ngpu_draw_vertices` gets its first real test
+in run 107.
+
 ## Next (state at 02:40, 2026-09-16)
 
 **Where it stands.** The native path (fable2recomp `native-gpu`, build 102)
