@@ -2231,6 +2231,9 @@ Four captures settle what the street is doing:
   that full-screen quad, which is why the tower shared its colour.)
 - Run 233, the same again with `ngpu_depth_test=false`: still black, so the
   ground is not being rejected by the depth test either.
+- Run 234 rules out the obvious confound: with the non-indexed draws back on
+  and only the quad pass off, the street is black just the same, so turning
+  those off in runs 230 and 233 is not what hid it.
 - Run 231's census of the frame's native targets shows where the other passes
   go: 1280x720 colour 00030000 with 1,427 draws (presented), 1280x720 colour
   000C0000 with 158 draws, 1040x1040 colour 00020000 with 372 draws (the
