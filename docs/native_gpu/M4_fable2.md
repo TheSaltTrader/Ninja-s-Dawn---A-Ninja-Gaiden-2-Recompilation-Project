@@ -1716,6 +1716,21 @@ override and attributes the entry's skip counters in the histogram; runs
 131 (UP draws, water composite skipped) and 132 (+ present the last 8888
 target) follow runs 129-130.
 
+## Runs 129-130 (06:40-06:46) - which pass covers the market
+
+Run 130 skipped the water composite (`ngpu_skip_vs`, the low dword of
+`38D8055FCB75A1CE`): the horizon and the castle skyline went with it, but
+the full-screen gradient stayed - so the cover is one of the two sky-dome
+shaders (`F693EBF7D3C98B56`, `1D7465E63ADDFF64`; position-only, standard
+world-view-projection), whose depth passes everywhere under the native
+depth convention. Suspects: the game inverting depth through the viewport
+range rather than the projection (a dome at the far plane would then land
+at the near value here), or a state the shadow does not carry (stencil).
+Build 129 adds two more skip slots and `ngpu_log_vs` (every draw of one
+vertex shader: order in the frame, target, RB_DEPTHCONTROL / blend / cull,
+the first constants); run 133 skips all three passes with the UP draws on
+and logs the first sky shader's draws, run 134 adds `ngpu_present_post`.
+
 ## Next (state at 02:40, 2026-09-16)
 
 **Where it stands.** The native path (fable2recomp `native-gpu`, build 102)
