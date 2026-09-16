@@ -1558,6 +1558,24 @@ stream-0 override (the call's bytes, 8-in-32 unless the ring's SET_CONSTANT
 for the copy says 8-in-16), shaders from the device fields, and those
 shader objects dumped on sight when dumping is on.
 
+## Runs 113-114 (04:20-04:35) - the pipeline wall explained
+
+Run 113 enabled the D3D12 debug layer from a cvar at device creation:
+enabling it after the Xenos plugin's device exists removes that device
+(`rex::FatalError` at the first paint, 3 s in). Build 119 enables it from a
+static initializer at process start instead (`NGPU_D3D_DEBUG=1` in the
+environment; `ngpu_d3d_debug` then logs the info queue on a pipeline
+failure) - run 114.
+
+The wall itself fell to `dxc -dumpbin` on the cache: a computed-fetch
+vertex shader's **input signature still lists POSITION2/3/4/0 and NORMAL0**
+(the recompiler declares an input per vertex element before it looks at
+the fetches), and the runtime, making no input element for a computed
+fetch, handed D3D12 an input layout missing signature elements - which is
+a pipeline-creation error. Build 120 gives every computed fetch a dummy
+element (one dword at offset 0 of its stream, R32_FLOAT or R32_UINT by the
+declared type); the shader ignores the attribute and loads the row itself.
+
 ## Next (state at 02:40, 2026-09-16)
 
 **Where it stands.** The native path (fable2recomp `native-gpu`, build 102)
