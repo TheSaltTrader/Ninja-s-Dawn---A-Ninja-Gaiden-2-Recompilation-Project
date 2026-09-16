@@ -618,6 +618,55 @@ the recompiler at garbage. `tools/native_gpu/fetch_rows.py` lists the
 vertex fetch rows of any container; run 20 dumps the raw variant entry and
 header records (`VE`/`VH` lines) to settle the layout.
 
+## Runs 20-21 (19:05-19:28): the pixel-shader "variant" and the host page offset
+
+Two readings that every earlier run rested on were wrong.
+
+**The shader-load flush is SetShaders(dev, VS, PS).** Run 20's dump printed
+the raw "variant entry" records (`VE` lines): word 0 = `00400007` - the
+common word of a **pixel shader object** (type nibble 7, container at +0x28
+with flags 0x102A1100, physical block at +0x18). sub_82221858's second
+path loads that pixel shader (IM_LOAD of `[ps+0x18] + Shader.physicalOffset`
+with `Shader.size` bytes, the header at `container + shaderOffset`, type
+bit 1) and then the vertex shader the same way from `[vs+0x20]` (type 0).
+There are no vertex-shader variants: the per-(shader, entry) layouts, the
+`.var.xvu` containers and the "entry shared by several shaders" puzzle were
+all the pixel shader. The recompiled flush (generated/default/
+fable2_recomp.254.cpp) is the reference.
+
+**The 0xE0.. mirror sits one page higher on the host.** The runtime maps the
+0xE0000000 range at file offset 0x100001000 but Windows' 64 KB mapping
+granularity rounds the 0x1000 away, so every guest access adds it back
+(`rex::memory::detail::PhysicalHostOffset`, used by the recompiled code and
+by `GuestPtr`). The game does the same when it forms GPU addresses:
+SetStreamSource, DrawIndexedVertices and the shader-load flush all compute
+`(addr & 0x1FFFFFFF) + (addr >= 0xE0000000 ? 0x1000 : 0)`. So:
+
+| address form | held where | host pointer |
+| --- | --- | --- |
+| CPU virtual (0xFD..) | IB +0x18, VB +0x18, VS +0x20, PS +0x18 | `virtual_membase + addr + 0x1000` (`Host()`) |
+| GPU physical | fetch constants, ring packets, `Memory::GetPhysicalAddress(virt)` | `physical_membase + addr` (`Phys()`) |
+
+Runs 9-20 read index buffers, shader blocks and the dumped `.xvu`
+containers through `physical_membase + (addr & 0x1FFFFFFF)` - 4 KB too
+low. Run 21's probe made it visible: the index buffer read that way holds
+`3C000000 00000000`, read through the runtime's own physical number it
+holds `00000001 0002FFFF` (a 0,1,2,restart strip); the vertex data read
+through the fetch constant matches the runtime view. The clean quads of
+runs 9-19 were meshes drawn with a neighbouring buffer's indices, the
+"vertex fetch rows" found in pixel-shader blocks were the vertex shader
+allocated one page below, and the 15 pixel shaders that compiled were
+neighbouring objects glued to the wrong container.
+
+Fixes (build 34): `Host()` for every object-held address (index copy, the
+scanner's block, the dump's `.xvu` physical part), the scanner reads the
+vertex shader's own block (`[vs+0x20] + physicalOffset`, `size` from the
+container's Shader header, one layout per shader), the cache reads and
+watches through `GetPhysicalAddress` (bound by decorated name) and matches
+the stream's fetch address against the object's address + 0x1000. Runs
+19-21 with the cache partly engaged stayed at 37-40 fps (their "range" and
+"bypass" failures came from strides taken off the wrong block).
+
 ## Shader translation, second pass (17:50) — the translator sees the wrong bytes for many shaders
 
 XenosRecomp with duplicate vertex-input declarations removed (a local
