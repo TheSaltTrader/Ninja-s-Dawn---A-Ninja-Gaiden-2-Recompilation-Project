@@ -2249,3 +2249,42 @@ denominator. The next step is to compare the ring parser's DRAW packet count
 per frame against the draws we issue - the ring is the ground truth for what
 the GPU was actually told to draw - and hook whatever entry point accounts for
 the difference.
+
+### Runs 235-244: what the ground is not
+
+`ngpu_only_vs` draws one vertex shader alone. Ranking the full-size target's
+shaders by indices (run 235) and isolating the top of that list rules each one
+out as the street:
+
+| vertex shader | indices / draws | what it draws |
+| --- | --- | --- |
+| BCC6E2DEF4A3E5C2 | 1,212,465 / 801 | not yet isolated |
+| 2A5207A8748C72CB | 457,260 / 399 | props: windows, bunting, signs, a cart |
+| 36F4DD575DB99917 | 304,767 / 73 | skinned, and still flat |
+| 2D96AFB187B6B7F6 | 303,468 / 124 | not isolated (id overflowed int32) |
+| 6E1021DB0B71C69D | 46,998 / 4 | the canal-side building facades |
+
+Three more explanations are dead:
+
+- Not masked or blended away. `ngpu_debug_force_write` forces the colour mask
+  open and blending off inside a `ngpu_ps_debug` capture, to tell a draw that
+  is invoked but forbidden to write from one that never runs. Run 244: the
+  street is black either way.
+- Not depth-rejected (run 233) and not occluded by the quad pass (runs 229-230,
+  234).
+- Not a gap in the skip accounting. Run 235: 2,421 draws issued, 2,205 drawn,
+  every named skip counter zero, and the difference is the 166 impostor draws
+  the frame log counts separately. Nothing is being quietly dropped.
+
+Two cautions for whoever picks this up:
+
+- `ngpu_only_vs` and `ngpu_skip_vs` take the LOW 32 BITS of the shader hash as
+  a signed int32. A hash whose top bit is set must be passed as a negative
+  decimal; passing the unsigned value silently matches nothing and the capture
+  comes back black, which looks exactly like a real result. Runs 236, 237, 241
+  and 243 were lost to this. Check the coverage line's drawn count against the
+  expected draw count before believing any isolation capture.
+- The shared plugin's `[hitch] ... draws N` line is NOT a per-frame draw count
+  comparable with ours: over one run its median is 287 and its maximum 6,490.
+  It cannot be used as an independent total, and an early reading of it that
+  suggested most draws were missing does not hold.
