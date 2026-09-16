@@ -1531,6 +1531,33 @@ XenosRecomp `fable2` branch:
 - the raw-index heuristic does not track r0.x being rewritten before a
   fetch (rare; would read the wrong row).
 
+## Runs 111-113 (04:06-04:25) - computed fetches hit a pipeline wall; the real UP function
+
+Run 111 (build 117 + the run117 cache: 333 compiled, 278 with computed
+fetches): every vertex shader that loads a stream itself is rejected with
+"pipeline" - `CreateGraphicsPipelineState` fails for them (Plume does not
+report why; build 118 enables the D3D12 debug layer on demand,
+`ngpu_d3d_debug`, and logs the info-queue messages when a pipeline fails).
+The picture is the run-108 one (those draws fell back: "not cached" 350).
+
+Run 112 (`ngpu_draw_up`): 30 UP calls per frame reached the draw path and
+failed with "vs 4C277100 (not in ngpu_cache)" - the UI vertex shaders were
+never dumped: the engine sets them through a setter the SetShaders hooks do
+not cover (the device fields at +0x3198 / +0x3194 know them). And the ring
+at the "UP exit" parsed as garbage (`T3[7F x16384]`): `sub_82217DB8` is
+only the XDK's *begin* step. Its caller **sub_8222E120** is the real
+DrawIndexedVerticesUP(dev, prim, minIndex, numVertices, indexCount,
+pIndexData, indexFormat, pVertexData, stride at r1+0x54): it reserves ring
+space (the begin), copies both arrays into it (`sub_82CA9480` = memcpy,
+twice) and commits the write pointer from device+0x3484 - at the begin's
+exit the reserved area is still unwritten. Build 118 hooks the wrapper's
+entry (its arrays and the stack stride) and its exit at **0x8222E1B8**
+(`addi r1,r1,176`) and draws from the arrays themselves: indices read from
+guest memory (16-bit big-endian, minus minIndex), the vertices through a
+stream-0 override (the call's bytes, 8-in-32 unless the ring's SET_CONSTANT
+for the copy says 8-in-16), shaders from the device fields, and those
+shader objects dumped on sight when dumping is on.
+
 ## Next (state at 02:40, 2026-09-16)
 
 **Where it stands.** The native path (fable2recomp `native-gpu`, build 102)
