@@ -1858,6 +1858,27 @@ stalls all carry their real textures. Two faults stand out.
   134 logs the first UP draws' fetch constants and the descriptor each one
   resolved to.
 
+## Run 144 (07:44) - the "missing ground" is the canal, and the picture is right
+
+    vs 38D8055FCB75A1CE draw #1696 of frame 1552: 30 indices,
+    surface 14010500 colour 00030000, RB_DEPTHCONTROL 00708766 mask F
+    ... draw #1832: 30 indices, surface 0A000280 colour 000C0000, mask 0
+
+Thirty indices, not a full-screen quad: this is a **water surface patch**
+(hence `g_WaterConstants` and `g_WaterHeight`), drawn into the scene target
+with depth writes on, and again into a second target with the colour mask
+zero - a depth-only pass. Which resolves the "black ground" of runs 142 and
+143: the camera is standing on Bowerstone Market's **bridge**, the two
+"pillars" are its towers, and the dark expanse between them is the **canal**.
+There is no missing terrain. Skipping the water is what made it black.
+
+So runs 138 and 141 - every UP draw rendering, the viewport depth range
+applied - are close to a correct render of the scene: the bridge, the canal,
+the market on both banks, the stalls, the arch, the clock tower, the sky.
+What is still wrong is narrower than it looked: the banner and awning quads
+draw in flat pastel colours, which is a material problem, not a geometry or
+depth one.
+
 ## Next (state at 02:40, 2026-09-16)
 
 **Where it stands.** The native path (fable2recomp `native-gpu`, build 102)
