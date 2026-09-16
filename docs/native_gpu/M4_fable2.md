@@ -686,6 +686,34 @@ post-process and UI passes' full-screen quads cover the scene (depth
 LESS_EQUAL, no render-target separation). Run 23 skips draws under 12
 indices (`ngpu_min_indices`) to look at the world.
 
+## Resume checklist (state at 20:10, 2026-09-15)
+
+- Branches (not pushed): `fable2recomp` `native-gpu` (code: src/native_gpu_present.cpp,
+  native_gpu_dump.cpp/.h, native_gpu_trace.cpp, ngpu_shaders/, tools/ngpu_shaders.cmd, src/xxhash.h),
+  `ng2recomp` `native-gpu` (tools/native_gpu/*, docs/native_gpu/*). XenosRecomp local branch
+  `fable2` in NativeGPU/reference/XenosRecomp; Plume patched in NativeGPU/reference/plume (working
+  tree, no git identity there); `NativeGPU/fable2_shader_common.h`.
+- Build: scratch `build_renamed.cmd <tag>` (tools/build.cmd; log out/build_tu1_<tag>.log, look for
+  `=== Done`); shaders: `tools
+gpu_shaders.cmd` (absolute path) -> ngpu_vs/ngpu_ps/ngpu_ps_xs.dxil
+  beside the exe. Recompiler: `NativeGPUuild_xenosrecomp.cmd`; Plume: `NativeGPUuild_plume.cmd`.
+- Shader cache: run the game with `ngpu_dump_at_frame=3000` once (writes ngpu_shaders/<obj>_v|p.xvu
+  on first sight), then `XENOS_COMMON=NativeGPU/fable2_shader_common.h translate_all.sh <ngpu_shaders>
+  <out> "*.xvu"` and `pack_cache.py <out> <exe dir>/ngpu_cache`. The runtime hashes live containers
+  (XXH3) and loads `<hash>_v.dxil` + `.layout`.
+- Run: scratch `market_fps.sh <tag> "ngpu_trace=true;ngpu_shadow=true;ngpu_native_draws=true"`
+  (hero 2 market walk, 150 s); watch `[ngpu] xs:`, `[ngpu] cache:`, `[ngpu] frame cost`,
+  `[swap] guest fps`; the shadow window is at screen region 48,40 1264x712.
+- Cvars: ngpu_shadow, ngpu_native_draws, ngpu_xs (translated shaders), ngpu_cache/_mb, ngpu_rt_last
+  (scene pass by episode), ngpu_wvp_only, ngpu_min_indices, ngpu_depth_test, ngpu_reverse_z,
+  ngpu_const_mode, ngpu_max_draws, ngpu_dump_at_frame/_frames.
+- Next: M5-b = translated pixel shaders (PS container hash the same way: container +0x28, block
+  +0x18; textures from the 32 fetch constants at device+0x480 - untile with the SDK's
+  rex/graphics/pipeline/texture/util.h helpers, DXT pass-through; samplers; PS constants from
+  device+0x1780; SharedConstants descriptor indices in the 8-float4-per-dimension layout), then
+  render targets / resolve, blend + depth states from the D3DRS shadow, and the DrawVertices /
+  DrawVerticesUP paths.
+
 ## Runs 28-30 (19:55-20:02) - M5-a: the game's own vertex shaders drive the native draws
 
 Build 40-42 (`ngpu_xs`): XenosRecomp's translations are packed by container
