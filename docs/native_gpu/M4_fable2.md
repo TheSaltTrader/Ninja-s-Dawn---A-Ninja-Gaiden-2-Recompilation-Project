@@ -1103,6 +1103,30 @@ a 640x360 and a 320x180 resolve every frame, which recreated the resolved
 texture twice per frame - build 77 keys `g_resolved` by (base, w, h), and
 the fetch path looks up with the fetch constant's size.
 
+## Runs 64-68 (23:20-23:42) - the blit works; the scene is HDR times 9.67
+
+The blit path was proven step by step with in-process shots: mode 18
+(solid magenta) fills the window, mode 19 shows the fullscreen triangle's
+uv gradient, mode 20 (sample + gradient) shows the scene target - the
+same white-geometry / black-floor image as the window path had, so M6's
+plumbing is right and the *content* is the question. Run 68 dumped the
+material shader's named constants for a sampled draw:
+`g_GlobalAmbientAndBrightness = (0.0255, 0.0473, 0.121, 9.67)` - the
+output is multiplied by **9.67** (the HDR target is tonemapped by the
+game's post-process, which the native path does not run), the global
+light params c80/c81/c87 are zero (night), `g_AtmosphericFactors = (1, 1,
+0, 0)` (full fog influence), the atmospheric parameters c64..c68 small.
+At `ngpu_exposure=0.02` the white areas become a flat uniform grey with
+no texture detail anywhere, i.e. the lit term is ~0 on every wall and the
+fog term (extinction / in-scattering, the 1D LUTs the game rewrites each
+frame - `ngpu_dump_slot=-3` now dumps every upload) is what we see. The
+sampled draw's slot 13 was a real 128x128 texture (descriptor 121), not
+the 1x1, so the black lit term is not only the 1x1s. Diagnostic modes
+21/22/23 (build 80: the material's diffuse via TEXCOORD0.xy, its lightmap
+via TEXCOORD0.zw, slot 0) render through flat pipelines that now carry
+the draw's own states (the reverse-Z clear made the fixed LESS_EQUAL
+diagnostics draw nothing - mode 16 came out black for that reason).
+
 ## Next
 
 1. **Read watched guest pages without faulting.** ReXGlue's memory has the
