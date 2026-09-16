@@ -1223,6 +1223,32 @@ where they differ.
   fetch constants) and the scene blit applies exposure then a Reinhard
   curve instead of a clamp.
 
+## Run 83 (01:20) - the native draw moves to the draw function's exit
+
+The parser's state was one draw late: the entry hook of `DrawIndexedVertices`
+fires before the XDK flushes that draw's dirty state (fetch constants,
+render states, shader loads) and writes its DRAW packet, so at draw N the
+ring held draw N-1's state - run 82 saw `RB_COLOR_MASK = 0` and
+`RB_DEPTHCONTROL = 0` for most draws (the depth-only pass's values,
+one draw late). Build 92 keeps the entry hook for the parameters and
+runs the native draw from a **completion hook at 0x8221E408** - the
+`addi r1,r1,208` before the shared epilogue, reached after the packet loop
+stores the write pointer. The hook is hand-inserted in the generated
+`fable2_recomp.197.cpp` (git-ignored) as `ngpu_8221E408(...)` with an
+`extern` declaration; the next codegen must add it to
+`config/hooks/native_gpu_trace.toml`:
+
+```
+[[midasm_hook]]
+address = 0x8221E408
+name = "ngpu_8221E408"
+registers = ["r3", "r4", "r5", "r6", "r7", "r8", "r9", "r10"]
+```
+
+`OnDrawIndexed` now only records (dev, prim, base vertex, start, count) in a
+thread-local pending slot; `OnDrawIndexedDone` performs `ShadowDrawIndexed`
+with it.
+
 ## Next
 
 1. **Read watched guest pages without faulting.** ReXGlue's memory has the
