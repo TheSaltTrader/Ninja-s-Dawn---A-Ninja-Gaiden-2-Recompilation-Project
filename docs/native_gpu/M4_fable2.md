@@ -1062,6 +1062,47 @@ into a texture bound to the dest header's base, so the light buffer,
 shadow maps, bloom chain and impostors come from our own passes; the swap
 resolve (1280x720 8888) drives the window, i.e. the game's own tonemap.
 
+## Runs 59-63 (22:58-23:25) - M6: native render targets
+
+**Capture problems first.** From run 59 the game window covered the
+shadow window (so `eye_look` returned the real game - a useful reference:
+the market at night is dark timber and brick, i.e. the dark runs 52/53
+were closer to right than the white ones). Build 73 adds in-process
+screenshots (`ngpu_shot_every=N` writes the back buffer to
+`ngpu_shot.bmp` next to the executable through a readback buffer); the
+first attempt crashed inside Plume - `copyTextureRegion` calls
+`setSamplePositions(dstLocation.texture)` and a buffer destination has no
+texture - patched with a null check and Plume rebuilt (Release). Build 74
+re-asserted the window's topmost flag every 2 s from the render thread
+and **hung the game** (run 61: the window belongs to another thread, so
+`SetWindowPos` blocks until that thread pumps) - `SWP_ASYNCWINDOWPOS`.
+
+**M6 (build 75, run 62).** Native render targets keyed by the register
+shadow at draw time: `GetRT(RB_SURFACE_INFO, RB_COLOR_INFO)` creates an
+RGBA16F colour target + D32 depth at (pitch x height) - the height learnt
+from the resolve destinations that read the target (16:9 guesses before
+that) - and `BindRT` binds it, clearing colour to black and depth to 0 or
+1 by the zfunc majority of the target's draws in the previous frame. The
+XDK Resolve (`sub_82206888`) now calls `ResolveNative`: the bound target
+(colour, or depth for flag 0x10 / format 23) is copied into a texture per
+(dest base, size) - `g_resolved` - which `GetTexture` serves before the
+guest-memory path, so the light buffer, bloom chain, impostors and shadow
+maps come from our own passes. Every draw pipeline renders RGBA16F; at
+EndFrame the widest / most-drawn target of the frame is blitted to the
+window by a fullscreen triangle (`ngpu_blit_vs.dxil` + `ngpu_ps_xs` mode
+17, `ngpu_exposure`). `ngpu_native_rt=false` restores the old path.
+
+Run 62 (build 75): the machinery works - targets 1280x720 (colour formats
+0, 3, 12), 1040-pitch and 560-pitch shadow maps (dests 1024x1024 / 512x512
+format 23), 280x280 impostors (four 256x256 dests per frame), 640x360 and
+320x180 bloom targets; resolves per frame as in the histogram; frame cost
+~3 ms, the guest at 59 fps. The window stayed green because the blit
+pipeline was built before its pixel shader existed (a null pixel shader
+rasterises nothing) - build 76. The bloom chain reuses one dest base for
+a 640x360 and a 320x180 resolve every frame, which recreated the resolved
+texture twice per frame - build 77 keys `g_resolved` by (base, w, h), and
+the fetch path looks up with the fetch constant's size.
+
 ## Next
 
 1. **Read watched guest pages without faulting.** ReXGlue's memory has the
