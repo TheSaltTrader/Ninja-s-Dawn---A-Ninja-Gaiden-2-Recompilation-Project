@@ -1392,6 +1392,44 @@ Build 111 makes the draw timing switchable (`ngpu_draw_at_exit`, default
 off = the entry-hook timing of run 94, the best pillars) so the exit-hook
 path stays available for the ring work without being the default.
 
+## Runs 103-104 (03:00-03:10) - the entry timing again, with the right sources
+
+Run 103 (build 111, `ngpu_draw_at_exit` off) drew flat pale buildings: at
+the entry hook the ring holds the *previous* draw's packets, so the
+ring-sourced shaders and fetch constants were one draw behind. Build 112
+gates every ring source on the exit timing; run 104 is back to the run-94
+look (stone pillars, the clock tower, the timbered houses). What is still
+pale and flat there is the fallback draws - ~210 "not cached" and ~210
+"range" per frame (of ~1,550), which the flat pipeline paints:
+
+- "not cached": ten hooked containers. Four fail to compile on the
+  boolean / loop constants the game sets with SetShaderConstantB/I
+  (`b129`, `b132`, `i0` - 316 of the 1,333 translated files use them),
+  two are rejected by the runtime for "format 6 TEXCOORD" (an 8-bit
+  *integer* attribute into a float input), four sample textures in the
+  vertex stage (`ngpu_vs_textures`, kept off).
+- "range": the per-draw stream copy refused draws whose vertex range
+  exceeded the fetch constant's size - the instance / repeated-mesh rows,
+  whose index the shader computes itself.
+
+Build 113 + the re-translated cache (`fable2_run113`, all 2,472 dumped
+containers through the new header) address the first two and the third:
+
+- `fable2_shader_common.h`: `uint4 g_BoolConstants[2]` (c34..c35) and
+  `uint4 g_LoopConstants[8]` (c36..c43) in the shared block; the new
+  `tools/native_gpu/fix_hlsl.py` (run by `translate_all.sh` before dxc)
+  rewrites `if (b132 != 0)` to `NGPU_BOOL(132)` and `i0.x` to
+  `NGPU_LOOP(0).x` - plain `#define b1` would have broken the
+  `register(b1, space4)` bindings - and inserts `iTexCoord0 *= 255.0` for
+  integer 8/16-bit inputs, which the runtime now feeds as UNORM.
+- the runtime fills c32.x (the named booleans: vertex bits 0..15, pixel
+  16..31), c34..c43 from the device shadow at `ngpu_bool_off` (0x1780) /
+  `ngpu_loop_off` (0x17A0) - the guess "right after the ALU constants";
+  a 300-frame log compares them with the ring parser's 0x4900.. registers
+  and scans the device object for their real home.
+- `ngpu_range_clamp`: the copy takes the fetch constant's whole size when
+  the draw's range overstates it (the shader indexes the rows).
+
 ## Next (state at 02:40, 2026-09-16)
 
 **Where it stands.** The native path (fable2recomp `native-gpu`, build 102)

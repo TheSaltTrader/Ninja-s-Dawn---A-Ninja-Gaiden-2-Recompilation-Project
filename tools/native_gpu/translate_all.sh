@@ -8,6 +8,7 @@ IN="$1"; OUT="$2"; GLOB="${3:-*.xvu}"
 X=/c/Users/renoi/ClaudeCode/NativeGPU/build/xenosrecomp/XenosRecomp/XenosRecomp.exe
 H="${XENOS_COMMON:-/c/Users/renoi/ClaudeCode/NativeGPU/reference/XenosRecomp/XenosRecomp/shader_common.h}"
 D=/c/Users/renoi/ClaudeCode/NativeGPU/reference/XenosRecomp/thirdparty/dxc-bin/bin/x64/dxc.exe
+FIX="$(cd "$(dirname "$0")" && pwd)/fix_hlsl.py"  # boolean / loop constants, integer inputs
 mkdir -p "$OUT/hlsl" "$OUT/dxil"
 : > "$OUT/errors.txt"; : > "$OUT/failed.txt"
 tr_ok=0; tr_bad=0; c_ok=0; c_bad=0
@@ -18,6 +19,7 @@ for f in $GLOB; do
   case "$f" in *_p.xvu|*_p.var.xvu) t=ps_6_0;; *) t=vs_6_0;; esac
   if timeout 15 "$X" "$f" "$OUT/hlsl/$n.hlsl" "$H" >/dev/null 2>&1 && [ -s "$OUT/hlsl/$n.hlsl" ]; then
     tr_ok=$((tr_ok+1))
+    python "$FIX" "$OUT/hlsl/$n.hlsl" "$OUT/hlsl/$n.hlsl.layout"
     if "$D" -T $t -E main -HV 2021 -all-resources-bound -Wno-ignored-attributes -Fo "$OUT/dxil/$n.dxil" "$OUT/hlsl/$n.hlsl" >"$OUT/dxil/$n.err" 2>&1; then
       c_ok=$((c_ok+1))
     else
