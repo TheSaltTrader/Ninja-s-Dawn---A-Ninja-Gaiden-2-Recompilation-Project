@@ -1820,6 +1820,23 @@ Xenia plugin still presents the game while the native renderer draws into its
 own window. The real frame-rate work comes after correctness, and it gets a
 fresh baseline with the machine quiet.
 
+## Runs 140-141 (07:24-07:30) - the vertex-texture shaders are fine now
+
+`ngpu_up_live_tex` (the texture fetch constants read live instead of from
+the snapshot) changed nothing visible, so the snapshot's textures are not a
+frame stale - the UP quads' wrong material is something else (their own
+constants, or a texture the cache serves white).
+
+`ngpu_vs_textures` is healthy again: 52 vertex shaders load, 2 are rejected,
+1,514 draws, and the flat plane of run 118 is gone - it was the sky pass
+under the old depth range, exactly as suspected. **Default on** from here.
+
+What is left in the picture: where the market's ground should be, the sky
+shows through. Run 139 (sky and water skipped) leaves that area black, so
+either the ground is never drawn natively or it draws black. Run 142 paints
+TEXCOORD0 as colour to say which; run 143 raises the exposure to see
+whether the ground is there but dark.
+
 ## Next (state at 02:40, 2026-09-16)
 
 **Where it stands.** The native path (fable2recomp `native-gpu`, build 102)
