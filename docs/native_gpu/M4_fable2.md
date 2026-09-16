@@ -1025,6 +1025,43 @@ distant surfaces black) - run 53 isolates it with `ngpu_tex_mips=false`.
   RB_COLOR_INFO / RB_DEPTH_INFO (+0x2880/84/88) for the M6 render-target
   map.
 
+## Runs 57-58 (22:50-22:57) - the render-target map: the scene is HDR
+
+Build 70/71 histograms (per frame, from the register shadow at draw time
+and the XDK Resolve hook):
+
+| RB_SURFACE_INFO | RB_COLOR_INFO | RB_DEPTH_INFO | draws | meaning |
+|---|---|---|---|---|
+| 14010500 (pitch 1280, **2x MSAA**) | 00030000 (EDRAM 0, format 3 = **2_10_10_10_FLOAT**) | 00010400 (EDRAM 0x400, D24FS8) | ~800-970 | the scene pass: HDR colour |
+| 14010500 | 000C0000 (format 12 = 2_10_10_10_FLOAT_AS_16_16_16_16) | 00010400 | 25-44 | same pass, another colour view |
+| 04020118 (pitch 280, 4x MSAA) | 00000000 (8888) | 000100E0 | 13-16 | a small pass (impostors?) |
+| 0A000280 (pitch 640) | 00000000 (8888) | 000100B8 | 2-3 | the 640-wide pass (light buffer) |
+
+Resolves per frame (dest base, size, fetch format, flags): 256x256 f3 x4
+(impostors), 320x180 f6 / f54 / f7 (bloom chain), 640x360 f54 (the HDR
+scene downsampled: 2_10_10_10_AS_16_16_16_16) and 640x360 f6, 1280x720 f2
+(k_8) with flags 0x10 (a depth resolve), 1024x1024 f23 flags 4 (the shadow
+map). Every dest base is in the **0xE0 form** (F27xxxxx...), i.e. the
+engine's texture headers hold raw virtual addresses for its render
+targets while CPU-loaded textures carry converted physical ones.
+
+Consequence for the shadow window: the scene is rendered into a 7e3-float
+HDR target and tonemapped by the post-process chain, which the native
+path does not run yet; my B8G8R8A8 window shows the raw HDR values and
+saturates anything above 1 - the white walls since build 68 may be that
+(the dark runs 52/53 had fixed states; with the game's states the same
+draws saturate?) or the new formats. Run 58 (old formats only, states
+off) was not captured; run 59 uses diagnostic mode 16 (a flat colour per
+pixel shader) to tell which shader paints the walls.
+
+M6 plan from these numbers: a native render target per (surface pitch /
+MSAA, colour base + format, depth base + format) key - the scene target
+R16G16B16A16_FLOAT (7e3 fits), the light buffer and impostor targets
+8888, depth D32 - and on each Resolve a copy/blit of the source target
+into a texture bound to the dest header's base, so the light buffer,
+shadow maps, bloom chain and impostors come from our own passes; the swap
+resolve (1280x720 8888) drives the window, i.e. the game's own tonemap.
+
 ## Next
 
 1. **Read watched guest pages without faulting.** ReXGlue's memory has the
