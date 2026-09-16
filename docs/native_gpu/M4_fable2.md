@@ -686,6 +686,29 @@ post-process and UI passes' full-screen quads cover the scene (depth
 LESS_EQUAL, no render-target separation). Run 23 skips draws under 12
 indices (`ngpu_min_indices`) to look at the world.
 
+## Runs 23-26 (19:32-19:45) - M4-d: the market is recognisable in the shadow window
+
+The flat colour of runs 22-23 was not a full-screen quad (`ngpu_min_indices`
+changed nothing) nor a screen-space shader (every indexed draw goes through
+a vertex shader with `g_WorldViewProjection` at c0: `ngpu_wvp_only` skipped
+nothing) but the **shadow-map pass**: the frame's indexed draws fall into
+two render-target episodes, 370 draws into surface 42620AB0 (the shadow
+map, drawn first from the light's viewpoint - its casters cover the window)
+and ~1,490 into a surface that alternates between frames (4319B710 /
+4319A270, the scene). Matching the scene pass by *ordinal* (the episode
+with the most draws in the previous frame; `ngpu_rt_last`) leaves the
+1,488 scene draws, and run 26's window shows Bowerstone market: the stone
+archway, the hero standing in the glow ring, the timber houses and stalls
+on both sides, the cobbled street - each mesh in its flat per-draw colour,
+at the game's 60 fps.
+
+Learned on the way: the device's vertex constants are live per draw (709
+distinct c0..c15 blocks over the 1,973 indexed draws of a frame), and the
+natural `dot(v, cK)` order is right - the `.zxyw` swizzle the translated
+shaders apply to `g_WorldViewProjection` pairs with the register
+permutation they keep the position in (`r1 = (z, x, y, 1)`), so it cancels.
+Run 27 (`ngpu_const_mode=1`, the swizzled variant) is the control.
+
 ## Shader translation, third pass (19:40) - 126 of 132 compile
 
 The containers dumped by run 22 (read through the host page offset: 72
