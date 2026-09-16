@@ -1320,24 +1320,57 @@ in the next range (harmless).
   (`ngpu_state_mask=23`) and logs the words around +0x28DC against the
   ring's RB_COLOR_MASK to check that offset.
 
-## Next
+## Next (state at 02:20, 2026-09-16)
 
-1. **Read watched guest pages without faulting.** ReXGlue's memory has the
-   watch API the plugin uses (`include/rex/system/xmemory.h`:
-   `TriggerPhysicalMemoryCallbacks(..., is_write, unwatch_exact_range,
-   unprotect)`, `IsHostPageWriteWatched`, `QueryProtect`): resolve the watch
-   on an index buffer's range once per frame before copying it (under the
-   global critical region as the header requires), and the ~1 ms per draw
-   goes away — the timers put everything else at 0.5 ms per frame for ~175
-   draws, so the native path should then cost nothing at the game's 55–60 fps.
-2. **Shader variants.** The market's main mesh shaders (`4D05F5D0`,
-   `4D063B40`, ...) keep no fetch instruction in the block at obj+0x20;
-   `SetShader` receives a pointer to a variant entry (obj+0x380.. or an
-   external table such as 0x43004990), so the microcode in use is the
-   variant's. Resolve the entry → microcode address in `sub_82221858`'s
-   second path and the dump's `M` line, then the remaining ~1,450 draws per
-   frame render too.
-3. More position formats (2_10_10_10, 16_16_16_16 int) and the instance
-   rows (POSITION1..3 from streams 1/2) for the instanced classes.
-4. Then M5: XenosRecomp fixes for Fable's containers (duplicate inputs,
-   SV_Position export, the 8 crashers) so the draws use the game's shaders.
+**Where it stands.** The native path (fable2recomp `native-gpu`, build 102)
+renders the market through the game's own vertex and pixel shaders,
+textures (DXT1/3/5, DXN, 8888, 16-bit, float, 1D, cube maps, mip chains,
+re-uploaded on guest writes), the game's render states from the device
+shadow, native render targets with resolves feeding the light buffer /
+bloom chain / impostors / shadow maps, a ring-buffer parser that supplies
+the fetch constants and the shader pairs the engine loads, and a
+tonemapped blit to the window; the guest runs at 59 fps with the native
+path costing ~3-9 ms per frame. The best pictures: run 87 (`shot87.png`,
+forced depth) and run 94 (`shot94.png`, defaults): the night market with
+occlusion, the clock tower, the moonlit facade. Run the market with:
+
+```
+FABLE2_TUNE=ngpu_trace=true;ngpu_shadow=true;ngpu_native_draws=true;ngpu_shot_every=600;ngpu_exposure=0.15
+```
+
+(`ngpu_shot.bmp` beside the executable is the window's last shot.)
+
+**What is still wrong or missing, in order:**
+
+1. The floor and the light pools: ~400 draws per frame still fall back
+   from the translated path ("not cached" index buffers, "range" = index
+   range beyond the vertex buffer) to the flat pipelines, which test
+   LESS_EQUAL against the reverse-Z clear and draw nothing. Make the
+   translated path copy an uncached index buffer per draw, and revisit
+   the range check (streams with a base vertex).
+2. `DrawVertices` (non-indexed) and `DrawVerticesUP` draws are not
+   rendered at all (the light volumes and particles may be among them).
+3. The ring parser's per-draw state snapshot disagrees with the device
+   shadow (which is right); understand the XDK's post-draw writes before
+   trusting the ring for states. `ngpu_ring_states` stays off.
+4. Stencil is not implemented (the light pass may use it); `ngpu_force_depth`
+   showed the depth pre-pass + GE semantics are otherwise right.
+5. The game's own post-process (tonemap, bloom, the 1280x720 8888 swap
+   resolve) is not run natively; the blit approximates it (Reinhard at
+   `ngpu_exposure`). Wire the post-process draws (they draw into the
+   1280-pitch 8888 target) and present the swap resolve instead.
+6. Shader coverage: 315 of the 1445 dumped containers compile (the rest
+   are the broken variant dumps); the ring matches ~350 of ~1,200 pixel
+   loads per frame by code hash - the misses are containers never seen
+   through SetShaders (dump more by playing further) and the `.cpu`
+   variants. Cube-map shaders now compile; the 4 "format 6 TEXCOORD"
+   vertex shaders and the int/bool-constant shaders still do not.
+7. Texture write-watch churn: the fog LUTs and a few 16x16 textures are
+   rewritten by the game each frame (~1-2 re-uploads per frame) - fine,
+   but the 60-frame forced refresh also re-uploads textures that merely
+   share a page with per-frame data.
+8. The hand-declared exit hook (0x8221E408) must survive the next
+   generator run of `native_gpu_trace.toml` (it is appended by hand).
+9. Then: remove the Xenos plugin from the loop (the shadow window becomes
+   the window), MSAA, the remaining passes (impostor/shadow correctness),
+   and the frame-rate work.
