@@ -1576,6 +1576,18 @@ a pipeline-creation error. Build 120 gives every computed fetch a dummy
 element (one dword at offset 0 of its stream, R32_FLOAT or R32_UINT by the
 declared type); the shader ignores the attribute and loads the row itself.
 
+Run 114 (build 119, debug layer on from the start): no pipeline failed at
+all - 1,234 translated draws, **"range" fallbacks 4** (from 283), the
+market's ground band and a textured cart render where the pale plane was
+(`shot114.png`): the instancing shaders work. Why the same cache failed in
+runs 111-113 without the debug layer is unexplained (the signature /
+layout mismatch is real either way; build 120's dummy elements make the
+layout complete regardless). The UP draws did not run: the wrapper's exit
+r3 is memcpy's return in the success path, not an HRESULT (build 121 skips
+only E_OUTOFMEMORY). The dump-on-sight at the UP calls collected 187 new
+containers - the UI / loading / post-process shaders - and 186 of them
+compile (`fable2_run120`, packed on top of the run117 cache: 519 shaders).
+
 ## Next (state at 02:40, 2026-09-16)
 
 **Where it stands.** The native path (fable2recomp `native-gpu`, build 102)
