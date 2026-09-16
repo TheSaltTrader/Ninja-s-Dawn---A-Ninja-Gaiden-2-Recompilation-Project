@@ -1661,6 +1661,26 @@ matching uses) does not. `pack_cache.py` now writes
 to them when the container hash misses (build 124, the cache repacked from
 run117 + run120 + run123). Runs 125 / 126 test it.
 
+## Runs 125-126 (06:18-06:24) - the UI vertex shaders are built per run; runtime translation
+
+With the out pointers swapped the deferred UP draws read real indices
+(max 3 for a quad). The code-hash alias did not help: the runtime's own
+"vs container" log shows the 96-byte UI vertex shader hashing
+`D5E12A97B3A84881` in run 125 against `1B1DE457CA90EE5F` for run 122's
+dump of the same shader - the engine patches the *microcode* per run (the
+pixel shader objects `4216CED0` / `42151690` are static and cached; the
+vertex shader objects live in a dynamic heap and change every run). No
+offline cache can hold them.
+
+Build 125 adds runtime translation (`ngpu_jit`, on by default): a cache
+miss writes the container + block to `ngpu_jit/<hash>_v.xvu` and a worker
+thread runs XenosRecomp, the fix_hlsl rewrite (ported to C++: unnamed
+booleans / loops, integer inputs) and dxc, copies the DXIL + sidecar into
+`ngpu_cache`, and bumps a generation the shader lookups check to retry a
+"not in ngpu_cache" object. The tool paths are the dev machine's (a shipped
+build would bundle XenosRecomp and dxc). Run 127 tests it with the UP
+draws.
+
 ## Next (state at 02:40, 2026-09-16)
 
 **Where it stands.** The native path (fable2recomp `native-gpu`, build 102)
