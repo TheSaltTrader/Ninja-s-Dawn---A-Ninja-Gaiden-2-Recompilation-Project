@@ -1127,6 +1127,25 @@ via TEXCOORD0.zw, slot 0) render through flat pipelines that now carry
 the draw's own states (the reverse-Z clear made the fixed LESS_EQUAL
 diagnostics draw nothing - mode 16 came out black for that reason).
 
+## Runs 69-71 (23:44-23:55) - the market is textured; the pixel shader was the wrong one
+
+Diagnostic mode 23 (build 80: slot 0 sampled with TEXCOORD0.xy through the
+game's vertex shaders, flat pipelines carrying the draw's states) renders
+the **whole market correctly textured** - timber houses, the stone arch,
+the clock tower, roofs, signs (in-process shot `shot_m23.png`); mode 21
+(slot 13 with the same coordinates) is black almost everywhere, mode 22
+(slot 3 with TEXCOORD0.zw) the lightmap. So the real material shader of
+these draws samples its diffuse at **slot 0**, and `4CE80D10_p`
+(`g_BackgroundDiffuseTexture` at slot 13, 800 draws per frame) is not
+their pixel shader: the SetPixelShader hook (`sub_82208BB0`, device+0x3194)
+misses the path the engine sets pixel shaders through, so every draw was
+paired with the last pixel shader that went through the hook - the
+"background" shader - which is why the lit term was zero (1x1 black at
+slot 13) and only fog showed. Build 81 takes the draw's vertex and pixel
+shader objects from the device's own fields (+0x3198 / +0x3194, which the
+XDK draw flush reads) with the hooks as fallback, and counts the draws
+where they differ.
+
 ## Next
 
 1. **Read watched guest pages without faulting.** ReXGlue's memory has the
