@@ -1808,6 +1808,18 @@ instead, to tell the two apart (run 140). Run 141 re-tests
 `ngpu_vs_textures`, which was turned off in run 118 for a "flat plane"
 that was almost certainly the sky pass under the old depth range.
 
+## A note on the frame rates in this document (07:25)
+
+The peer session working on Ninja Gaiden II found 14 orphaned tracing pollers
+that had been burning about 100 CPU-hours across the machine's 32 cores for
+roughly a day, and killed them. Every frame rate quoted above was measured
+under that load. Re-checked afterwards, the last four market runs are
+identical to each other (mean 52.6-53.6 guest fps, min 9.4, max 60.2), so
+nothing here needs revising - and nothing here is a perf claim anyway: the
+Xenia plugin still presents the game while the native renderer draws into its
+own window. The real frame-rate work comes after correctness, and it gets a
+fresh baseline with the machine quiet.
+
 ## Next (state at 02:40, 2026-09-16)
 
 **Where it stands.** The native path (fable2recomp `native-gpu`, build 102)
