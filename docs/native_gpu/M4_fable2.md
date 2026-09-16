@@ -1703,6 +1703,19 @@ R32_FLOAT) and/or the scene colour, and one of those reads is wrong for
 it. Next: log the fetch constants of the water pass's draws against the
 resolved textures, and the depth decode the pixel shader applies.
 
+## Run 128 (06:37) - the UP draws' stride
+
+The failure histogram: 108 of 114 UP draws per frame fail with "draw path
+(vs ok)" - the vertex shader is translated (48 loaded now, from 29) and
+none of the translated draw's own early returns fired, so the draw entry
+rejected them earlier: the UP path never writes the shadow's per-stream
+stride table (the failure log showed "stride byte 0"), and the declaration
+fallback yields nothing for these quads, so the entry's stride check drops
+the draw. Build 128 supplies the call's own stride (20) through an
+override and attributes the entry's skip counters in the histogram; runs
+131 (UP draws, water composite skipped) and 132 (+ present the last 8888
+target) follow runs 129-130.
+
 ## Next (state at 02:40, 2026-09-16)
 
 **Where it stands.** The native path (fable2recomp `native-gpu`, build 102)
