@@ -2017,6 +2017,21 @@ fixer.
 The only draws the entry still turns away are 25 point lists a frame
 (primitive 1), which need a point topology and a pipeline variant.
 
+## Run 197 (12:08) - point lists, and where presentation stands
+
+Point-list draws (primitive 1, 25 a frame) render with their own topology
+now, carried into the pipeline key beside the strip bit. Coverage holds at
+99% with the frame rate unchanged.
+
+Presenting the game's *own* finished frame is still not right, and the
+reason is no longer missing draws. The composite target receives its draw,
+the resolve copies it, and what comes out is a tiled pattern of a small
+texture: that pass samples something other than what it should. Since the
+default presentation - the scene target, tonemapped by the blit - already
+shows the whole scene including anything the game draws into it (the main
+menu proved the interface path), `ngpu_present_post` stays off and the
+composite pass's texture binding is the next thread to pull.
+
 ## Where it stands (07:50, 2026-09-16)
 
 **The native renderer draws Bowerstone Market.** Not a recognisable
