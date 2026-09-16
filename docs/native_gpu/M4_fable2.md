@@ -532,6 +532,22 @@ Run 14 probes it (the trigger's return value, `QueryProtect` on the range
 and the copy time alone, logged as `[ngpu] ib probe`), with a cvar to
 trigger the watch as a write.
 
+## The index pages: the plugin's on-demand readback provider (18:25)
+
+`rexgpu-xenos` registers a data provider (`ResolveDataProvider`) and enables
+provider watches on every range a resolve writes; a touch from any thread
+but the GPU worker becomes `CallInThreadSafe` + a wait for the worker to
+land the readback, and while the resolve's submission is still open the
+page stays no-access — so a host copy of Fable's per-frame index data
+(which shares those pages) pays a cross-thread round trip per 64-byte line.
+The fix for the shadow path: release the provider watch on exactly the
+index range before copying (`Memory::DisablePhysicalMemoryDataProviders`,
+cvar `ngpu_ib_unwatch`). The installed SDK headers (RexBlue, Sep 3) predate
+that method while the runtime DLL (Sep 14, built from the rexglue-src
+working tree) exports it, so the call is bound by its decorated name at
+runtime — a reminder that the SDK headers and the shipped runtime have
+drifted apart since the plugin work began.
+
 ## Shader translation, second pass (17:50) — the translator sees the wrong bytes for many shaders
 
 XenosRecomp with duplicate vertex-input declarations removed (a local
