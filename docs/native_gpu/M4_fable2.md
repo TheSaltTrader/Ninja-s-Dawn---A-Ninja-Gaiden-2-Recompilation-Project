@@ -1588,6 +1588,16 @@ only E_OUTOFMEMORY). The dump-on-sight at the UP calls collected 187 new
 containers - the UI / loading / post-process shaders - and 186 of them
 compile (`fable2_run120`, packed on top of the run117 cache: 519 shaders).
 
+## Runs 115-116 (04:25-04:31) - instancing without the debug layer
+
+Run 115 (build 120, defaults): the dummy input elements hold - no pipeline
+rejection, 1,179 draws through translated shaders, "range" 4, 6 vertex
+shaders rejected (the four texture-sampling ones behind `ngpu_vs_textures`,
+the 16_16-float BLENDINDICES one, one more). The market's ground band and
+the instanced props render (`shot115.png`); the pale flat facade on the
+right is still fallback draws. Run 116 (`ngpu_draw_up`, build 120) drew no
+UP draws - the exit's r3 test (fixed in build 121).
+
 ## Next (state at 02:40, 2026-09-16)
 
 **Where it stands.** The native path (fable2recomp `native-gpu`, build 102)
