@@ -1456,6 +1456,37 @@ in `DrawTranslated`. So every DrawVertices went through the flat probe
 logic where it belongs, so `ngpu_draw_vertices` gets its first real test
 in run 107.
 
+## Runs 105-107 (03:26-03:34) - the new cache, and two regressions caught
+
+Run 105 (build 114, the run113 cache): 1,301 draws through translated
+shaders (from 1,124), "range" fallbacks 0 (309 clamped), "not cached" 131.
+But the picture grew a wide pale band across the middle: the clamped
+instance draws feed zero rows to the input assembler, and the translated
+instancing shaders do *not* compute their row index (XenosRecomp turns
+every vfetch into an input-assembler attribute), so the rows must really
+be per-instance data - `ngpu_range_clamp` is off again and instancing
+stays open (it needs the shader's own index math or a per-instance input
+slot: the layout sidecar does not say which fetch is the instance row).
+
+Run 106 (`ngpu_draw_up`): 117 UP calls per frame, 0 drawn - 76 "without a
+parsed packet" (the parser's DRAW sequence did not advance at the exit
+hook), 36 "draw failed" (the indexed path refused them: probably the
+stream-0 pair). Build 115 logs the first twelve exits (cursor, write
+pointer, segment end, packets parsed, initiator).
+
+Run 107 (`ngpu_draw_vertices`, its first real test - see build 114):
+1,327 translated draws, but a flat pale plane with silhouettes appears at
+mid-height: a screen-space quad (light / fog volume) drawn into the scene
+target. Off.
+
+The bool/loop constants: the ring parser sees the right bits
+(`0x4904 = 0x110`: b132 and b136, the pixel shader's flow-control
+booleans), but the device object holds no packed copy (the 300-frame scan
+found none in its first 16 KB: the XDK packs them at the flush from an
+unpacked shadow). Build 115 takes them from the ring's registers
+(`ngpu_bools_ring`) - one draw late under the entry timing, right for
+every draw that does not change them.
+
 ## Next (state at 02:40, 2026-09-16)
 
 **Where it stands.** The native path (fable2recomp `native-gpu`, build 102)
