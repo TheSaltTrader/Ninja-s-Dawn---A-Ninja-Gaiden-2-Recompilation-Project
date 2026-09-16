@@ -1487,6 +1487,50 @@ unpacked shadow). Build 115 takes them from the ring's registers
 (`ngpu_bools_ring`) - one draw late under the entry timing, right for
 every draw that does not change them.
 
+## Runs 108-110 (03:37-03:50) - UP draws reach the draw path; the instancing plan
+
+Run 108 (build 115: range clamp off, booleans from the ring): the run-104
+look again with the new cache - 1,055 translated draws, range 274, not
+cached 125.
+
+Runs 109-110 (`ngpu_draw_up`): the UP exit's ring parse sees the draw's
+packet only sometimes - other XDK draws (resolve / clear rectangles,
+`init 0x00030088` = RECTLIST, auto-index) follow it before the exit hook
+fires - so build 116 matches the UP draw among the last 32 DRAW packets by
+primitive type and index count (`init 0x00060004`: list, 6 indices, DMA
+indices at 0x1F7A1A30, 6 bytes, 8-in-16) and takes stream 0's fetch pair
+from the ring's SET_CONSTANT (the XDK writes it straight into the ring, not
+the shadow). Run 110: 58 of 123 UP calls per frame now reach the draw path
+and fail there - build 117 logs why (shader status, stream pair, stride).
+The rest: 44 with no new DRAW packet parsed, 21 with no matching packet.
+(A diagnostics line per UP call at frame multiples of 600 rotated the log
+at 5 MB - `fable2.1.log` holds the first part of run 109; twelve lines
+per run now.)
+
+### Computed-index fetches (build 117 + the run117 cache)
+
+The recompiler turned every vfetch into an input-assembler attribute and
+never looked at the fetch's source register. Fable's instancing and
+repeated-mesh vertex shaders compute their indices (`ps = r0.x * (1/N)`,
+`r0.z = trunc(ps)` for the instance row, `r1.x = ...` for the vertex within
+the instance) and fetch with them - so those draws got the wrong rows (the
+"range" fallbacks) and the run-107 DrawVertices plane. The fix, on the
+XenosRecomp `fable2` branch:
+
+- vertex shaders get `iVertexId : SV_VertexID` and `r0.x = float(iVertexId)`
+  (the Xenos convention; D3D12's vertex id includes the base vertex);
+- a fetch whose source is not r0.x (register or swizzle) is *computed*:
+  `ngpu_vload(NGPU_STREAM(s), uint(max(0, int(floor(r0.w)) * 7 + 2)), fmt, signed, integer)`
+  loads the row from the stream as a `StructuredBuffer<uint>` (register
+  space 4, the runtime's fifth descriptor set, 8,192 slots per frame,
+  descriptor index per stream in c44..c47) and decodes formats 57 / 38 /
+  37 / 36 / 32 / 31 / 6 / 26 / 25 / 7 / 16 / 17 in `fable2_shader_common.h`;
+  the sidecar's 13th field marks it, the runtime makes no input element for
+  it but binds the stream (its cached entry whatever the draw's range, or a
+  per-draw copy of the fetch constant's whole size, 1 MB at most);
+- the raw-index heuristic does not track r0.x being rewritten before a
+  fetch (rare; would read the wrong row).
+
 ## Next (state at 02:40, 2026-09-16)
 
 **Where it stands.** The native path (fable2recomp `native-gpu`, build 102)
