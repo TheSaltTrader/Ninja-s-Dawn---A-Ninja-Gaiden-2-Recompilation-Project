@@ -1146,6 +1146,40 @@ shader objects from the device's own fields (+0x3198 / +0x3194, which the
 XDK draw flush reads) with the hooks as fallback, and counts the draws
 where they differ.
 
+## Runs 69-74 (23:55-00:25) - reading the ring buffer
+
+- Run 69 (build 81): the device's current-shader fields (+0x3198 / +0x3194)
+  agree with the SetShader hooks on every draw, and run 71 (build 82, a
+  backward scan of the ring for the last type-0 packet writing each fetch
+  slot) agrees with the device fetch shadow - so the fetch constants are
+  right and the pixel shader object really is `4CE80D10` for those draws.
+  The backward scan (64 KB per draw) cost half the frame rate; it is off
+  by default (`ngpu_ring_fetch`).
+- Run 70 (`ngpu_slot13=0`, exposure 0.1): still the flat fog colour
+  (`g_AtmosphericParameters(4)` = (0.27, 0.41, 0.47)) - the lit term is
+  zero even with the atlas at slot 13. Run 72 (`ngpu_dump_slot=-3`) shows
+  the fog LUTs are real dynamic ramps (the 256x1 extinction goes from white
+  to (0x21,0x4d,0x59) across the row; the game rewrites them each frame -
+  the write watch re-uploads them), and a family of odd-width 1D textures
+  (1303x1 format 28, 1837x1 format 10, 2610x1 8888, 512x1 float) that are
+  data buffers in texture clothing.
+- Conclusion: the draws the engine kicks itself (`sub_82B9EEE0/F038` with
+  `IM_LOAD_IMMEDIATE`) load their shaders through the ring, so the XDK
+  objects describe only the draws that go through the XDK. Build 84 adds an
+  **incremental ring parser** (`RingAdvance` before each draw): type-0
+  register writes, SET_CONSTANT, LOAD_ALU_CONSTANT (ALU / fetch / bool /
+  loop / register ranges), IM_LOAD and IM_LOAD_IMMEDIATE (the last loaded
+  vertex / pixel microcode pointer and size). Draws take their fetch
+  constants and states from `g_ring.regs` when a packet wrote them, and
+  their shaders from the ring's microcode matched by XXH3 of the code
+  block against the containers registered when they went through the
+  hooks (`g_vs_by_code` / `g_ps_by_code`); the device fields remain the
+  fallback. Ring geometry from run 73: the write pointer (+0x30) advances
+  100-1000 bytes per draw inside a ~150 KB segment whose end is at +0x34
+  (+0x38 = the kick margin, 0xA0 below), then jumps to another segment -
+  the parser resyncs by parsing forward from 16 KB behind the new pointer
+  until the packets parse cleanly.
+
 ## Next
 
 1. **Read watched guest pages without faulting.** ReXGlue's memory has the
