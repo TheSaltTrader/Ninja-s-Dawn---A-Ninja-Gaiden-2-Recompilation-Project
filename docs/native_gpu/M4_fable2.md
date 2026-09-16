@@ -2000,6 +2000,23 @@ tried and reverted - it is correct in principle for vertices that mix 32-bit
 and 16-bit fields, but it walks every vertex once per attribute and cost the
 guest all but two frames a second (`ngpu_elem_swap`, off).
 
+## Run 195 (11:48) - 99% of the game's draws run natively
+
+    coverage: the game issues 2494 draws a frame (2033 indexed, 343 non-indexed,
+    117 user-pointer); the native path draws 2469 of them (99%);
+    primitives it turns away: 1:25
+
+Nothing is left in the "could not serve" bucket at all. The last fix was a
+vertex attribute whose fetch format is a float one but whose *usage name*
+(BLENDINDICES) made the recompiler declare it `uint4`; the shader reads the
+values as floats, so the declaration, the sidecar's recorded type and the
+runtime's input format all follow the data now. It had to be taught twice -
+the offline `fix_hlsl.py` and the runtime translator's own copy of the same
+fixer.
+
+The only draws the entry still turns away are 25 point lists a frame
+(primitive 1), which need a point topology and a pipeline variant.
+
 ## Where it stands (07:50, 2026-09-16)
 
 **The native renderer draws Bowerstone Market.** Not a recognisable
