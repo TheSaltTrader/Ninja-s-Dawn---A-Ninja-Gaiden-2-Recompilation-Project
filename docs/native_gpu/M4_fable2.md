@@ -1336,7 +1336,21 @@ behind `ngpu_draw_vertices` (off); the exit-hook approach that fixed the
 indexed draws is the way to do them properly (find `sub_8221C3E8`'s exit
 the same way: the `addi r1` before its shared epilogue).
 
-## Next (state at 02:20, 2026-09-16)
+## Runs 97-98 (02:30-02:37) - the default look, and non-indexed draws at their exit
+
+Run 96 showed the dark quads with the non-indexed draws off: they were
+the fallback draws made visible by the reverse-Z probe pipelines (build
+103) - the flat vertex shader places untranslated geometry (skinned
+meshes, the 4 "format 6 TEXCOORD" vertex shaders) wrongly, so invisible
+is better; build 105 keeps those pipelines behind `ngpu_probe_rz`. Run
+97 is the current default look (`shot97.png`). Build 106 hooks
+`DrawVertices`' exit (0x8221C7D0, the `addi r1,r1,160` before its
+epilogue, declared in the hooks TOML) and runs the non-indexed draw
+there: run 98 has no dark quads any more, but the arch pillars show the
+wrong texture while they are on (a snapshot / fetch-constant interaction
+still to understand), so `ngpu_draw_vertices` stays off.
+
+## Next (state at 02:40, 2026-09-16)
 
 **Where it stands.** The native path (fable2recomp `native-gpu`, build 102)
 renders the market through the game's own vertex and pixel shaders,
@@ -1364,9 +1378,10 @@ FABLE2_TUNE=ngpu_trace=true;ngpu_shadow=true;ngpu_native_draws=true;ngpu_shot_ev
    LESS_EQUAL against the reverse-Z clear and draw nothing. Make the
    translated path copy an uncached index buffer per draw, and revisit
    the range check (streams with a base vertex).
-2. `DrawVertices` (non-indexed) draws render only behind `ngpu_draw_vertices`
-   (build 103: dark quads over the scene - needs an exit hook for
-   `sub_8221C3E8` like the indexed one); `DrawVerticesUP` not at all.
+2. `DrawVertices` (non-indexed) draws run at their exit hook (0x8221C7D0)
+   behind `ngpu_draw_vertices`: no more dark quads (run 98) but the arch
+   pillars lose their stone texture while on - find why before enabling;
+   `DrawVerticesUP` not rendered at all.
 3. The ring parser's per-draw state snapshot disagrees with the device
    shadow (which is right); understand the XDK's post-draw writes before
    trusting the ring for states. `ngpu_ring_states` stays off.
