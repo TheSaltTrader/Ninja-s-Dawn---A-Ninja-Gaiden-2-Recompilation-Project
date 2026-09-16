@@ -1360,6 +1360,38 @@ land on the pillars with the wrong material. Build 108 puts them behind
 `ngpu_vs_textures` (off) until the pairing / target of those draws is
 understood; run 100 is the default check.
 
+## Runs 101-102 (02:50-03:00) - the ring's shader loads are engine copies
+
+Run 101 (build 109) took the fetch constants from the parser's *final*
+state (`ngpu_ring_final`, the XDK writes some fetch constants after the
+DRAW packet) and got orange pillars; the snapshot state (runs 97-100) gave
+window-textured or grey pillars, and the entry-hook timing of run 94 gave
+stone ones. So the pillar material depends on *when* the draw's constants
+are read, not on which register source - a sign that something the draw
+depends on is written after the draw call returns (the engine fills the
+LOAD_ALU_CONSTANT source memory, or the next material's constants land
+before the GPU would have read this draw's).
+
+Run 102 (build 110) matched the ring's shader loads by block address
+first (`g_vs_by_addr`/`g_ps_by_addr` from `GpuAddr(block)`) and, with
+`ngpu_ring_strict`, refused to draw a draw whose ring load matched nothing:
+
+    ring parse: 1790 draws, 1513 shader loads; by code: vs 402 hit 1388 miss,
+    ps 0 hit 303 miss
+    ring strict: 1388 draws skipped for an unknown vertex shader,
+    303 drawn flat for an unknown pixel shader
+    135 draws through translated shaders
+
+So most loads in the ring point at microcode the engine copied to its own
+memory (no container we dumped lives there and the hashes miss too - the
+copies are not byte-identical: Fable patches them). Strict matching is a
+regression and is off again; the hooked SetShaders pair stays the shader
+source, the ring supplies the ~400 loads it can identify.
+
+Build 111 makes the draw timing switchable (`ngpu_draw_at_exit`, default
+off = the entry-hook timing of run 94, the best pillars) so the exit-hook
+path stays available for the ring work without being the default.
+
 ## Next (state at 02:40, 2026-09-16)
 
 **Where it stands.** The native path (fable2recomp `native-gpu`, build 102)
