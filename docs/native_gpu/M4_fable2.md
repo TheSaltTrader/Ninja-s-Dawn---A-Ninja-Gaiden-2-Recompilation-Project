@@ -1631,6 +1631,18 @@ draw (1,241 lines): the runtime rotates `fable2.log` at 5 MB and the early
 lines (`blit:`, `not used:`, the first UP diagnostics) were lost. Gated on
 the frame's draw count now (build 123).
 
+## Runs 120-121 (04:41-04:47) - the deferred UP draws fire
+
+Build 122: every UP call reaches the deferred draw (121 per frame, none
+lost), and every one fails for two reasons fixed in build 123: the begin's
+returned ring addresses are CPU-form like the ring pointers (`Host()`, the
+0xE0 mirror + 0x1000) and were read through `Phys()` - a page off, all
+indices zero; and the UI vertex shaders (`4C276D80`, `4C277C70`, ...) were
+still "not in ngpu_cache" because the dump-on-sight sat in the unused
+wrapper hook (moved to the begin hook). The chain after build 123: run 122
+dumps them, they are translated and packed, runs 123 / 124 draw them
+(124 presents the last 8888 target).
+
 ## Next (state at 02:40, 2026-09-16)
 
 **Where it stands.** The native path (fable2recomp `native-gpu`, build 102)
