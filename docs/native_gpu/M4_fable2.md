@@ -1233,10 +1233,10 @@ ring held draw N-1's state - run 82 saw `RB_COLOR_MASK = 0` and
 one draw late). Build 92 keeps the entry hook for the parameters and
 runs the native draw from a **completion hook at 0x8221E408** - the
 `addi r1,r1,208` before the shared epilogue, reached after the packet loop
-stores the write pointer. The hook is hand-inserted in the generated
-`fable2_recomp.197.cpp` (git-ignored) as `ngpu_8221E408(...)` with an
-`extern` declaration; the next codegen must add it to
-`config/hooks/native_gpu_trace.toml`:
+stores the write pointer. A hand edit of the generated `fable2_recomp.197.cpp`
+was overwritten by the build's codegen (run 83 drew nothing), so the hook
+is declared in `config/hooks/native_gpu_trace.toml` (build 93) and codegen
+emits it; the entry, which the generator does not produce, is:
 
 ```
 [[midasm_hook]]
