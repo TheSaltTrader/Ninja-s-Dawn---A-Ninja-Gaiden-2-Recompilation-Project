@@ -12,8 +12,12 @@
    runtime as UNORM (D3D12 has no integer-to-float input conversion); the
    scale back to the integer values is inserted at the top of main().
 """
+import os
 import re
 import sys
+
+# recompiler usage name -> input variable name
+USAGE_VAR = {"BLENDINDICES": "BlendIndices", "BLENDWEIGHT": "BlendWeight", "POSITION": "Position", "NORMAL": "Normal", "TEXCOORD": "TexCoord", "COLOR": "Color", "TANGENT": "Tangent", "BINORMAL": "Binormal"}
 
 
 def main():
@@ -23,6 +27,18 @@ def main():
 
     text = re.sub(r"\(b(\d+) (!=|==) 0\)", r"(NGPU_BOOL(\1) \2 0)", text)
     text = re.sub(r"\bi(\d+)\.x\b", r"NGPU_LOOP(\1).x", text)
+
+    # A fetch whose format is a float one, declared by the recompiler as
+    # uint4 because of its usage (BLENDINDICES): the shader uses the values as
+    # floats, so the declaration follows the data.
+    for line in open(layout_path, encoding="utf-8").read().splitlines() if os.path.exists(layout_path) else []:
+        f = line.split()
+        if len(f) < 13 or f[0] != "vfetch" or f[12] != "uint4":
+            continue
+        if int(f[6]) not in (31, 32, 36, 37, 38, 57):
+            continue
+        text = text.replace("in uint4 i%s%s : %s%s" % (USAGE_VAR.get(f[1], f[1]), f[2], f[1], f[2]),
+                            "in float4 i%s%s : %s%s" % (USAGE_VAR.get(f[1], f[1]), f[2], f[1], f[2]))
 
     scales = []
     try:
