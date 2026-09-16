@@ -1681,6 +1681,28 @@ booleans / loops, integer inputs) and dxc, copies the DXIL + sidecar into
 build would bundle XenosRecomp and dxc). Run 127 tests it with the UP
 draws.
 
+## Run 127 (06:28) - runtime translation works; the sky and the water composite appear
+
+Six shaders were translated on first sight, 78-109 ms each (XenosRecomp +
+the C++ fix + dxc), and two of them were picked up by the retry ("loaded"
+lines two seconds later); 13 UP draws per frame render. The UI quad
+shaders (`A108F279E72A396B`, `A00CE53EFBE08040`) were translated within
+100 ms of their miss but the per-frame count still says 112 fail - the
+reason log was spent in the first frame, so build 126 adds a per-frame
+histogram of failure reasons.
+
+The picture changed completely (`shot127.png`): three of the new shaders
+are position-only full-screen passes the offline dumps never caught - two
+sky-dome shaders (world-view-projection + eye position) and the **water
+composite** (`g_WaterConstants`, `g_WaterHeight`, a screen-space quad with
+the half-pixel offset). The sky gradient is right (a dawn sky over the
+castle skyline); the water composite covers the whole market with its
+blue plane, so its "is this pixel water" test passes everywhere - it reads
+the scene depth resolve (`F2B1C000`, 1280x720, flags 0x10, native as
+R32_FLOAT) and/or the scene colour, and one of those reads is wrong for
+it. Next: log the fetch constants of the water pass's draws against the
+resolved textures, and the depth decode the pixel shader applies.
+
 ## Next (state at 02:40, 2026-09-16)
 
 **Where it stands.** The native path (fable2recomp `native-gpu`, build 102)
