@@ -1283,6 +1283,21 @@ last-loaded shaders **at every DRAW packet** (opcodes 0x22/0x34/0x35/0x36),
 and the draw uses that snapshot rather than the register file's final
 state.
 
+## Runs 89-90 (01:45-01:55) - what one draw looks like in the ring
+
+Build 98 traced the packet sequence per draw. A typical engine draw at the
+exit hook reads `T3[22 x4] T3[60 x1] NOP T0[4000 x32] T0[2203 x1] T0[484E
+x18] T0[48BA x6] T0[5000 x3] T0[2102 x1] T3[22 x4]`: the previous draw's
+DRAW_INDX (its header was the trailing packet last time), an XDK marker
+(opcode 0x60, one dword), vertex ALU constants, a couple of state
+registers, fetch constants 13..15 and 31 (the material textures and the
+vertex stream), then this draw's DRAW_INDX - whose data is not complete
+at the hook. Build 97 (snapshot at complete DRAW packets) therefore took
+the previous draw's state (run 88: almost everything at colour mask 0,
+i.e. the depth-only pass's state); build 99 snapshots at the trailing
+DRAW header as well, which is this draw's, and the packet parses again
+in the next range (harmless).
+
 ## Next
 
 1. **Read watched guest pages without faulting.** ReXGlue's memory has the
