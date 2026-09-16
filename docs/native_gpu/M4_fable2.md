@@ -1320,6 +1320,22 @@ in the next range (harmless).
   (`ngpu_state_mask=23`) and logs the words around +0x28DC against the
   ring's RB_COLOR_MASK to check that offset.
 
+## Runs 95-96 (02:15-02:30) - non-indexed draws, first try
+
+Build 103: `DrawVertices` (lists and strips) goes through the translated
+path (no index buffer, `drawInstanced(count, 1, start)`, strip topology in
+the pipeline key, fetch constants from the device shadow because it runs
+at the entry hook), a cached stream shorter than a draw's range is copied
+per draw instead of failing, and the probe pipelines gained GREATER_EQUAL
+variants for reverse-Z frames. Run 95 with the non-indexed draws on:
+huge dark quads over the whole scene - the full-screen and light-volume
+draws landing in the scene target with the wrong shaders or constants
+(entry-hook timing: their own packets are not in the ring yet, and the
+hooked shader pair may be the previous draw's). Build 104 puts them
+behind `ngpu_draw_vertices` (off); the exit-hook approach that fixed the
+indexed draws is the way to do them properly (find `sub_8221C3E8`'s exit
+the same way: the `addi r1` before its shared epilogue).
+
 ## Next (state at 02:20, 2026-09-16)
 
 **Where it stands.** The native path (fable2recomp `native-gpu`, build 102)
@@ -1348,8 +1364,9 @@ FABLE2_TUNE=ngpu_trace=true;ngpu_shadow=true;ngpu_native_draws=true;ngpu_shot_ev
    LESS_EQUAL against the reverse-Z clear and draw nothing. Make the
    translated path copy an uncached index buffer per draw, and revisit
    the range check (streams with a base vertex).
-2. `DrawVertices` (non-indexed) and `DrawVerticesUP` draws are not
-   rendered at all (the light volumes and particles may be among them).
+2. `DrawVertices` (non-indexed) draws render only behind `ngpu_draw_vertices`
+   (build 103: dark quads over the scene - needs an exit hook for
+   `sub_8221C3E8` like the indexed one); `DrawVerticesUP` not at all.
 3. The ring parser's per-draw state snapshot disagrees with the device
    shadow (which is right); understand the XDK's post-draw writes before
    trusting the ring for states. `ngpu_ring_states` stays off.
