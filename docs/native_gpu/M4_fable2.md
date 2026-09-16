@@ -982,6 +982,49 @@ anywhere. The scene is dark with blotchy blue/white patches on walls and
 floor, which looks like the mip levels (level 0 near the hero is crisp,
 distant surfaces black) - run 53 isolates it with `ngpu_tex_mips=false`.
 
+## Runs 53-56 (22:33-22:50) - mips are innocent, render states and formats arrive
+
+- Run 53 (`ngpu_tex_mips=false`) looked exactly like run 52, so the dark
+  blotchy scene is shading, not the new mip chains (mip chains stay on).
+- The draw census (`ngpu_dump_draws`, run 45) gives the material shader's
+  slot layout: 0 = diffuse atlas (DXT1), 1 = DXT5/DXT1, 2 = **DXN** (49,
+  normal map), 3 = 576x768 lightmap, 4 = 64x1 format 29 (1D), 5 = 256x1
+  8888 (1D), 6/7 = 1024x1024 format 23 (shadow depth), 8 = 1280x720 format
+  2 (k_8), 9/11/12/13/15 = 1x1 8888, 14 = 16x16. The translated material
+  shader (`4CE80D10_p` = PS hash 52FE118F450D1448, 800+ draws per frame)
+  reads `g_BackgroundDiffuseTexture` from shared-constant byte 52 = **slot
+  13** and the lightmap from slot 3, in-scattering/extinction 1D LUTs from
+  4/5; its output is `(diffuse^2 * (lightmap * ambient + light)) *
+  brightness` plus fog. The dumped 1x1 at 1FC40000 is **all zeros** in guest
+  memory - a GPU-written texture (resolve target; the plugin's readback is
+  served on demand, never landed for a raw host read), so these draws come
+  out black until M6 owns the resolves. The 64x1 format-29 LUT holds
+  (0xFFFF,0xFFFF,0xFFFF,0) per texel and the 256x1 8888 LUT is all 0xFF -
+  both equal the white placeholder, so the LUT formats changed nothing.
+- Build 68: **render states from the device register shadow** (0x2200..
+  at +0x2934: RB_DEPTHCONTROL +0x2934, RB_BLENDCONTROL0 +0x2938,
+  RB_COLORCONTROL +0x293C, PA_SU_SC_MODE_CNTL +0x2948; 0x2100.. at +0x28CC:
+  RB_COLOR_MASK +0x28DC, RB_ALPHA_REF +0x2904) - pipelines keyed by (pixel
+  hash, state word); the alpha test goes to the translated shaders as
+  c33.x = alpha ref, c33.y = SPEC_CONSTANT_ALPHA_TEST (the shader header now
+  defines `g_SpecConstants()` as the per-draw `g_SpecFlags`; the cache is
+  being re-translated). New formats: DXN -> BC5, DXT5A -> BC4, k_8, k_8_8,
+  16-bit UNORM/SNORM/FLOAT, 32-bit float, 1D textures as Nx1.
+- Run 54: the states took effect but everything front-facing vanished
+  (floor gone, buildings as white back-face shells): the face bit was read
+  the wrong way round. Build 69 flips it (face 0 = clockwise front here)
+  and lets the depth clear follow the frame's depth functions (the state
+  histogram says the market draws test **GREATER_EQUAL with z write** -
+  Fable II uses reverse-Z - so the buffer is cleared to 0).
+- Run 55: the histogram reads `depth 66 blend 00010001 cull 6 mask F` for
+  809 of 850 draws (a few `blend 01060106`, `07010701`, `0D0C0D0C`), yet the
+  scene is mostly white with the clear colour where the floor should be.
+  Run 56 (`ngpu_state=false`) separates the states from the formats; build
+  70 adds `ngpu_state_mask` (1 depth, 2 blend, 4 cull, 8 colour mask, 16
+  alpha) to bisect, and a per-frame histogram of RB_SURFACE_INFO /
+  RB_COLOR_INFO / RB_DEPTH_INFO (+0x2880/84/88) for the M6 render-target
+  map.
+
 ## Next
 
 1. **Read watched guest pages without faulting.** ReXGlue's memory has the
