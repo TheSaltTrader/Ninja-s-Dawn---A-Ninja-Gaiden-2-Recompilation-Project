@@ -737,7 +737,11 @@ in the cache), 0.7 ms per frame, the game at 59-60 fps, and the window
 shows the market drawn by the real shaders (arch, hero, houses, stalls,
 cart). Fallbacks to the probe path: 362 draws whose streams have no
 vertex buffer object (the per-frame ring streams: instance rows), 170 not
-cached, 22 out of range. Plume gained `R10G10B10A2_UNORM` for the Xenos
+cached, 22 out of range. Runs 31-32 (builds 43-44) copy such streams per
+draw into the frame's upload heap (base .. base + max index, swapped like
+the cached ones): **947 draws per frame through the translated shaders**,
+0 stream fallbacks, 179 draws of the 9 rejected shaders, 29 out of range,
+still 60 fps. Plume gained `R10G10B10A2_UNORM` for the Xenos
 2_10_10_10 attributes (`reference/plume`, rebuilt).
 
 ## Runs 23-26 (19:32-19:45) - M4-d: the market is recognisable in the shadow window
