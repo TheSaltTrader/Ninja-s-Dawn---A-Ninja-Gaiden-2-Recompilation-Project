@@ -714,6 +714,41 @@ gpu_shaders.cmd` (absolute path) -> ngpu_vs/ngpu_ps/ngpu_ps_xs.dxil
   render targets / resolve, blend + depth states from the D3DRS shadow, and the DrawVertices /
   DrawVerticesUP paths.
 
+## Runs 34-43 (20:24-21:15) - M5-b textures: data right, one slot wrong
+
+Builds 46-54: a texture cache fed from the 32 fetch constants at
+device+0x480 (dword 1: format, endian, base page; dword 2: size; dword 5
+bits 9-10: dimension - dword 4 has none), Xenos 2D untiling in blocks
+(xenia's TiledOffset2DOuter/Inner, ported), DXT1/3/5 -> BC1/2/3 and
+8_8_8_8, level 0 only, staged in the frame heap (256-byte pitches, 512-byte
+offsets) and copied before the draw; descriptor set 0 holds 4,096 slots;
+the shared-constants block carries each fetch slot's descriptor index and a
+wrap/clamp sampler index. Findings, in order:
+
+- `ngpu_dump_textures` + `tools/native_gpu/texture_decode.py`: the runtime's
+  untiled rows decode to the real market atlas (barrels, windows, roof
+  shingles) - untiling and the 8in16 swap are right.
+- `ngpu_ps_debug` (the flat pixel shader painting interpolants or sampling a
+  slot): TEXCOORD0.xy is smooth, slot 0 sampled with it shows correctly
+  textured houses, so coordinates + textures + sampler + descriptor indices
+  all work through my own pixel shader.
+- The game's material shader (hash 52FE118F450D1448, ~750 of ~800 translated
+  draws per frame) still renders noise. Its samplers: diffuse
+  `g_BackgroundDiffuseTexture` at fetch slot 13 (packoffset c3.y), lightmap
+  `g_TextureLightmapSampler` at slot 3, fog LUTs `g_InScattering` /
+  `g_Extinction` at 4 / 5 (1D, served white). Its pixel constants are live
+  (70 of 224 non-zero). With `ngpu_tex_slots=3` (slots 0-1 only) the noise
+  is gone, so it comes from slot 3 or 13 (runs with masks 8192 and 8 split
+  them).
+- Interpolator packing: the vertex shader exports the lightmap coordinate
+  as `oTexCoord5.xy` while the pixel shader reads `iTexCoord0.zw`; the
+  interpolator tables carry a component mask per entry (bits 12-15 of the
+  word: VS TEXCOORD0 = xy, PS TEXCOORD0 = xyzw), which the recompiler
+  ignores. Whether hardware packs o5.xy into interpolator 0.zw is open.
+- Signed 2_10_10_10 attributes (TEXCOORD1, `comp` = 1) now arrive as the raw
+  dword in a float input and are unpacked in the shader
+  (`unpack2_10_10_10_snorm`), since D3D12 has no R10G10B10A2_SNORM.
+
 ## Run 33 (20:18) - M5-b (placeholders): the game's own pixel shaders run too
 
 Build 45 (`ngpu_xs`): translated pixel shaders (container at object +0x28,
