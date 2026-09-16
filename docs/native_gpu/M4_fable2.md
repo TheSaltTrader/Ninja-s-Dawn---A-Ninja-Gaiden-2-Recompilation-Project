@@ -1350,6 +1350,16 @@ there: run 98 has no dark quads any more, but the arch pillars show the
 wrong texture while they are on (a snapshot / fetch-constant interaction
 still to understand), so `ngpu_draw_vertices` stays off.
 
+## Runs 99-100 (02:40-02:50) - vertex shaders that sample textures
+
+Build 107 let the four texture-sampling vertex shaders translate (the
+header samples level 0 in the vertex stage). Run 99: 30 vertex shaders
+loaded, but the arch pillars are painted with the window texture again -
+the same look as run 98 with the non-indexed draws on: some extra draws
+land on the pillars with the wrong material. Build 108 puts them behind
+`ngpu_vs_textures` (off) until the pairing / target of those draws is
+understood; run 100 is the default check.
+
 ## Next (state at 02:40, 2026-09-16)
 
 **Where it stands.** The native path (fable2recomp `native-gpu`, build 102)
@@ -1391,7 +1401,10 @@ FABLE2_TUNE=ngpu_trace=true;ngpu_shadow=true;ngpu_native_draws=true;ngpu_shot_ev
    resolve) is not run natively; the blit approximates it (Reinhard at
    `ngpu_exposure`). Wire the post-process draws (they draw into the
    1280-pitch 8888 target) and present the swap resolve instead.
-6. Shader coverage: 315 of the 1445 dumped containers compile (the rest
+6. Shader coverage (the texture-sampling vertex shaders translate but
+   are off, `ngpu_vs_textures`: with them on the arch gets the wrong
+   material - probably the same pairing / target question as the
+   non-indexed draws): 315 of the 1445 dumped containers compile (the rest
    are the broken variant dumps); the ring matches ~350 of ~1,200 pixel
    loads per frame by code hash - the misses are containers never seen
    through SetShaders (dump more by playing further) and the `.cpu`
