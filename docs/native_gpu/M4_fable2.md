@@ -1598,6 +1598,24 @@ the instanced props render (`shot115.png`); the pale flat facade on the
 right is still fallback draws. Run 116 (`ngpu_draw_up`, build 120) drew no
 UP draws - the exit's r3 test (fixed in build 121).
 
+## Run 117 (04:32) and the deferred UP draws (build 122)
+
+Run 117 (build 121, the 519-shader cache): 1,250 translated draws, still no
+UP draw - the wrapper `sub_8222E120` is never called by the engine. Fable
+calls the XDK *begin* (`sub_82217DB8`) itself: it reserves the ring area
+(the begin writes the fetch constant and the DRAW packet, returns the
+vertex and index addresses through r10 and [r1+0x54]), fills the arrays
+inline and commits the write pointer from device+0x3484 in its own code -
+there is no function whose exit sees the data complete. Build 122 defers
+the draw instead: at the begin's exit the device object (0x3600 bytes) and
+the two returned ring addresses are copied; at the next draw hook (or the
+present) the draw runs with `LoadV` reading from that snapshot (states,
+fetch constants, shader fields, VS/PS constants all as the engine set them
+for this draw; the ring parser is skipped while it is installed), the
+indices read from the ring copy (16-bit big-endian minus minIndex), the
+vertices through the stream-0 override with 8-in-32. `ngpu_draw_up` runs
+120 and 121 (`ngpu_present_post`).
+
 ## Next (state at 02:40, 2026-09-16)
 
 **Where it stands.** The native path (fable2recomp `native-gpu`, build 102)
