@@ -24,6 +24,8 @@ C f<frame> table=<t> base=<b> base2=<b2> n=<n> list=<addr> len=<bytes>
 R f<frame> surface=<s> index=<i> w0=<word>
 F <frame>
 VD decl=<obj> <64 words of the vertex declaration object>
+VE entry=<ptr> <24 words of the variant entry record>      (once per shader/variant pair)
+VH hdr=<ptr> <24 words of the variant header (entry + [entry+64])>
 ```
 
 - **D** — one draw. `kind`: `DI` = DrawIndexedVertices (`sub_8221DFC0`:

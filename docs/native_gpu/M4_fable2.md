@@ -589,6 +589,35 @@ still renders the real frame. ~300 draws per frame now render natively
 guest memory and the residual page checks; run 18 uploads half-float
 positions as 16-bit data (R16G16B16A16_FLOAT input, byte swap only).
 
+## Native draws runs 18-19 (18:45-19:05) - the copies are bandwidth, not conversion
+
+Run 18 (16-bit-float positions uploaded raw, R16G16B16A16_FLOAT input):
+still 38-39 fps, `vertices 9.2 ms (copy 5.8, convert+store 3.4)` - the
+per-draw path copies ~96 MB of vertex spans per frame (the "upload" skips
+are the 96 MB frame heap running out), so the cost is memory bandwidth on
+data that never changes. Run 19 added a persistent vertex/index cache
+invalidated by the runtime's physical-memory write notifications
+(`RegisterPhysicalMemoryInvalidationCallback` +
+`EnablePhysicalMemoryAccessCallbacks`, exported by rexruntime.dll, missing
+from the installed headers) but never engaged: every draw reported "no
+vertex buffer object" because the object at device+0x30AC+4*stream keeps
+its Xenos fetch constant, not a byte size - +0x18 = address | type,
++0x1C = size in dwords << 2 | endian (0x10004E42 = 5008 dwords, the
+stream's fetch address 4 KB past the object's). Run 20 decodes it.
+
+Run 18's dump settled the draw classes of a market frame (1,947 indexed
+draws): vs 4CEE9520 with variant 4CEE9AE0 draws 585 of them, 4CE085B0
+without a variant (a 108-byte block) 206, 4D058010/4D05A500 146. The
+`.var.xvu` variant containers (153 written) translate 118/153 with the
+recompiler (35 crash it) and compile 0: the variant block's layout is not
+the object container's (literals + code at the header's offsets) - the
+dumped blocks start with the previous allocation's tail, a heap header
+(`ABCDABCD`, sizes, guest pointers) and the literals before the control
+flow program (+256 in 4D067220/4D067FC0), so the patched header points
+the recompiler at garbage. `tools/native_gpu/fetch_rows.py` lists the
+vertex fetch rows of any container; run 20 dumps the raw variant entry and
+header records (`VE`/`VH` lines) to settle the layout.
+
 ## Shader translation, second pass (17:50) — the translator sees the wrong bytes for many shaders
 
 XenosRecomp with duplicate vertex-input declarations removed (a local
