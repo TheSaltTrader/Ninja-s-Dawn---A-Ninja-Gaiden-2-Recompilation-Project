@@ -463,20 +463,29 @@ where a `tfetch` above sampler slot 15 would live. The Fable II side had tested
 more samplers on its own set and seen only membership shuffle — the hypothesis
 was right, it was just invisible there.
 
-**The control, which is the point.** Compare the decoded *program*, not the file
-and not the count:
+**The recompiler's OUTPUT is non-deterministic too**, not just its crashes — the
+Fable II session's finding, reproduced here. One unchanged file, 8 successful
+runs:
 
-    1EE30000   6 statements both builds, hash IDENTICAL
-    1D701000  12 statements both builds, differing by ONE line:
-        - oDepth5.xy         = r0.xy + -g_Consts(9).xy;
-        + oBlendIndices10.xy = r0.xy + -g_Consts(9).xy;
+    8 different file hashes          the output varies run to run
+    statement count 12 every time    stable
+    arithmetic, semantic names normalised away:  IDENTICAL all 8 runs
 
-Same arithmetic, different output *name*. That is what separates this from the
-two false fixes on the Fable side, where padding changed 643→644→640 lines with
-different vertex inputs and trimming broke two working shaders. **No computation
-changes here.** The name moves because output semantics come from the definition
-table a synthetic container lacks, so they are unreliable in *both* builds rather
-than broken by the change.
+**The computation is invariant; every varying element is a semantic name or the
+format decode that follows from it.** So the first version of this section, which
+read a single `oDepth5` → `oBlendIndices10` difference as a sampler effect, was
+reading run-to-run noise.
+
+That same measurement makes *normalised arithmetic* a valid cross-configuration
+instrument — it is stable across the flakiness where file hashes and counts are
+not. Applied properly, 3 successful runs per configuration:
+
+    1D701000   16 samplers: 2aa687bf ×3      32 samplers: 2aa687bf ×3
+    1EE30000   16 samplers: 5a918740 ×3      32 samplers: 5a918740 ×3
+
+Identical across configurations *and* across runs. **The sampler change is
+semantically neutral for the computation** — the conclusion stands, now on
+evidence that survives the non-determinism rather than evidence that never did.
 
 **The "regression" was noise.** `VS 0x1EFD7000` looked like it worked at 16 and
 crashed at 32; repeated, it is 9/10 and 7/10 — both inside the flaky band. It
@@ -488,7 +497,21 @@ out-of-bounds read whose fault depends on heap layout: a XenosRecomp bug that no
 container-level change will fix, only move. A debug build is the next step for
 the vertex-shader faults.
 
-**Still open and ahead of the crashes**, from the Fable II side: a synthetic
-container loses the definition table's literal constants — a real translation
-ends `c255 = (0, 1.0, 0.5, 0)`, a synthetic one has zeros. A shader computing
-with 0.0 where it needs 1.0 is wrong in a way that renders rather than fails.
+### One cause behind all of it: the missing definition table
+
+The Fable II session's account, and it makes the whole evening cohere. The
+recompiler derives input and output semantics — and the literal constants — from
+the container's **definition table**. A synthetic container has none, so it reads
+uninitialised memory in its place. That single cause covers the
+non-deterministic crashes, the varying output, the renamed outputs, the
+unreliable vertex semantics, and `c255 = (0, 1.0, 0.5, 0)` coming back as zeros.
+
+Which means **"synthetic container minus definition table" is not a working
+configuration.** It is a program with correct arithmetic wired to random inputs —
+wrong in the way that renders rather than fails.
+
+Recoverable, though, and better specified than guessing: a `vfetch` instruction
+encodes its fetch slot and format, so the semantics and the decode can be
+*derived from the microcode* rather than invented. That is the next piece of
+work, and NG2's 33 are a second population to test it against — a different
+engine, and the pixel shaders the Fable II dump path does not currently build.
