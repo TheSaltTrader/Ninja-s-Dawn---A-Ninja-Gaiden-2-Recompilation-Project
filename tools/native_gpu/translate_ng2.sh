@@ -27,7 +27,11 @@
 # The comparison is of the RAW recompiler output, before the fix passes, because
 # that is where the non-determinism lives.
 IN="$1"; OUT="$2"; GLOB="${3:-*.xvu}"
-STABLE_RUNS="${STABLE_RUNS:-3}"
+# FIVE, NOT THREE, AND "STABLE IN N RUNS" IS NOT "DETERMINISTIC". Two censuses
+# over the same 80 containers named DIFFERENT containers as unstable, so N runs
+# agreeing is evidence rather than proof. The first column of any report built
+# on this must never be read as a coverage number.
+STABLE_RUNS="${STABLE_RUNS:-5}"
 TIME_CAP_S="${TIME_CAP_S:-120}"
 MEM_CAP_MB="${MEM_CAP_MB:-4096}"
 
@@ -64,7 +68,7 @@ echo "STABILITY        : $STABLE_RUNS runs must agree byte-for-byte"
 echo "CAPS             : ${TIME_CAP_S}s, ${MEM_CAP_MB}MB"
 
 mkdir -p "$OUT/hlsl" "$OUT/dxil" "$OUT/tmp"
-: > "$OUT/errors.txt"; : > "$OUT/failed.txt"; : > "$OUT/unstable.txt"
+: > "$OUT/errors.txt"; : > "$OUT/failed.txt"; : > "$OUT/unstable.txt"; : > "$OUT/stable.txt"
 tr_ok=0; tr_bad=0; unstable=0; c_ok=0; c_bad=0
 cd "$IN" || exit 1
 for f in $GLOB; do
@@ -108,6 +112,11 @@ for f in $GLOB; do
     continue
   fi
 
+  # RECORD THE AGREEMENT COUNT, so an artefact carries its own provenance.
+  # Agreement is unanimous by construction today, so this is always N/N - but if
+  # it ever loosens to a majority rule, "agreed 5/5" and "agreed 3/5, kept the
+  # majority" must not both read as "translated".
+  echo "$f  agreed $STABLE_RUNS/$STABLE_RUNS" >> "$OUT/stable.txt"
   cp "$OUT/tmp/$n.1.hlsl" "$OUT/hlsl/$n.hlsl"
   rm -f "$OUT/tmp/$n".*.hlsl
   tr_ok=$((tr_ok+1))

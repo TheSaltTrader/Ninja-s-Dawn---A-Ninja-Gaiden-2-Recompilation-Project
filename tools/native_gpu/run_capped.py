@@ -22,6 +22,8 @@ import ctypes
 import ctypes.wintypes as w
 import subprocess
 import sys
+import threading
+import time
 
 TIMED_OUT = 124
 MEMORY_CAPPED = 125
@@ -31,6 +33,19 @@ MEMORY_CAPPED = 125
 # code instead - under plain `timeout` MSYS reported 139 for the same thing and
 # that distinction must not be lost by moving to a job object.
 CRASHED = 126
+# Never run the command at all rather than run it with no limit.
+NO_CAP = 127
+
+
+class PROCESS_MEMORY_COUNTERS_EX(ctypes.Structure):
+    _fields_ = [("cb", w.DWORD), ("PageFaultCount", w.DWORD),
+                ("PeakWorkingSetSize", ctypes.c_size_t), ("WorkingSetSize", ctypes.c_size_t),
+                ("QuotaPeakPagedPoolUsage", ctypes.c_size_t),
+                ("QuotaPagedPoolUsage", ctypes.c_size_t),
+                ("QuotaPeakNonPagedPoolUsage", ctypes.c_size_t),
+                ("QuotaNonPagedPoolUsage", ctypes.c_size_t),
+                ("PagefileUsage", ctypes.c_size_t), ("PeakPagefileUsage", ctypes.c_size_t),
+                ("PrivateUsage", ctypes.c_size_t)]
 
 
 class JOBOBJECT_BASIC_LIMIT_INFORMATION(ctypes.Structure):
@@ -97,6 +112,9 @@ k32.OpenProcess.argtypes = [w.DWORD, w.BOOL, w.DWORD]
 k32.CreateToolhelp32Snapshot.argtypes = [w.DWORD, w.DWORD]
 k32.ResumeThread.argtypes = [w.HANDLE]
 k32.CloseHandle.argtypes = [w.HANDLE]
+k32.TerminateProcess.argtypes = [w.HANDLE, ctypes.c_uint]
+psapi = ctypes.WinDLL("psapi", use_last_error=True)
+psapi.GetProcessMemoryInfo.argtypes = [w.HANDLE, ctypes.c_void_p, w.DWORD]
 
 
 def main(argv):
@@ -108,32 +126,61 @@ def main(argv):
     cap = int(argv[1]) * 1024 * 1024
     cmd = argv[cut + 1:]
 
+    # EVERY STEP OF THE CAP IS CHECKED, and a child we could not cap is never
+    # resumed. The first version checked none of them: if any call failed it
+    # resumed the process anyway and ran it with no limit at all, which is the
+    # one outcome this file exists to prevent - and during a 1,740-container
+    # census something did let processes through to 15 and 66 GB while the same
+    # cap held perfectly in isolation. A cap that can fail silently is not a cap.
     job = k32.CreateJobObjectW(None, None)
-    if job:
+    port = None
+    why = None
+    if not job:
+        why = "CreateJobObject failed (%d)" % ctypes.get_last_error()
+    else:
         jl = JOBOBJECT_EXTENDED_LIMIT_INFORMATION()
         jl.BasicLimitInformation.LimitFlags = (
             JOB_OBJECT_LIMIT_PROCESS_MEMORY | JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE)
         jl.ProcessMemoryLimit = cap
-        k32.SetInformationJobObject(job, JobObjectExtendedLimitInformation,
-                                    ctypes.byref(jl), ctypes.sizeof(jl))
-        port = k32.CreateIoCompletionPort(w.HANDLE(-1), None, 0, 1)
-        ap = JOBOBJECT_ASSOCIATE_COMPLETION_PORT()
-        ap.CompletionKey = ctypes.c_void_p(1)
-        ap.CompletionPort = port
-        k32.SetInformationJobObject(job, JobObjectAssociateCompletionPortInformation,
-                                    ctypes.byref(ap), ctypes.sizeof(ap))
-    else:
-        port = None
+        if not k32.SetInformationJobObject(job, JobObjectExtendedLimitInformation,
+                                           ctypes.byref(jl), ctypes.sizeof(jl)):
+            why = "SetInformationJobObject(limits) failed (%d)" % ctypes.get_last_error()
+        else:
+            port = k32.CreateIoCompletionPort(w.HANDLE(-1), None, 0, 1)
+            if not port:
+                why = "CreateIoCompletionPort failed (%d)" % ctypes.get_last_error()
+            else:
+                ap = JOBOBJECT_ASSOCIATE_COMPLETION_PORT()
+                ap.CompletionKey = ctypes.c_void_p(1)
+                ap.CompletionPort = port
+                if not k32.SetInformationJobObject(job, JobObjectAssociateCompletionPortInformation,
+                                                   ctypes.byref(ap), ctypes.sizeof(ap)):
+                    why = "SetInformationJobObject(port) failed (%d)" % ctypes.get_last_error()
+    if why:
+        sys.stderr.write("*** REFUSING TO RUN UNCAPPED: %s\n" % why)
+        if port:
+            k32.CloseHandle(port)
+        if job:
+            k32.CloseHandle(job)
+        return NO_CAP
 
     # Suspended, so the child is inside the capped job before it runs a single
     # instruction; anything it spawns inherits the job and the cap with it.
     CREATE_SUSPENDED = 0x00000004
     p = subprocess.Popen(cmd, creationflags=CREATE_SUSPENDED)
-    if job:
-        h = k32.OpenProcess(0x1F0FFF, False, p.pid)   # PROCESS_ALL_ACCESS
-        if h:
-            k32.AssignProcessToJobObject(job, h)
-            k32.CloseHandle(h)
+    h = k32.OpenProcess(0x1F0FFF, False, p.pid)   # PROCESS_ALL_ACCESS
+    assigned = bool(h) and bool(k32.AssignProcessToJobObject(job, h))
+    err = ctypes.get_last_error()
+    if h:
+        k32.CloseHandle(h)
+    if not assigned:
+        # Still suspended, so it has run nothing. Kill it rather than resume it.
+        sys.stderr.write("*** REFUSING TO RUN UNCAPPED: could not put the child in "
+                         "the capped job (%d) - killed it instead\n" % err)
+        p.kill()
+        k32.CloseHandle(port)
+        k32.CloseHandle(job)
+        return NO_CAP
     # Popen gives no thread handle, so resume every thread of the new process.
     th = k32.CreateToolhelp32Snapshot(0x00000004, p.pid)   # TH32CS_SNAPTHREAD
 
@@ -154,15 +201,47 @@ def main(argv):
         ok = k32.Thread32Next(th, ctypes.byref(te))
     k32.CloseHandle(th)
 
+    # An INDEPENDENT watchdog, because the job object is one mechanism and one
+    # mechanism that can fail silently is what let a translator reach 66 GB.
+    # This samples what the child has actually committed and kills it itself.
+    # If it ever fires, the job object did not do its job - which is a fact
+    # worth knowing rather than a redundancy.
+    watchdog_fired = [False]
+
+    def watch():
+        pmc = PROCESS_MEMORY_COUNTERS_EX()
+        pmc.cb = ctypes.sizeof(pmc)
+        hp = k32.OpenProcess(0x1000 | 0x0400 | 0x0001, False, p.pid)  # QUERY_LIMITED|QUERY|TERMINATE
+        if not hp:
+            return
+        try:
+            while p.poll() is None:
+                if psapi.GetProcessMemoryInfo(hp, ctypes.byref(pmc), ctypes.sizeof(pmc)):
+                    if pmc.PrivateUsage > cap:
+                        watchdog_fired[0] = True
+                        sys.stderr.write("*** WATCHDOG killed %s at %d MB committed - the JOB "
+                                         "OBJECT DID NOT HOLD, which is itself a defect\n"
+                                         % (cmd[0], pmc.PrivateUsage // (1024 * 1024)))
+                        k32.TerminateProcess(hp, 1)
+                        return
+                time.sleep(0.25)
+        finally:
+            k32.CloseHandle(hp)
+
+    wd = threading.Thread(target=watch, daemon=True)
+    wd.start()
+
     timed_out = False
     try:
         rc = p.wait(timeout=secs)
     except subprocess.TimeoutExpired:
         timed_out = True
         p.kill()
+        p.wait()      # do not leave it half-dead while the next one starts
         rc = TIMED_OUT
+    wd.join(timeout=2)
 
-    capped = False
+    capped = watchdog_fired[0]
     if job:
         if port:
             # Drain the job's messages: the OS posted one if it refused an
@@ -175,14 +254,19 @@ def main(argv):
             k32.CloseHandle(port)
         k32.CloseHandle(job)
 
-    if rc >= 0xC0000000 and not timed_out:
-        sys.stderr.write("*** %s CRASHED (0x%08X) on this input - not a refusal\n" % (cmd[0], rc))
-        return CRASHED
+    # The cap is tested BEFORE the crash code: a process killed for breaching
+    # the cap dies with 0xC0000409 (its allocator fails and calls __fastfail),
+    # so testing the crash first reports every capped run as a plain crash and
+    # hides the one fact worth having. Measured: 42E9FAB0_p came back CRASHED
+    # while the cap was working perfectly.
     if capped:
         sys.stderr.write("*** %s allocated past the %d MB cap and was killed - a "
                          "REPRODUCIBLE property of this input, not machine load\n"
                          % (cmd[0], cap // (1024 * 1024)))
         return MEMORY_CAPPED
+    if not timed_out and rc >= 0xC0000000:
+        sys.stderr.write("*** %s CRASHED (0x%08X) on this input - not a refusal\n" % (cmd[0], rc))
+        return CRASHED
     return TIMED_OUT if timed_out else rc
 
 
