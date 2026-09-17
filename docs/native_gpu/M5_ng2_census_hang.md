@@ -208,15 +208,35 @@ carrying most of the volume have stable heads and churning tails. That is
 precisely the population a head-only skip decision would have silently
 corrupted, and it is 23% of the upload volume.
 
-**And 71% is an upper bound, not a measurement.** Every version of this probe
-samples, and a sample can only ever over-report "unchanged", because a byte not
-hashed is a byte that cannot disagree. 4 KB said 94.4%; 8 KB says 71.0%; whole-
-page hashing — what a real skip path must do — can only come in at or below 71%,
-and nothing here says how far below. The redundancy ratio the first probe
-implied (16.9:1) is really 2.4:1 at 8 KB and may be worse at full coverage,
-which matters because that ratio *is* the argument for the design: at 19:1 a CPU
-read replacing a write plus a GPU copy wins clearly; at 2.4:1 it is a genuine
-trade. Hash whole ranges before building anything on the number.
+**71% was an upper bound — so it was re-measured at full coverage.** Any sample
+can only over-report "unchanged", because a byte not hashed is a byte that
+cannot disagree. Hashing the whole range settles it:
+
+| hash coverage | bytes unchanged | ranges unchanged | redundancy |
+|---|---:|---:|---:|
+| head only (4 KB) | 94.4% | 97.8% | 16.8:1 |
+| head + tail (8 KB) | 71.3% | 93.4% | 2.5:1 |
+| **whole range (all)** | **71.2%** | **93.9%** | **2.5:1** |
+
+Head+tail and whole-range agree to within 0.1 points on bytes and 0.5 on ranges.
+**The bound is tight, not merely lower** — 4 KB was the outlier and 8 KB had
+already found the answer. The true redundancy is 2.5:1, not the 16.8:1 the first
+probe implied.
+
+Boot held and improved monotonically as coverage grew — 2.5% → 2.2% → 1.3%
+unchanged — which is what shows the probe changed and the game did not.
+
+The 93.9% of *ranges* against 71.2% of *bytes* is the case for page-granular
+skipping: that gap is entirely partially-dirty large ranges, which range
+granularity would forfeit.
+
+**The hashing cost is NOT in this data, and must not be read out of it.**
+Steady-state frame p50 across the three probes was 26.78, 22.89 and 22.60 ms,
+with a no-probe control at 26.79 — the heaviest hashing has the lowest p50,
+which is nonsense as a cost signal. These runs reach different points in the
+attract sequence, so scene variation dominates. Measuring the cost needs the
+same scene twice, or better, an A/B of the skip itself behind a cvar, where cost
+and benefit appear together in one one-variable control.
 
 **One polarity error to not repeat.** The suggestion that the refresh be
 narrowed to "pages a resolve actually touched" is backwards:
