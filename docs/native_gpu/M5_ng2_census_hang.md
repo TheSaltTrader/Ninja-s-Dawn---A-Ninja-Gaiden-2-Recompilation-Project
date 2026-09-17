@@ -154,6 +154,52 @@ page at frame close, so the next frame re-uploads all of them. Whether it needs
 to invalidate all of them, rather than only pages a resolve actually touched, is
 a question about what the refresh *marks* — not about who waits.
 
+### Is any of it necessary? 94% is not
+
+The question that decides whether a fix can exist, put by the Fable II session
+and worth restating because it reframes the cost: an invalidated page costs
+nothing until something asks for that range. So the refresh is not *adding*
+work — it is removing the ability to skip it. Which means the 17 MB a frame is
+only waste if the bytes being re-read are the same bytes the GPU already had.
+
+  * **different** — NG2 really is rewriting its working set every frame, the
+    refresh is necessary, and the cvar's cost is inherent. No fix exists in
+    shared memory.
+  * **unchanged** — the write-watch was adequate for those pages and the whole
+    volume is redundant. A fix is real and worth designing.
+
+Their `shared_memory_upload_churn=true` probe hashes each re-uploaded range and
+reports every 5 s. Thirteen samples on NG2 at cvar-true:
+
+| phase | bytes unchanged | ranges unchanged | throughput |
+|---|---:|---:|---:|
+| boot / menu (4 samples) | **2.5%** | 27.3% | 15 MB/s |
+| steady-state (9 samples) | **94.4%** | **97.8%** | 529 MB/s |
+
+Steady-state totals: 22,469.6 MB unchanged across 690,726 ranges, against
+1,334.1 MB changed across 15,873 — about 19 redundant bytes for every byte that
+genuinely changed.
+
+The progression is clean rather than noisy: 1%, 16%, 13%, 15% while loading,
+then 87, 92, 93, 94, 96, 97, 97, 97, 93 once rendering. The transition is the
+streaming load finishing. **So the refresh does necessary work during boot and
+almost none in steady state** — which is a constraint on any fix, not just a
+licence to weaken it.
+
+The 529 MB/s also independently confirms the ~520 MB/s derived from the
+`[hitch]` uploads figure: two different instruments, same number.
+
+Caveat worth keeping: the hash covers the first 4 KB of a range, so "unchanged"
+strictly means *its first 4 KB* is unchanged. 97.8% of 690,726 ranges is hard to
+explain by sampling position, but hashing head and tail would close it.
+
+**One polarity error to not repeat.** The suggestion that the refresh be
+narrowed to "pages a resolve actually touched" is backwards:
+`valid_ = valid_and_gpu_written_` *keeps* the GPU-written (resolve-touched)
+pages and drops the CPU-uploaded ones. Narrowing that way is either a no-op or
+the inverse of the point. The refresh is not about resolves — it is a workaround
+for CPU writes the write-watch misses.
+
 ### The dev workaround
 
 `--clear_memory_page_state=false` on the command line. Character models degrade,
