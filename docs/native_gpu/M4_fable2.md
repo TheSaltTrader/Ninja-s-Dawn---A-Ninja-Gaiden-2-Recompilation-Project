@@ -2366,10 +2366,33 @@ of the ratio - exactly the blind spot flagged earlier. They are the only
 unaccounted-for submissions in the frame, and the ground is the only
 unaccounted-for geometry.
 
-**Next milestone.** Hook that path and give it a native draw. Two things have to
-be worked out: where the tessellated draw's parameters live (the emitters take
-the device in r3 and a per-draw structure pointer in r5, which changes every
-call), and what the Xenos tessellator is being asked to do, since the vertex
-shader for a tessellated draw reads its control points rather than a plain
-vertex buffer. `ngpu_probe_x` / `ngpu_probe_y` and the library-draw report are
-the instruments for it.
+**CORRECTION, run 261.** Reporting the registers from inside those emitters
+kills the tessellation reading. `VGT_HOS_MAX_TESS_LEVEL` is 0 on every one of
+them, so they are not tessellated draws and the rate agreement with
+`SetRenderState_TESSELLATIONMODE` is coincidence. Their surface registers read
+14000500/00020000 and 04020118/00000000 - the small auxiliary targets the
+census already accounts for (1, 12 and 40 draws), not the presented scene. So
+these 24 draws are real and are outside our hooks, but they are not the ground
+either.
+
+Note also that the entry hook fires BEFORE the emitter writes its packet, so
+the DRAW packet it reports is the previous one. An exit hook is needed to read
+a library draw's own packet.
+
+**Where this leaves the ground.** Every specific explanation tried has been
+eliminated by experiment: missing submission, wrong render target, depth
+rejection, colour masking, blending, occlusion by the quad pass, the per-frame
+target clear, each of the six busiest scene shaders, the second full-size pass,
+and now the library emitters. What survives is the plain statement that in the
+presented pass nothing writes those pixels, confirmed by flat-colour capture
+which does not depend on any CPU-side model.
+
+The next thing to try is the one instrument not yet built: compare against the
+shared plugin, which renders the plaza correctly. A per-frame count of draws it
+executes, and the vertex shader hash of whichever draw covers the plaza pixel
+in ITS frame, would name the shader directly instead of by elimination. That
+means a small change to the shared plugin's command processor, which is shared
+with Ninja Gaiden 2 and must be coordinated - see the shared-tree hazard note.
+The emitters take the device in r3 and a per-draw structure pointer in r5,
+which changes every call; that structure is where a library draw's parameters
+live if anyone needs to hook this path later.
