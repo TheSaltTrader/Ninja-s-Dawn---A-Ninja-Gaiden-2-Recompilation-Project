@@ -245,6 +245,54 @@ pages and drops the CPU-uploaded ones. Narrowing that way is either a no-op or
 the inverse of the point. The refresh is not about resolves — it is a workaround
 for CPU writes the write-watch misses.
 
+### The page-skip A/B, and a correction to the freeze claim
+
+The Fable II session built `shared_memory_upload_skip_unchanged`: hash each 4 KB
+page, skip both the memcpy and the GPU copy for pages identical to the ones last
+uploaded, and copy only runs of dirty pages. Page-granular because 93.9% of
+*ranges* were unchanged against 71.2% of *bytes* — the volume lives in large
+ranges with a few dirty pages, which range granularity would forfeit.
+
+A/B on one build, one cvar apart:
+
+| check | result |
+|---|---|
+| eviction counter non-zero (safety) | **pass** — 11,144 hashes evicted by a GPU write |
+| visual: models, textures, flash | **pass** — clean, and reached the Ch1 cinematic at 60 fps |
+| upload volume | **pass** — 71–74% saved in steady state, 46.5 GB avoided |
+| frame time | **no clean difference** |
+| freeze still at 13 swaps? | **unanswerable — see below** |
+
+Aligned by sample ordinal (the attract sequence is deterministic from boot), the
+steady-state band saved 57, 58, 58, 74, 74, 74, 73, 71, 71 percent against the
+71.2% the whole-range probe predicted. Whole-run including boot is 46.4%, lower
+only because boot genuinely rewrites everything — the mechanism degrades to
+current behaviour exactly when the refresh is doing necessary work.
+
+**The correction.** Neither leg froze. Skip-on ran 28 swaps and skip-off 41,
+both with zero `NtSignal` stalls, and both were stopped by hand rather than
+dying. Worse for the earlier claim: the freeze stopped reproducing two builds
+*before* the skip existed —
+
+| plugin build | outcome |
+|---|---|
+| `AllPagesGpuWritten` fix | froze, 13 swaps, 1 stall |
+| churn head-only | froze, 13 swaps, 1 stall |
+| churn head+tail | 19 swaps, **0 stalls** |
+| churn whole-range | 23 swaps, 0 stalls |
+| skip on / skip off | 28 / 41 swaps, 0 stalls |
+
+So **the freeze half of the `clear_memory_page_state` finding is unreproduced,
+not explained.** The cvar result still stands on upload volume, which is
+measured and repeatable. But "cvar true froze at 13–14 twice, cvar false lived"
+rested on a freeze that four consecutive reproductions made look deterministic
+and that later builds stopped showing. Either something between the head-only
+and head+tail builds fixed it, or it was always intermittent and every
+attribution made that morning — including this document's — was over-confident.
+
+The test that would settle it is re-running the head-only build, which froze
+twice, and seeing whether it still does.
+
 ### The dev workaround
 
 `--clear_memory_page_state=false` on the command line. Character models degrade,
