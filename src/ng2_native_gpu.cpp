@@ -6,6 +6,7 @@
 #include <chrono>
 #include <cstdint>
 #include <cstdlib>
+#include <cstring>
 #include <string>
 #include <thread>
 
@@ -110,6 +111,12 @@ std::atomic<uint64_t> g_idx_physical_ok{0};
 std::atomic<uint64_t> g_idx_both{0};
 std::atomic<uint64_t> g_idx_neither{0};
 std::atomic<uint64_t> g_idx_checked{0};
+std::atomic<uint64_t> g_idx_faulted{0};  // both interpretations faulted on read
+// The first draw's inputs, for the report. Logging from the draw callback does
+// not reach the file, so what the probe was HANDED has to travel this way.
+std::atomic<uint32_t> g_idx_sample_base{0};
+std::atomic<uint32_t> g_idx_sample_words{0};
+std::atomic<uint32_t> g_idx_sample_endian{0};
 
 // Read once at Start(), not per draw: this is on the per-draw path.
 bool g_check_inputs = false;
@@ -135,9 +142,12 @@ std::string Totals() {
   if (const uint64_t n = g_idx_checked.load()) {
     // Named as a verdict, not as four counters: which address space the index
     // base lives in is the question, so the line answers it.
-    idx = fmt::format(" | INDEX BASE of {} draws: {} virtual-only, {} physical-only, {} both, {} neither",
-                      n, g_idx_virtual_ok.load(), g_idx_physical_ok.load(),
-                      g_idx_both.load(), g_idx_neither.load());
+    idx = fmt::format(
+        " | INDEX BASE of {} draws: {} virtual-only, {} physical-only, {} both, {} neither,"
+        " {} FAULTED | first sample: base {:08X} words {} endian {}",
+        n, g_idx_virtual_ok.load(), g_idx_physical_ok.load(), g_idx_both.load(),
+        g_idx_neither.load(), g_idx_faulted.load(), g_idx_sample_base.load(),
+        g_idx_sample_words.load(), g_idx_sample_endian.load());
   }
   return fmt::format("{} draws ({} indexed, {} auto), {} indices{}{}{}{}{}",
                      g_draws.load(), g_indexed.load(), g_auto.load(), g_indices.load(), serial, idx,
@@ -188,15 +198,48 @@ void Reporter(unsigned every_s) {
 // frame does that - but it can prove one WRONG, cheaply, before any renderer
 // depends on it.
 
+// Read guest bytes WITHOUT trusting the address.
+//
+// TranslateVirtual and TranslatePhysical are arithmetic - base + offset - with
+// no bounds check and no mapping check, so a bogus index_base yields a wild
+// pointer that faults on read. This probe exists precisely BECAUSE the address
+// space of index_base is unknown, so by construction it will be handed
+// addresses that are wrong in one interpretation or the other. Dereferencing
+// them unguarded killed the game: 227,800 draws in, no shutdown, no stall, no
+// error - the process simply stopped, and the instrument took the subject with
+// it.
+//
+// Structured exception handling rather than a range check alone, because a
+// range check can only reject what it knows about: guest memory is sparsely
+// mapped, so an address inside the arena can still be unmapped. This is the one
+// place in this file where a fault is an EXPECTED OUTCOME and must be a datum,
+// not a crash.
+bool ReadGuestBytes(const uint8_t* p, uint32_t bytes, uint8_t* out) {
+  if (!p || !bytes) return false;
+#if defined(_WIN32)
+  __try {
+    for (uint32_t i = 0; i < bytes; ++i) out[i] = p[i];
+    return true;
+  } __except (EXCEPTION_EXECUTE_HANDLER) {
+    return false;  // unmapped or wrong interpretation - a result, not a failure
+  }
+#else
+  std::memcpy(out, p, bytes);
+  return true;
+#endif
+}
+
 bool PlausibleIndexRun(const uint8_t* p, uint32_t count_words, bool big_endian) {
   if (!p) return false;
   const uint32_t n = count_words < 32u ? count_words : 32u;
   if (n < 3) return false;
+  uint8_t buf[64];
+  if (!ReadGuestBytes(p, n * 2, buf)) return false;
   uint32_t max_index = 0;
   bool all_zero = true, all_ff = true;
   for (uint32_t i = 0; i < n; ++i) {
-    const uint16_t v = big_endian ? uint16_t((p[i * 2] << 8) | p[i * 2 + 1])
-                                  : uint16_t((p[i * 2 + 1] << 8) | p[i * 2]);
+    const uint16_t v = big_endian ? uint16_t((buf[i * 2] << 8) | buf[i * 2 + 1])
+                                  : uint16_t((buf[i * 2 + 1] << 8) | buf[i * 2]);
     if (v != 0) all_zero = false;
     if (v != 0xFFFF) all_ff = false;
     if (v > max_index) max_index = v;
@@ -208,16 +251,47 @@ bool PlausibleIndexRun(const uint8_t* p, uint32_t count_words, bool big_endian) 
 }
 
 void CheckIndexBuffer(const GpuDrawRecord* rec) {
+  if (!rec->index_base || !rec->index_size_words) return;
+
+  // SAY WHAT WE ARE ABOUT TO TOUCH, BEFORE TOUCHING IT.
+  //
+  // The first version of this probe killed the game on the very first indexed
+  // draw - 229,994 draws in, no shutdown, no stall, no error line - and left
+  // nothing to diagnose with: the counters showed 1 checked and 0 classified,
+  // which says only "it died between those two points". A probe into memory of
+  // unknown validity has to log its inputs BEFORE dereferencing them, or its
+  // own crash is the one event it cannot report.
+  // Recorded, not logged. A REXLOG_INFO placed here produced NOTHING in the log
+  // while g_idx_checked proved the function ran 4,679,029 times - logging from
+  // inside the plugin's draw callback does not reach the file, for reasons not
+  // worth chasing. The reporter thread demonstrably logs, so the sample is
+  // stashed and printed from there.
+  if (!g_idx_sample_base.load(std::memory_order_relaxed)) {
+    g_idx_sample_base.store(rec->index_base, std::memory_order_relaxed);
+    g_idx_sample_words.store(rec->index_size_words, std::memory_order_relaxed);
+    g_idx_sample_endian.store(rec->index_endian, std::memory_order_relaxed);
+  }
+
   auto* memory = REX_KERNEL_MEMORY();
-  if (!memory || !rec->index_base || !rec->index_size_words) return;
+  if (!memory) return;
   g_idx_checked.fetch_add(1, std::memory_order_relaxed);
 
   // index_endian 2 is the Xenos 8-in-16 swap, i.e. big-endian halfwords.
   const bool big_endian = rec->index_endian != 0;
-  const bool v = PlausibleIndexRun(memory->TranslateVirtual<const uint8_t*>(rec->index_base),
-                                   rec->index_size_words, big_endian);
-  const bool p = PlausibleIndexRun(memory->TranslatePhysical<const uint8_t*>(rec->index_base),
-                                   rec->index_size_words, big_endian);
+  bool v = false, p = false;
+#if defined(_WIN32)
+  // The TRANSLATION itself is guarded too, not only the read: it is pointer
+  // arithmetic on an address this probe exists because it cannot vouch for.
+  __try {
+    v = PlausibleIndexRun(memory->TranslateVirtual<const uint8_t*>(rec->index_base),
+                          rec->index_size_words, big_endian);
+    p = PlausibleIndexRun(memory->TranslatePhysical<const uint8_t*>(rec->index_base),
+                          rec->index_size_words, big_endian);
+  } __except (EXCEPTION_EXECUTE_HANDLER) {
+    g_idx_faulted.fetch_add(1, std::memory_order_relaxed);
+    return;
+  }
+#endif
   if (v && p) g_idx_both.fetch_add(1, std::memory_order_relaxed);
   else if (v) g_idx_virtual_ok.fetch_add(1, std::memory_order_relaxed);
   else if (p) g_idx_physical_ok.fetch_add(1, std::memory_order_relaxed);
