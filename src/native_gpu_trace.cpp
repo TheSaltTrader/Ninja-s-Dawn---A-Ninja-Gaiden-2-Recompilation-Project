@@ -14,6 +14,7 @@
 #include <mutex>
 
 REXCVAR_DEFINE_BOOL(ngpu_trace, false, "GPU", "Log a call census of the Direct3D library entry points every 10 s");
+REXCVAR_DEFINE_INT32(ngpu_trace_frame, 600, "GPU", "Frame after which the one verbatim frame transcript is dumped - set past the menus so it captures a real 3D frame, not the title");
 
 namespace {
 constexpr int kHooks = 108;
@@ -134,6 +135,13 @@ uint64_t g_last[kHooks];
 std::atomic<int> g_nsamples[kHooks];
 uint32_t g_samples[kHooks][kSamples][8];
 std::atomic<uint32_t> g_tick{0};
+constexpr uint32_t kFrameMarkerAddr = 0x837452C0;
+constexpr int kSeqMax = 8192;
+uint16_t g_seq[kSeqMax];
+int g_seq_n = 0;
+bool g_seq_done = false;
+uint64_t g_frame_no = 0;
+uint64_t g_frame_base[kHooks];
 std::mutex g_dump_mutex;
 auto g_t0 = std::chrono::steady_clock::now();
 double g_next_dump = 10.0;
@@ -163,6 +171,37 @@ void Dump() {
   }
 }
 
+void FrameEnd() {
+  std::lock_guard<std::mutex> lock(g_dump_mutex);
+  ++g_frame_no;
+  // One transcript, once, after warmup - the title screen is not the frame
+  // worth recording and the first frames are atypical.
+  if (!g_seq_done && g_frame_no > REXCVAR_GET(ngpu_trace_frame) && g_seq_n > 0) {
+    g_seq_done = true;
+    REXLOG_INFO("[ngpu] FRAME TRANSCRIPT, frame {}, {} calls in order", g_frame_no, g_seq_n);
+    // Run-length encoded: order is preserved exactly, repeats collapse so
+    // the log stays readable. "Ax12" means twelve consecutive calls to A.
+    std::string line;
+    int run = 1;
+    for (int k = 1; k <= g_seq_n; ++k) {
+      if (k < g_seq_n && g_seq[k] == g_seq[k - 1]) { ++run; continue; }
+      const uint32_t a = kEntries[g_seq[k - 1]].addr;
+      line += run > 1 ? fmt::format(" {:08X}x{}", a, run) : fmt::format(" {:08X}", a);
+      run = 1;
+      if (line.size() > 900) { REXLOG_INFO("[ngpu] seq{}", line); line.clear(); }
+    }
+    if (!line.empty()) REXLOG_INFO("[ngpu] seq{}", line);
+    REXLOG_INFO("[ngpu] PER-FRAME counts for that frame:");
+    for (int i = 0; i < kHooks; ++i) {
+      const uint64_t c = g_count[i].load(std::memory_order_relaxed);
+      const uint64_t d = c - g_frame_base[i];
+      if (d) REXLOG_INFO("[ngpu] frame sub_{:08X} {} x{}", kEntries[i].addr, kEntries[i].label, d);
+    }
+  }
+  for (int i = 0; i < kHooks; ++i) g_frame_base[i] = g_count[i].load(std::memory_order_relaxed);
+  g_seq_n = 0;
+}
+
 inline void Trace(int i, PPCRegister& r3, PPCRegister& r4, PPCRegister& r5, PPCRegister& r6,
                   PPCRegister& r7, PPCRegister& r8, PPCRegister& r9, PPCRegister& r10) {
   if (!REXCVAR_GET(ngpu_trace)) return;
@@ -174,6 +213,11 @@ inline void Trace(int i, PPCRegister& r3, PPCRegister& r4, PPCRegister& r5, PPCR
     a[4] = r7.u32; a[5] = r8.u32; a[6] = r9.u32; a[7] = r10.u32;
     g_nsamples[i].store(ns + 1, std::memory_order_release);
   }
+  if (!g_seq_done) {
+    std::lock_guard<std::mutex> lock(g_dump_mutex);
+    if (g_seq_n < kSeqMax) g_seq[g_seq_n++] = static_cast<uint16_t>(i);
+  }
+  if (kFrameMarkerAddr && kEntries[i].addr == kFrameMarkerAddr) FrameEnd();
   if ((g_tick.fetch_add(1, std::memory_order_relaxed) & 1023) == 0) Dump();
 }
 }  // namespace
