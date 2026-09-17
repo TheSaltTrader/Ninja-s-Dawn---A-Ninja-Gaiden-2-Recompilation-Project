@@ -2332,3 +2332,44 @@ whether its 199 draws split between the scene target and the 1040x1040 shadow
 map in a way that leaves the scene ones degenerate. `ngpu_probe_*` plus
 `ngpu_only_vs` is the pair of instruments for it, with the caveat about signed
 shader ids above.
+
+### Runs 255-260: the draws our hooks never see
+
+Run 255 upgraded the probe from a bounding box to a real point-in-triangle test
+against each draw's own transformed geometry, and that immediately corrected a
+false lead: the draw that "covered" the plaza with all 256 of its triangles
+belongs to the 000C0000 pass, which uses a DIFFERENT CAMERA, so it covers that
+point in its own image, not in the view. A per-draw probe must be read together
+with the target the draw binds.
+
+Merging the two full-size targets (`ngpu_rt_key_color=false`, run 256) does not
+bring the ground in. It brings the other pass's content in - a red UI panel
+appears over the left-hand buildings - so those two passes are genuinely
+separate images and the default stays as it was.
+
+In the presented pass, the triangle probe finds only a few small triangles over
+the plaza, from skinned and instanced shaders. That agrees with the flat-colour
+capture, which is GPU ground truth: nothing writes those pixels.
+
+**Where the missing draws are.** Ranking the traced functions by call rate turns
+up a family that moves together at about twelve per frame: `sub_82B9EEE0` and
+`sub_82B9F038`, both labelled DRAW_INDX_2 emitters in the library census, plus
+the ring writers `sub_82196628` and `sub_82196750`. Their rate tracks
+`SetRenderState_TESSELLATIONMODE`, which the game calls about eleven times a
+frame. Reporting from inside those two emitters (run 260) gives 24 draws a
+frame, none of them through any of the three wrappers the native path hooks,
+all firing while no native render target is bound.
+
+That is the whole gap. The coverage metric reads 91-99% because its denominator
+counts only the hooked wrappers, so these 24 draws are missing from both halves
+of the ratio - exactly the blind spot flagged earlier. They are the only
+unaccounted-for submissions in the frame, and the ground is the only
+unaccounted-for geometry.
+
+**Next milestone.** Hook that path and give it a native draw. Two things have to
+be worked out: where the tessellated draw's parameters live (the emitters take
+the device in r3 and a per-draw structure pointer in r5, which changes every
+call), and what the Xenos tessellator is being asked to do, since the vertex
+shader for a tessellated draw reads its control points rather than a plain
+vertex buffer. `ngpu_probe_x` / `ngpu_probe_y` and the library-draw report are
+the instruments for it.
