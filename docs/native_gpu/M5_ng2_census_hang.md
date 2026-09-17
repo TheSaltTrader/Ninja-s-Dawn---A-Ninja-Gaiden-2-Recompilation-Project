@@ -269,10 +269,10 @@ steady-state band saved 57, 58, 58, 74, 74, 74, 73, 71, 71 percent against the
 only because boot genuinely rewrites everything — the mechanism degrades to
 current behaviour exactly when the refresh is doing necessary work.
 
-**The correction.** Neither leg froze. Skip-on ran 28 swaps and skip-off 41,
-both with zero `NtSignal` stalls, and both were stopped by hand rather than
-dying. Worse for the earlier claim: the freeze stopped reproducing two builds
-*before* the skip existed —
+**The correction, and then the correction to the correction.** Neither leg of
+the A/B froze — skip-on ran 28 swaps and skip-off 41, both stopped by hand. That
+looked like the freeze had stopped reproducing two builds *before* the skip
+existed:
 
 | plugin build | outcome |
 |---|---|
@@ -282,16 +282,43 @@ dying. Worse for the earlier claim: the freeze stopped reproducing two builds
 | churn whole-range | 23 swaps, 0 stalls |
 | skip on / skip off | 28 / 41 swaps, 0 stalls |
 
-So **the freeze half of the `clear_memory_page_state` finding is unreproduced,
-not explained.** The cvar result still stands on upload volume, which is
-measured and repeatable. But "cvar true froze at 13–14 twice, cvar false lived"
-rested on a freeze that four consecutive reproductions made look deterministic
-and that later builds stopped showing. Either something between the head-only
-and head+tail builds fixed it, or it was always intermittent and every
-attribution made that morning — including this document's — was over-confident.
+That reading was wrong, and N=3 twice settles it. Same plugin, same detector,
+same 45-swap target, one cvar apart:
 
-The test that would settle it is re-running the head-only build, which froze
-twice, and seeing whether it still does.
+| `shared_memory_upload_churn` | result |
+|---|---|
+| **off** | **FROZE 3/3** — at 13, 12, 17 swaps |
+| **on** | **alive 3/3** — all reached 45 swaps, 0 stalls |
+
+**The freeze never stopped. The diagnostic was suppressing it.** Sorted by probe
+state instead of by build, every run of the day falls into line:
+
+    probe off:  sharedtree 14, fix_test 13, repeat 13/12/17   ALL FROZE
+    probe on:   head-only 13 (froze), head+tail 19, whole 23,
+                skip_on 28, skip_off 41, churnon 45/45/45     only head-only froze
+
+**A dose-response curve, which is the real finding.** Head-only hashes 4 KB per
+range and the freeze survives it. Head+tail hashes 8 KB and it starts escaping.
+Whole-range hashes everything and it never froze in five runs. The freeze
+disappears as the probe grows more expensive — so **it is timing-sensitive**:
+something in the upload path races, and anything that slows that path down hides
+it.
+
+Consequences worth stating plainly:
+
+- **Any fix evaluated with the probe on will look like it works.** Two did.
+- The skip A/B's "neither froze" says nothing about the skip. Its upload-volume
+  result (71–74%) is unaffected — that came from the skip's own counters and the
+  aligned hitch lines, not from survival.
+- The original `clear_memory_page_state` result had no probe running, so the
+  cvar genuinely changes it. But the *mechanism* proposed for it — upload volume
+  — is not established, because volume and latency move together when that cvar
+  is turned off.
+
+The discriminator is a probe that adds LATENCY without doing useful work: a
+fixed delay in the upload path, cvar-gated, no hashing. If a pure delay
+suppresses the freeze it is a race and the volume story is dead; if only real
+hashing suppresses it, touching those pages matters and it is a different bug.
 
 ### The dev workaround
 
