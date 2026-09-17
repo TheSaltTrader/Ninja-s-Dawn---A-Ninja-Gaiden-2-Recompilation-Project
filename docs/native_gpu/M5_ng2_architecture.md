@@ -544,3 +544,35 @@ Semantic *names* are not recoverable and do not need to be: the native path bind
 vertex buffers from the fetch constants and builds its input layout from the same
 translation's sidecar, so the names only have to be self-consistent. That is why
 varying names were harmless and the varying **format decode** was not.
+
+### Resolved: both fixes together, 100 of 100
+
+The control first — the Fable II session's vfetch scan against **NG2's own**
+containers, because a generator validated on another title's layout is not
+validated here:
+
+    68 MATCH, 0 MISMATCH
+    field18 = 1 in all 411 NG2 vertex containers, same as Fable II
+
+NG2's element table is laid out identically and the offset is confirmed rather
+than assumed. (343 of the 411 declare zero elements and so skip the comparison;
+no mismatch anywhere it applies.)
+
+Then both fixes, 10 runs per shader:
+
+| | vertex shaders | pixel shaders | total |
+|---|---|---|---|
+| element table + 16 samplers | **10/10, one output hash each** | 0/10 | 50/100 |
+| element table + 32 samplers | 10/10, one hash | **10/10, one hash** | **100/100** |
+
+**The two bugs are orthogonal.** The element table does nothing for pixel
+shaders — they are still 0/10 at 16 samplers with it in place — and the sampler
+count does nothing for vertex shaders. Each is necessary, neither is sufficient,
+and together they are complete on this population: every shader translates every
+time, byte-identical across ten runs.
+
+So NG2's shader path is finished end to end: **607 from real containers, and the
+uncontained ones translating deterministically through synthesis.**
+
+Both were reproduced on a different engine from the one they were found on,
+which is what makes them fixes rather than local workarounds.

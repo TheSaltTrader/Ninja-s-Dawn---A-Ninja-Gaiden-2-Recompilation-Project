@@ -1,23 +1,49 @@
-"""Build a synthetic XenosRecomp container around raw microcode.
+"""Synthetic XenosRecomp container, WITH a derived vertex element table.
 
-A Python twin of synth::BuildContainer in native_gpu_present.cpp, so the header
-can be iterated against the real recompiler offline instead of one game run at
-a time. Keep the two in step: this is the one that gets experimented on.
+The first version stopped at the 24-byte Shader struct. A vertex shader header
+is a VertexShader, which extends it:
+
+    struct VertexShader : Shader {
+        field18; vertexElementCount; field20;
+        vertexElementsAndInterpolators[];   // elements at [field18 + i],
+    };                                      // interpolators after them
+    struct VertexElement { address : 12; usage : 4; usageIndex : 4; };
+    struct Interpolator  { usageIndex : 4; usage : 4; };
+
+XenosRecomp looks every vertex fetch up in that array BY INSTRUCTION ADDRESS and
+asserts when the lookup misses. Without it the recompiler reads the constant
+table as the array - which is where the non-deterministic output and the random
+segfaults came from: a program with correct arithmetic wired to random inputs.
+
+The addresses are recoverable from the microcode (vfetch_scan), so the table can
+be derived rather than guessed. The NAMES cannot be, and do not need to be: the
+native path binds vertex buffers from fetch constants and builds its input
+layout from this same translation's sidecar, so the semantics only have to be
+unique and self-consistent.
 """
-import struct, sys
+import struct, sys, os
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from vfetch_scan import scan
+
+USAGE_TEXCOORD = 5
 
 
-def build(microcode: bytes, is_vertex: bool = True, pad: int = 0) -> bytes:
+def build(microcode, is_vertex=True, pad=0, n_interpolators=8):
     names = ["g_Consts"]
     names += ["g_Sampler%d" % i for i in range(16)]
     names += ["g_Bool%d" % i for i in range(32)]
     n = len(names)
 
+    fetches = scan(microcode) if is_vertex else []
+    n_elems = len(fetches)
+
     HEADER = 0x24
-    SHADER_STRUCT = 24
     shader_off = HEADER
-    ctc_off = shader_off + SHADER_STRUCT
-    ct_off = ctc_off + 4              # offsets inside the table are relative to here
+    # Shader(24) + field18/count/field20(12) + the array
+    shader_bytes = 24 + 12 + (n_elems + n_interpolators) * 4 if is_vertex else 24
+    ctc_off = shader_off + shader_bytes
+    ct_off = ctc_off + 4
     ct_size = 28
     info_off = ct_size
     info_bytes = n * 20
@@ -33,27 +59,40 @@ def build(microcode: bytes, is_vertex: bool = True, pad: int = 0) -> bytes:
     out = bytearray(vsize + psize)
 
     def p32(at, x):
-        struct.pack_into('>I', out, at, x)
+        struct.pack_into(">I", out, at, x & 0xFFFFFFFF)
 
     def p16(at, x):
-        struct.pack_into('>H', out, at, x)
+        struct.pack_into(">H", out, at, x & 0xFFFF)
 
     p32(0x00, 0x102A1100 | (1 if is_vertex else 0))
     p32(0x04, vsize)
     p32(0x08, psize)
     p32(0x0C, 0)
     p32(0x10, ctc_off)
-    p32(0x14, 0)                      # no definition table
+    p32(0x14, 0)
     p32(0x18, shader_off)
     p32(0x1C, 0)
     p32(0x20, 0)
 
-    p32(shader_off + 0x00, 0)         # physicalOffset
-    p32(shader_off + 0x04, psize)     # size
+    p32(shader_off + 0x00, 0)                      # physicalOffset
+    p32(shader_off + 0x04, len(microcode))         # size: the real program, never the padding
     p32(shader_off + 0x08, 0)
-    p32(shader_off + 0x0C, 0)         # svPos register 0
+    p32(shader_off + 0x0C, 0)                      # svPos register 0
     p32(shader_off + 0x10, 0)
-    p32(shader_off + 0x14, 16 << 5)   # interpolator count 16
+    p32(shader_off + 0x14, n_interpolators << 5)   # interpolatorInfo
+
+    if is_vertex:
+        p32(shader_off + 0x18, 0)                  # field18: elements start at [0]
+        p32(shader_off + 0x1C, n_elems)            # vertexElementCount
+        p32(shader_off + 0x20, n_interpolators)    # field20
+        arr = shader_off + 0x24
+        for i, addr in enumerate(fetches):
+            # address:12 | usage:4 | usageIndex:4 - unique per element, which is
+            # all the recompiler needs to declare each input once.
+            p32(arr + i * 4, (addr & 0xFFF) | (USAGE_TEXCOORD << 12) | ((i & 0xF) << 16))
+        for i in range(n_interpolators):
+            # Interpolator packs usageIndex first, then usage.
+            p32(arr + (n_elems + i) * 4, (i & 0xF) | (USAGE_TEXCOORD << 4))
 
     p32(ctc_off, ct_size + info_bytes + (cursor - (info_off + info_bytes)))
     p32(ct_off + 0x00, ct_size)
@@ -67,11 +106,11 @@ def build(microcode: bytes, is_vertex: bool = True, pad: int = 0) -> bytes:
     for i in range(n):
         at = ct_off + info_off + i * 20
         if i == 0:
-            rset, idx, cnt = 2, 0, (256 if is_vertex else 224)   # Float4
+            rset, idx, cnt = 2, 0, (256 if is_vertex else 224)
         elif i <= 16:
-            rset, idx, cnt = 3, i - 1, 1                          # Sampler
+            rset, idx, cnt = 3, i - 1, 1
         else:
-            rset, idx, cnt = 0, i - 17, 1                         # Bool
+            rset, idx, cnt = 0, i - 17, 1
         p32(at + 0x00, name_at[i])
         p16(at + 0x04, rset)
         p16(at + 0x06, idx)
@@ -87,11 +126,3 @@ def build(microcode: bytes, is_vertex: bool = True, pad: int = 0) -> bytes:
 
     out[vsize:vsize + len(microcode)] = microcode
     return bytes(out)
-
-
-if __name__ == "__main__":
-    src, dst = sys.argv[1], sys.argv[2]
-    pad = int(sys.argv[3]) if len(sys.argv) > 3 else 0
-    is_vertex = (len(sys.argv) <= 4) or sys.argv[4] != "p"
-    open(dst, "wb").write(build(open(src, "rb").read(), is_vertex, pad))
-    print("wrote %s (pad %d, %s)" % (dst, pad, "vertex" if is_vertex else "pixel"))
