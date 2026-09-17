@@ -281,17 +281,28 @@ bool EnsurePipelineLayout() {
   const RenderDescriptorRange samplers(RenderDescriptorRangeType::SAMPLER, 0, kBoundless);
   // space4 holds three things, and the BOUNDLESS one must be last: Plume marks
   // only the final range of a set as variable-sized.
+  // b0 VertexShaderConstants, b1 PixelShaderConstants, b2 SharedConstants.
+  //
+  // b1 WAS MISSING and nothing at runtime noticed. I derived this layout by
+  // reading one VERTEX shader's HLSL, which declares only b0 and b2 - pixel
+  // shaders declare b1 instead of b0, and 169 of the 634 artefacts bind it.
+  // Generalising a layout from one population again, which is the third time
+  // on this project. Found by check_root_signature.py against what the DXIL
+  // actually declares, never by a run: the debug layer is off in Release, so
+  // 121 pipelines were built against a root signature that could not satisfy
+  // 169 of their shaders.
   const RenderDescriptorRange cb0(RenderDescriptorRangeType::CONSTANT_BUFFER, 0, 1);
+  const RenderDescriptorRange cb1(RenderDescriptorRangeType::CONSTANT_BUFFER, 1, 1);
   const RenderDescriptorRange cb2(RenderDescriptorRangeType::CONSTANT_BUFFER, 2, 1);
   const RenderDescriptorRange streams(RenderDescriptorRangeType::STRUCTURED_BUFFER, 0, kBoundless);
-  const RenderDescriptorRange space4[] = {cb0, cb2, streams};
+  const RenderDescriptorRange space4[] = {cb0, cb1, cb2, streams};
 
   const RenderDescriptorSetDesc sets[] = {
       RenderDescriptorSetDesc(&tex2d, 1, true, kBoundless),
       RenderDescriptorSetDesc(&tex3d, 1, true, kBoundless),
       RenderDescriptorSetDesc(&texcube, 1, true, kBoundless),
       RenderDescriptorSetDesc(&samplers, 1, true, kBoundless),
-      RenderDescriptorSetDesc(space4, 3, true, kBoundless),
+      RenderDescriptorSetDesc(space4, 4, true, kBoundless),
   };
 
   RenderPipelineLayoutDesc desc;
