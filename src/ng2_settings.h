@@ -418,6 +418,10 @@ struct Ng2Settings {
     // the menu so an old settings file carrying 120 or 144 - or a hand-edited one -
     // loads as 60 instead of speeding the game up.
     fps = std::clamp(fps, 30, 60);
+    // Same reason: vsync off raises the guest vblank from 60 Hz to 1000 Hz and
+    // this title advances its logic on vblank, so off is a speed-up, not tearing.
+    // Forced on whatever an old or hand-edited file says.
+    vsync = true;
     monitor = std::clamp(monitor, 0, 16);
     resolution_scale = std::clamp(resolution_scale, 1, 8);
     anisotropic = std::clamp(anisotropic, -1, 4);

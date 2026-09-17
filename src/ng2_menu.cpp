@@ -465,16 +465,13 @@ bool DrawSettings(Ng2Settings& s, const PageOptions& opts) {
     // not a substitute for not offering it.
     ImGui::EndDisabled();
 
-    RowStart("V-Sync",
-             "Off does not just tear here. The game paces its logic off the "
-             "display, so without V-Sync it runs faster than it should.");
-    changed |= ImGui::Checkbox("##vsync", &s.vsync);
-    // Same hazard as fps > 60 one row up, so it gets the same treatment: the
-    // consequence is stated on the page, not only in a tooltip nobody hovers.
-    // Off raises the guest's vblank from 60 Hz to 1000 Hz, and this title
-    // advances its logic on vblank.
-    if (!s.vsync)
-      Muted("Off makes the game run faster than it should, not just tear.");
+    // V-Sync is not offered. It was a checkbox with a line underneath saying
+    // "Off makes the game run faster than it should, not just tear" - the same
+    // pattern, and the same hazard, as the 120/144 frame-rate options removed
+    // above. Off raises the guest's vblank from 60 Hz to 1000 Hz and this title
+    // advances its logic on vblank, so it is a speed control wearing the name of
+    // a tearing control. The field survives in the settings file so old files
+    // load; Clamp() and the tuning both force it on regardless of what one says.
 
     RowStart("Keep aspect ratio",
              "Pillarbox the 16:9 picture on a wider window instead of "
@@ -869,7 +866,10 @@ void ApplyLiveSettings(const Ng2Settings& s, rex::ui::Window* window) {
   SetCvar("present_cas_additional_sharpness", std::to_string(s.cas_sharpness));
   SetCvar("present_dither", s.present_dither ? "true" : "false");
   SetCvar("present_letterbox", s.letterbox ? "true" : "false");
-  SetCvar("vsync", s.vsync ? "true" : "false");
+  // Unconditional, not from the setting: vsync off is a game-speed change on this
+  // title, the row is no longer offered, and this live path must not be able to
+  // reintroduce it from a stale value.
+  SetCvar("vsync", "true");
   // Ultrawide 3D FOV (ng2_fov_k), live. Mirrors Ng2App::ApplyFov: on, the 3D is
   // widened by the render/display aspect so the 16:9 frame filled to the wider
   // screen keeps correct proportions; off, k=1. The plugin caches the per-shader

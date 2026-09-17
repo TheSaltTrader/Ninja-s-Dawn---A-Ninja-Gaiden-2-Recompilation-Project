@@ -22,6 +22,18 @@ field is parsed as before - but it is brought down to 60. The bound is enforced
 in `Ng2Settings::Clamp()` rather than only in the menu, so a hand-edited file or
 the `NG2_FPS` environment override cannot reintroduce the speed-up either.
 
+### Changed - V-Sync is no longer offered either
+
+Same hazard, same treatment. The V-Sync checkbox carried a line reading "Off makes
+the game run faster than it should, not just tear" - turning it off raises the
+guest vblank from 60 Hz to 1000 Hz, and this title advances its logic on vblank.
+It was a speed control wearing the name of a tearing control.
+
+The row is gone,  forces it on, and the tuning now sends 
+unconditionally rather than from the setting, so neither a stale settings file nor
+a hand-edited one can reintroduce the speed-up. The field still parses so old
+files load.
+
 ### Removed - Frame interpolation, after it was built and measured
 
 An attempt to give the smoothness those options implied WITHOUT the speed-up:
