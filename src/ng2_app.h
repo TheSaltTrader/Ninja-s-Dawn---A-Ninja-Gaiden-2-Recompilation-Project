@@ -17,6 +17,7 @@
 #include "ng2_saveimport.h"
 #include "ng2_hwdetect.h"
 #include "ng2_autoskip.h"
+#include "ng2_native_gpu.h"
 #include "ng2_perf.h"
 #include "ng2_texnotify.h"
 #include "ng2_settings.h"
@@ -286,6 +287,11 @@ class Ng2App : public rex::ReXApp {
     ng2::StartPerfMonitor();
     perf_hud_ = std::make_unique<ng2::PerfHudOverlay>(drawer);
 
+    // The native renderer's draw hand-off from the GPU plugin. Off unless
+    // NG2_NATIVE_GPU is set, and a no-op if the plugin does not export it, so
+    // an older plugin or a stock build runs exactly as before.
+    ng2::ngpu::Start();
+
     // Escape quits. The window's close button already does, but a full-screen
     // game with no visible chrome needs a key that gets you out.
     // [diag] F7 while the character is bobbing: find the oscillating float.
@@ -402,6 +408,7 @@ class Ng2App : public rex::ReXApp {
       return;
     shutting_down_ = true;
     StopTitleWatcher();
+    ng2::ngpu::Stop();
     ng2::StopPerfMonitor();
     settings_.Clamp();
     settings_.Save();
