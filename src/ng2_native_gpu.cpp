@@ -137,6 +137,12 @@ std::atomic<uint32_t> g_idx_sample_base{0};
 std::atomic<uint32_t> g_idx_sample_words{0};
 std::atomic<uint32_t> g_idx_sample_endian{0};
 
+// Draws the availability probe would have REFUSED while a usable pipeline
+// existed. Declared here, with the other tallies, because Totals() reports it -
+// a counter declared below the function that prints it is the third instance of
+// that mistake on this project.
+std::atomic<uint64_t> g_would_skip{0};
+
 std::atomic<uint64_t> g_ucode_read_ok{0};
 std::atomic<uint64_t> g_ucode_read_faulted{0};
 std::atomic<uint32_t> g_ucode_first_addr{0};
@@ -407,9 +413,12 @@ std::string Totals() {
                        g_ucode_read_ok.load(), u, g_ucode_first_addr.load(),
                        g_ucode_first_word.load());
   }
-  return fmt::format("{} draws ({} indexed, {} auto), {} indices{}{}{}{}{}{}",
+  const std::string skip = g_would_skip.load()
+      ? fmt::format(" | WantShader would REFUSE {} draws that have a pipeline", g_would_skip.load())
+      : std::string();
+  return fmt::format("{} draws ({} indexed, {} auto), {} indices{}{}{}{}{}{}{}",
                      g_draws.load(), g_indexed.load(), g_auto.load(), g_indices.load(), serial, idx,
-                     SurfaceReport() + BinReport(),
+                     SurfaceReport() + BinReport(), skip,
                      g_bad_size.load() ? fmt::format(" | {} ABI MISMATCH", g_bad_size.load()) : "",
                      g_no_regs.load() ? fmt::format(" | {} without registers", g_no_regs.load()) : "",
                      g_no_shader.load() ? fmt::format(" | {} without a shader", g_no_shader.load()) : "");
@@ -760,8 +769,25 @@ void OnDraw(const GpuDrawRecord* rec) {
                                           rec->vs_dwords, rec->vs_immediate != 0);
   const bool have_ps = render::WantShader(render::ShaderStage::kPixel, rec->ps_address,
                                           rec->ps_dwords, rec->ps_immediate != 0);
-  (void)have_vs;
-  (void)have_ps;  // stage 2b: nothing is translated yet, so both are false
+  // THE SIZE OF A TRAP, MEASURED RATHER THAN DESCRIBED.
+  //
+  // WantShader answers "is there a translated program filed under this
+  // ADDRESS", and `available` is set at exactly one site - the by-pointer
+  // branch of RegisterShaderMicrocode. An IMMEDIATE shader never reaches it:
+  // it is matched by content, its DXIL is loaded, a pipeline is built for it,
+  // and WantShader still returns false, because there is no address to file it
+  // under.
+  //
+  // So a draw path gated on WantShader would skip every immediate draw while
+  // reporting them as "shader not available" - and immediate is 91.8% of draws
+  // in light frames. This counts exactly that population: draws where the
+  // availability probe says no and a usable pipeline exists anyway. If the
+  // number is large, the trap is real and the gate must be WantPipeline.
+  if ((!have_vs || !have_ps) && render::WantPipeline(
+          (rec->registers && rec->register_count > kRegRbColorInfo)
+              ? ((rec->registers[kRegRbColorInfo] >> 16) & 0xF) : 0u)) {
+    g_would_skip.fetch_add(1, std::memory_order_relaxed);
+  }
 
   // Can the microcode behind those addresses actually be read?
   // Both stages, symmetrically - the registration path must not favour one

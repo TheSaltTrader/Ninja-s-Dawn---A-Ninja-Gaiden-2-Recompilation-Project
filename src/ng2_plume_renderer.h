@@ -309,6 +309,33 @@ bool WantPipeline(uint32_t xenos_color_format);
 //        cbuffer SharedConstants                   b2, space4
 //        push constants (root constants on D3D12)
 //
+// 10. DO NOT GATE RENDERING ON WantShader. It answers a narrower question than
+//     it appears to, and the gap is the majority of draws.
+//
+//     `available` is set at exactly ONE site: the by-pointer branch of
+//     RegisterShaderMicrocode, keyed by guest address. An IMMEDIATE shader
+//     never reaches it - it is matched by content, its DXIL is loaded, a
+//     pipeline is built for it - and WantShader still returns false, because
+//     there is no address to file it under. The probe is structurally blind to
+//     the immediate half rather than merely unlucky with it.
+//
+//     So a draw path gated on WantShader skips EVERY immediate draw while
+//     reporting them as "shader not available": 91.8% of draws in light frames,
+//     and 625,620 matched immediates in one measured run. The coverage number
+//     would then climb as scenes got heavier, which reads as progress and is
+//     the same false signal constraint 8 warns about.
+//
+//     WantPipeline is the correct gate. It keys on the CURRENT shader pair,
+//     which both load modes set, so it cannot be blind to one of them by
+//     construction.
+//
+//     This is backlog item 5 - "does anything set availability on a path the
+//     replay does not take" - and the answer is yes, with the sign reversed
+//     from what was expected: the replay path works for immediates while the
+//     AVAILABILITY path does not. The consumer now counts draws where the
+//     probe refuses and a pipeline exists, so the size of the trap is a number
+//     in the log rather than a paragraph here.
+//
 // And the reason all of these are stated here rather than discovered later:
 // reading and running catch DIFFERENT classes. These two are structural - visible to a
 // reader, invisible to a run that never evicts or never takes the branch. The

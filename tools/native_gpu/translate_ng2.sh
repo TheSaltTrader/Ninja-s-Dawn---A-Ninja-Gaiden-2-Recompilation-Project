@@ -113,7 +113,8 @@ if [ -e "$LOCK" ]; then
   echo "note: stale lock from pid $holder, taking it"
 fi
 echo $$ > "$LOCK"
-trap 'rm -f "$LOCK"' EXIT INT TERM
+# Only release a lock we still own, or a superseded run frees the live one.
+trap '[ "$(cat "$LOCK" 2>/dev/null)" = "$$" ] && rm -f "$LOCK"' EXIT INT TERM
 tr_ok=0; tr_bad=0; unstable=0; c_ok=0; c_bad=0; deferred=0
 # RESUMABLE, because this machine is shared and a long run is not safe from it.
 # Two multi-hour regenerations were killed by the OS low-memory killer - not for
@@ -140,6 +141,21 @@ cd "$IN" || exit 1
 for f in $GLOB; do
   [ -f "$f" ] || continue
   n=${f%.xvu}; n=${n%.var}
+  # RE-VALIDATE THE LOCK EVERY CONTAINER, not only at startup. Stopping a
+  # background task kills the process it tracks and NOT its children, so a run
+  # that was "stopped" keeps looping - and a startup-only check waves it
+  # straight through. That is how two writers ended up in one directory twice:
+  # the second run truncated stable.txt and deferred.txt underneath the first,
+  # two minutes after the first had started.
+  #
+  # A lock nobody re-reads is a lock that only protects against a race it can
+  # see at one instant. If someone else now holds it, this run is the stale one
+  # and stands down rather than corrupting a ledger it no longer owns.
+  if [ "$(cat "$LOCK" 2>/dev/null)" != "$$" ]; then
+    echo "STANDING DOWN: $OUT is now owned by pid $(cat "$LOCK" 2>/dev/null) - this run is superseded"
+    exit 1
+  fi
+
   free_mb=$(awk '/^MemFree:/ {print int($2/1024)}' /proc/meminfo 2>/dev/null)
   if [ -n "$free_mb" ] && [ "$free_mb" -lt "$MEM_FLOOR_MB" ]; then
     deferred=$((deferred+1))
