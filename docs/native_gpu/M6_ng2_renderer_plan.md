@@ -155,6 +155,32 @@ last bound target (`EDRAM_AND_RESOLVES.md`).
 - Coordinate the machine through `~/.game-test-lock`, and restore the shipped
   plugin (`.sdkbak`) after every run.
 
+## The correctness oracle, from the start
+
+Every instrument built during the shader work measured whether a translation
+**succeeded** or was **stable**. None measured whether it was **correct** — a
+shader synthesised with NaN literal constants translates, stays byte-identical
+across ten runs, carries its definition table, and renders nonsense. It passed
+every check that existed.
+
+**The renderer will walk into exactly this.** "It draws" and "it draws the same
+every frame" are the same two questions wearing different clothes, and a
+renderer can pass both while drawing the wrong thing.
+
+The oracle here is unusually good and should be wired in before anything appears
+on screen rather than after: **the plugin renders the same frame from the same
+packets.** So for any draw the native path handles, the emulated result is
+available for comparison — per draw, per render target, or per frame. Concretely:
+
+- the plugin already reports its own per-frame draw and index totals, and the
+  hand-off reconciles against them (M6 step 1a);
+- the same comparison extends to geometry: for a given draw, the native path and
+  the plugin should issue the same primitive count from the same index buffer;
+- and ultimately to pixels — the plugin's resolved frame against the native one.
+
+A native frame that renders something plausible is not evidence. A native frame
+that matches the plugin's is.
+
 ## The milestone
 
 One frame of NG2's own geometry in the Plume window, recognisable silhouette,
