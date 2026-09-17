@@ -221,3 +221,12 @@ NG2's numbers were re-checked against that arithmetic: 2342 = 641 + 1701,
 1903 = 541 + 1362, 3618 = 1111 + 2507, six frames, overflow zero. The verdict
 stands — but it stood by luck, because the overflow it happened never to hit
 would have been invisible.
+
+Re-run on the corrected instrument rather than assumed to survive it:
+
+    frame 1500 bins: 1 pair [FFFFFFFFFFFFFFFF] = 2339 draws / 762,952 idx
+                     predicated=670  rejected=0  overflow=0
+                     2339 draws bucketed of 2339 - reconciles
+
+The claim now rests on a tool that reports its own coverage instead of one
+checked by hand afterwards.
