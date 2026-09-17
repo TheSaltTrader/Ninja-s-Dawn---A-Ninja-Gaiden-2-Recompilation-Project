@@ -189,9 +189,34 @@ licence to weaken it.
 The 529 MB/s also independently confirms the ~520 MB/s derived from the
 `[hitch]` uploads figure: two different instruments, same number.
 
-Caveat worth keeping: the hash covers the first 4 KB of a range, so "unchanged"
-strictly means *its first 4 KB* is unchanged. 97.8% of 690,726 ranges is hard to
-explain by sampling position, but hashing head and tail would close it.
+**That caveat was the finding.** The hash covered only a range's first 4 KB, so
+"unchanged" meant *its first 4 KB* was unchanged. Re-run with head AND tail
+mixed into the same FNV:
+
+| hash | bytes unchanged | ranges unchanged | throughput |
+|---|---:|---:|---:|
+| head only (4 KB) | 94.4% | 97.8% | 529 MB/s |
+| **head + tail (8 KB)** | **71.0%** | **94.4%** | 470 MB/s |
+
+Boot stayed low and slightly lower either way (2.5% → 2.2% of bytes), which is
+the probe's own sanity check: a stricter hash must not make anything read as
+*more* unchanged.
+
+The drop is concentrated in **bytes** (−23 points) and not in **ranges**
+(−3.4). So the ranges that changed verdict are few and large — the ones
+carrying most of the volume have stable heads and churning tails. That is
+precisely the population a head-only skip decision would have silently
+corrupted, and it is 23% of the upload volume.
+
+**And 71% is an upper bound, not a measurement.** Every version of this probe
+samples, and a sample can only ever over-report "unchanged", because a byte not
+hashed is a byte that cannot disagree. 4 KB said 94.4%; 8 KB says 71.0%; whole-
+page hashing — what a real skip path must do — can only come in at or below 71%,
+and nothing here says how far below. The redundancy ratio the first probe
+implied (16.9:1) is really 2.4:1 at 8 KB and may be worse at full coverage,
+which matters because that ratio *is* the argument for the design: at 19:1 a CPU
+read replacing a write plus a GPU copy wins clearly; at 2.4:1 it is a genuine
+trade. Hash whole ranges before building anything on the number.
 
 **One polarity error to not repeat.** The suggestion that the refresh be
 narrowed to "pages a resolve actually touched" is backwards:
