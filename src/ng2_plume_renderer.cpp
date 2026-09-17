@@ -3,6 +3,8 @@
 #include <atomic>
 #include <cstdlib>
 #include <memory>
+#include <map>
+#include <mutex>
 #include <thread>
 #include <vector>
 
@@ -53,6 +55,25 @@ std::thread g_thread;
 std::atomic<bool> g_running{false};
 std::atomic<uint64_t> g_presented{0};
 std::atomic<uint64_t> g_guest_frames{0};
+
+// THE SHADER REGISTRY, keyed by guest address BY VALUE.
+//
+// Constraint 1 of this file's header: no raw pointers into an evictable cache.
+// The key is the address the IM_LOAD named, and nothing here holds a pointer
+// into the plugin's shader cache - which can evict, and whose erase sites
+// destroy the owner. A stale entry here is a wrong ANSWER, recoverable; a stale
+// pointer would be a use-after-free far from its cause.
+struct ShaderSeen {
+  uint32_t dwords = 0;
+  uint64_t draws = 0;
+  bool immediate = false;
+  bool available = false;  // true once a translated program exists for it
+};
+std::mutex g_shader_mutex;
+std::map<uint32_t, ShaderSeen> g_vertex_shaders;
+std::map<uint32_t, ShaderSeen> g_pixel_shaders;
+std::atomic<uint64_t> g_vs_miss{0}, g_ps_miss{0};
+std::atomic<uint64_t> g_vs_immediate{0}, g_ps_immediate{0};
 
 // The coverage oracle. Per-frame pair, reset at EndFrame, plus running totals
 // so the final line can state the shortfall over the whole run.
@@ -257,9 +278,67 @@ void EndFrame() {
   // something, because a native path silently skipping a draw shows up here as
   // a discrepancy rather than as a slightly smaller count nobody queries.
   if (handed && (frame % 300) == 0) {
-    REXLOG_INFO("[ng2-plume] frame {}: rendered {} of {} draws ({:.1f}%) - {} MISSED",
-                frame, drawn, handed, 100.0 * double(drawn) / double(handed), handed - drawn);
+    size_t vs_n = 0, ps_n = 0;
+    {
+      std::lock_guard<std::mutex> lock(g_shader_mutex);
+      vs_n = g_vertex_shaders.size();
+      ps_n = g_pixel_shaders.size();
+    }
+    // The shader side is reported with the SAME shape as the draw side: what is
+    // missing, named per stage, so an asymmetry between vertex and pixel is
+    // visible as a number rather than as a uniformly unlit picture.
+    REXLOG_INFO("[ng2-plume] frame {}: rendered {} of {} draws ({:.1f}%) - {} MISSED"
+                " | shaders seen VS {} PS {} | misses VS {} PS {} | immediate VS {} PS {}",
+                frame, drawn, handed, 100.0 * double(drawn) / double(handed), handed - drawn,
+                vs_n, ps_n, g_vs_miss.load(), g_ps_miss.load(),
+                g_vs_immediate.load(), g_ps_immediate.load());
   }
+#endif
+}
+
+bool WantShader(ShaderStage stage, uint32_t guest_address, uint32_t dword_count,
+                bool immediate) {
+#if defined(NG2_PLUME_ON)
+  if (!g_running.load(std::memory_order_relaxed)) return false;
+
+  // An IMMEDIATE shader has no address to key on - the microcode came inline in
+  // the packet. Counted as its own class rather than folded into a miss,
+  // because "we have nowhere to cache this" and "we have not translated this
+  // yet" are different problems with different fixes.
+  if (immediate) {
+    (stage == ShaderStage::kVertex ? g_vs_immediate : g_ps_immediate)
+        .fetch_add(1, std::memory_order_relaxed);
+    return false;
+  }
+  if (!guest_address) return false;
+
+  // ONE BODY FOR BOTH STAGES. The map is selected here and used here, so a
+  // lookup can never be tested against the other map's end() - constraint 2 -
+  // and the vertex path cannot acquire a capability the pixel path lacks,
+  // which is constraint 5.
+  bool available = false;
+  {
+    std::lock_guard<std::mutex> lock(g_shader_mutex);
+    auto& map = (stage == ShaderStage::kVertex) ? g_vertex_shaders : g_pixel_shaders;
+    auto& seen = map[guest_address];
+    seen.dwords = dword_count;
+    seen.immediate = false;
+    ++seen.draws;
+    available = seen.available;
+  }
+
+  // A MISS IS COUNTED, NEVER SUBSTITUTED. Returning false means this draw
+  // cannot be rendered natively yet, and the caller must skip it rather than
+  // reach for a last-known-good program. Substituting is what turns a missing
+  // translation path into a frame of correct geometry that is uniformly wrong.
+  if (!available) {
+    (stage == ShaderStage::kVertex ? g_vs_miss : g_ps_miss)
+        .fetch_add(1, std::memory_order_relaxed);
+  }
+  return available;
+#else
+  (void)stage; (void)guest_address; (void)dword_count; (void)immediate;
+  return false;
 #endif
 }
 

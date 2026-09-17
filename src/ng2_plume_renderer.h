@@ -21,6 +21,8 @@
 
 #pragma once
 
+#include <cstdint>
+
 namespace ng2::ngpu::render {
 
 // Brings up the Plume D3D12 device and its window on a private thread. Returns
@@ -52,6 +54,30 @@ void EndFrame();
 // increments.
 void NoteDrawHandedOff();
 void NoteDrawRendered();
+
+// THE SHADER LOOKUP, SYMMETRIC BY CONSTRUCTION.
+//
+// One function for both stages, taking the stage as an argument rather than
+// having a vertex path and a pixel path. That is deliberate and it is the whole
+// point: the sibling renderer grew a translation path for vertex microcode and
+// never grew one for pixel, and the lookup miss fell through to a stale device
+// value - so 2,197 draws in a frame shared ONE pixel shader. The frame rendered
+// correct geometry and was uniformly unlit, which looks like a shading bug and
+// is a lookup falling through. Two separate functions is how that becomes
+// possible; one function cannot drift against itself.
+//
+// A MISS IS LOUD. It is counted per stage and named by address, never
+// substituted with a last-known-good, a default, or whatever the device happens
+// to hold. A renderer that silently substitutes produces a plausible picture
+// built from the wrong programs, which is the failure this project keeps
+// finding and the hardest to see.
+enum class ShaderStage { kVertex, kPixel };
+
+// Records that a draw wants this shader. Returns true if it is available to the
+// native path. At stage 2b nothing is translated yet, so this returns false and
+// counts the miss - which is the honest state and is reported as such.
+bool WantShader(ShaderStage stage, uint32_t guest_address, uint32_t dword_count,
+                bool immediate);
 
 // STAGE 2b DESIGN CONSTRAINTS, written before the code so they are decisions
 // rather than repairs. Both come from defects found in the sibling project's

@@ -336,6 +336,18 @@ void OnDraw(const GpuDrawRecord* rec) {
   // report what it never saw, which is the whole point of the comparison.
   render::NoteDrawHandedOff();
 
+  // BOTH STAGES, EVERY DRAW, THROUGH THE SAME CALL. Not "vertex now, pixel
+  // when the pixel path exists" - that asymmetry is exactly what let the
+  // sibling renderer run a whole frame on one stale pixel shader while its
+  // geometry came out right. Two calls to one function, so neither stage can
+  // quietly acquire a capability the other lacks.
+  const bool have_vs = render::WantShader(render::ShaderStage::kVertex, rec->vs_address,
+                                          rec->vs_dwords, rec->vs_immediate != 0);
+  const bool have_ps = render::WantShader(render::ShaderStage::kPixel, rec->ps_address,
+                                          rec->ps_dwords, rec->ps_immediate != 0);
+  (void)have_vs;
+  (void)have_ps;  // stage 2b: nothing is translated yet, so both are false
+
   const uint32_t di = rec->vgt_draw_initiator;
   g_draws.fetch_add(1, std::memory_order_relaxed);
   g_indices.fetch_add(di >> 16, std::memory_order_relaxed);
