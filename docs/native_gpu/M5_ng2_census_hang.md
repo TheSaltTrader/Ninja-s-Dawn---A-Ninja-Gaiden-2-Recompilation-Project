@@ -141,6 +141,17 @@ pays a large cost on *every* frame where the false-path pays it only on real
 loads. Steady-state frames are the tell — 13,548 and 22,232 KB with the cvar on
 against 12 and 16 KB with it off, on frames drawing comparable geometry.
 
+**These are NG2's numbers and they do not transfer.** I quoted the cvar-off
+figure to the Fable II session as though it described Fable - "Fable uploads
+12-16 KB a frame, so it never reaches the pool's 256 KB threshold" - on the
+reasoning that Fable also runs the cvar off. Same setting, different title,
+different content, different geometry: it was an extrapolation, not a
+measurement, and Fable measured the truth as ~1,540 UploadRanges calls a frame
+with 850-990 threshold crossings per 5 s in ordinary play. So Fable exercises
+that path CONTINUOUSLY, not at level loads, and my "dormant, not immune"
+characterisation was wrong in the direction that understates their exposure.
+A cvar value is not a workload.
+
 The upload pool never fails, though. `Shared memory: Failed to get an upload
 buffer` appears **zero** times in all four frozen runs, and there is no
 `E_OUTOFMEMORY`. (The one "device removed" hit in every log is the
