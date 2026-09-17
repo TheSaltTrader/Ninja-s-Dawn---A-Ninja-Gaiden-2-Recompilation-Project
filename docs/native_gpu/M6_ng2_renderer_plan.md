@@ -156,6 +156,25 @@ Returning on the stable condition means frozen; timing out means alive. For a
 long unattended stretch, `eye_watch(action="start")` before the run and
 `eye_changes` after gives the same answer with a timeline attached.
 
+MEASURED 2026-09-17, and it is better than it looks on paper. Across four runs
+the alive case timed out at 60 s, 115 s and 240 s without ever going stable,
+and the frozen case returned in **3.2 s and 10.1 s**. In the run that froze in a
+CUTSCENE - the case where a held camera shot ought to fool a pixel detector -
+vision called it at 06:59:10 while the draw counter did not visibly flatline
+until 06:59:16. **It caught the onset six seconds before the log could**, because
+a frame that has stopped advancing is stable long before the last in-flight
+draws finish landing. It was right, and it was the fastest signal available.
+
+Do not read a `[swap]` frame rate as a health check. NG2 swings 60 -> 30 -> 60
+in normal play, and the working plugin and the broken one produced traces that
+are indistinguishable by eye:
+
+    shipped (ran 240 s):  60.3  30.1  60.0  60.0  59.4  58.6  57.2  30.0 ...
+    mine    (froze):      60.3  60.0  60.0  59.4  58.4  60.0  40.5  30.0 ...
+
+The authoritative confirmation is a COUNTER THAT STOPS ADVANCING - swap reports,
+or the exe-side draw totals - never the rate itself.
+
 ## Known hazards when running
 
 - The plugin built from this branch hangs NG2's Chapter 1 intro; it is a build
