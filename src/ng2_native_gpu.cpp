@@ -115,6 +115,11 @@ std::atomic<uint64_t> g_idx_both{0};
 std::atomic<uint64_t> g_idx_neither{0};
 std::atomic<uint64_t> g_idx_checked{0};
 std::atomic<uint64_t> g_idx_faulted{0};  // both interpretations faulted on read
+// PER INTERPRETATION, because "it faulted" without saying WHICH translation
+// faulted cannot distinguish "this address is bad" from "one of the two ways of
+// reading it is bad" - and that distinction is the whole question here.
+std::atomic<uint64_t> g_idx_virt_faulted{0};
+std::atomic<uint64_t> g_idx_phys_faulted{0};
 // The first draw's inputs, for the report. Logging from the draw callback does
 // not reach the file, so what the probe was HANDED has to travel this way.
 std::atomic<uint32_t> g_idx_sample_base{0};
@@ -152,9 +157,11 @@ std::string Totals() {
     // base lives in is the question, so the line answers it.
     idx = fmt::format(
         " | INDEX BASE of {} draws: {} virtual-only, {} physical-only, {} both, {} neither,"
-        " {} FAULTED | first sample: base {:08X} words {} endian {}",
+        " {} FAULTED (virt-fault {}, phys-fault {}) | first sample: base {:08X} words {}"
+        " endian {}",
         n, g_idx_virtual_ok.load(), g_idx_physical_ok.load(), g_idx_both.load(),
-        g_idx_neither.load(), g_idx_faulted.load(), g_idx_sample_base.load(),
+        g_idx_neither.load(), g_idx_faulted.load(), g_idx_virt_faulted.load(),
+        g_idx_phys_faulted.load(), g_idx_sample_base.load(),
         g_idx_sample_words.load(), g_idx_sample_endian.load());
   }
   if (const uint64_t u = g_ucode_read_ok.load() + g_ucode_read_faulted.load()) {
@@ -263,6 +270,33 @@ bool PlausibleIndexRun(const uint8_t* p, uint32_t count_words, bool big_endian) 
   return !all_zero && !all_ff && max_index < 32768u;
 }
 
+// One interpretation, one guard, so neither can mask the other. Kept as its
+// own function because __try/__except cannot coexist with C++ objects needing
+// unwinding in the same frame, and because a fault here must be attributable
+// to THIS interpretation rather than to whichever ran first.
+// The memory type is taken from the accessor rather than named: rex::Memory is
+// an incomplete type in this translation unit, and only the pointer it hands
+// back is ever used.
+using GuestMemory = decltype(REX_KERNEL_MEMORY());
+
+bool TryIndexInterpretation(GuestMemory memory, bool physical, const GpuDrawRecord* rec,
+                            bool big_endian, bool* faulted) {
+#if defined(_WIN32)
+  __try {
+    const uint8_t* p = physical ? memory->TranslatePhysical<const uint8_t*>(rec->index_base)
+                                : memory->TranslateVirtual<const uint8_t*>(rec->index_base);
+    return PlausibleIndexRun(p, rec->index_size_words, big_endian);
+  } __except (EXCEPTION_EXECUTE_HANDLER) {
+    *faulted = true;
+    return false;
+  }
+#else
+  const uint8_t* p = physical ? memory->TranslatePhysical<const uint8_t*>(rec->index_base)
+                              : memory->TranslateVirtual<const uint8_t*>(rec->index_base);
+  return PlausibleIndexRun(p, rec->index_size_words, big_endian);
+#endif
+}
+
 void CheckIndexBuffer(const GpuDrawRecord* rec) {
   if (!rec->index_base || !rec->index_size_words) return;
 
@@ -291,20 +325,24 @@ void CheckIndexBuffer(const GpuDrawRecord* rec) {
 
   // index_endian 2 is the Xenos 8-in-16 swap, i.e. big-endian halfwords.
   const bool big_endian = rec->index_endian != 0;
-  bool v = false, p = false;
-#if defined(_WIN32)
-  // The TRANSLATION itself is guarded too, not only the read: it is pointer
-  // arithmetic on an address this probe exists because it cannot vouch for.
-  __try {
-    v = PlausibleIndexRun(memory->TranslateVirtual<const uint8_t*>(rec->index_base),
-                          rec->index_size_words, big_endian);
-    p = PlausibleIndexRun(memory->TranslatePhysical<const uint8_t*>(rec->index_base),
-                          rec->index_size_words, big_endian);
-  } __except (EXCEPTION_EXECUTE_HANDLER) {
+  // ONE GUARD PER INTERPRETATION. They used to share a single __try with the
+  // VIRTUAL translation evaluated first, so a fault there aborted the block
+  // and the PHYSICAL interpretation was never evaluated at all - and physical
+  // is the one the plugin itself uses successfully (primitive_processor.cpp
+  // reads memory_.TranslatePhysical(guest_index_base) with no guard whatever).
+  // That structure made one of the two answers unobservable, and it reported
+  // 1,889,699 faults of 1,889,700 which was read as "index data is not
+  // CPU-readable". An instrument whose own shape can only produce one outcome
+  // has not tested the other.
+  bool vf = false, pf = false;
+  const bool v = TryIndexInterpretation(memory, false, rec, big_endian, &vf);
+  const bool p = TryIndexInterpretation(memory, true, rec, big_endian, &pf);
+  if (vf) g_idx_virt_faulted.fetch_add(1, std::memory_order_relaxed);
+  if (pf) g_idx_phys_faulted.fetch_add(1, std::memory_order_relaxed);
+  if (vf && pf) {
     g_idx_faulted.fetch_add(1, std::memory_order_relaxed);
     return;
   }
-#endif
   if (v && p) g_idx_both.fetch_add(1, std::memory_order_relaxed);
   else if (v) g_idx_virtual_ok.fetch_add(1, std::memory_order_relaxed);
   else if (p) g_idx_physical_ok.fetch_add(1, std::memory_order_relaxed);

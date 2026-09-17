@@ -73,6 +73,11 @@ struct ShaderSeen {
   uint64_t draws = 0;
   bool immediate = false;
   bool available = false;  // true once a translated program exists for it
+  // THE CONTENT HASH, BY VALUE, not a pointer to the bytes. The draw path
+  // looks the DXIL up through g_dxil on every use, per constraint 1 - a cache
+  // that can grow under a held pointer is how the sibling renderer got a
+  // use-after-free reachable through five early returns.
+  uint64_t hash = 0;
 };
 std::mutex g_shader_mutex;
 std::map<uint32_t, ShaderSeen> g_vertex_shaders;
@@ -96,6 +101,24 @@ struct ManifestEntry {
   std::string artefact;
 };
 std::map<uint64_t, ManifestEntry> g_manifest;
+
+// THE TRANSLATED BYTES, keyed by the SAME content hash as the manifest.
+//
+// One key from microcode to DXIL, deliberately. The moment this is keyed by
+// anything else - address, artefact name, stage - there are two lookups that
+// can disagree, which is the failure this file's constraint 2 is about.
+//
+// Loaded lazily on first match and never evicted, so the map only grows; that
+// is what lets the draw path hold a HASH rather than a pointer.
+std::map<uint64_t, std::vector<uint8_t>> g_dxil;
+// A MATCH WHOSE ARTEFACT WILL NOT LOAD IS NOT A MATCH. It is a third outcome,
+// distinct from "unmatched", and it must never read as success: the manifest
+// said a translation exists and the disk disagreed. Counted separately and
+// named, because silently treating it as a miss would hide a broken build.
+std::atomic<uint64_t> g_dxil_loaded{0};
+std::atomic<uint64_t> g_dxil_failed{0};
+std::atomic<uint64_t> g_dxil_bytes{0};
+int g_dxil_fail_logged = 0;
 std::atomic<uint64_t> g_manifest_hits{0};
 std::atomic<uint64_t> g_manifest_unknown{0};
 std::atomic<uint64_t> g_manifest_stage_mismatch{0};
@@ -367,9 +390,10 @@ void EndFrame() {
                 vs_n, ps_n, g_vs_miss.load(), g_ps_miss.load(),
                 g_vs_immediate.load(), g_ps_immediate.load());
     REXLOG_INFO("[ng2-plume] manifest: {} programs | matched VS {} PS {} | unknown VS {} PS {}"
-                " | stage-mismatch {}",
+                " | stage-mismatch {} | DXIL loaded {} ({} KB), UNLOADABLE {}",
                 g_manifest.size(), g_hit_vs.load(), g_hit_ps.load(), g_unknown_vs.load(),
-                g_unknown_ps.load(), g_manifest_stage_mismatch.load());
+                g_unknown_ps.load(), g_manifest_stage_mismatch.load(), g_dxil_loaded.load(),
+                g_dxil_bytes.load() / 1024, g_dxil_failed.load());
   }
 #endif
 }
@@ -431,6 +455,37 @@ bool RegisterShaderMicrocode(ShaderStage stage, uint32_t guest_address, const ui
     g_manifest_stage_mismatch.fetch_add(1, std::memory_order_relaxed);
     return false;
   }
+  // LOAD THE TRANSLATED BYTES ONCE, on first match for this program. Until
+  // this existed the manifest only ever proved a NAME was known, which is not
+  // the same as having something to bind - "matched" was a claim about a text
+  // file.
+  auto dx = g_dxil.find(h);
+  if (dx == g_dxil.end()) {
+    std::ifstream df(it->second.artefact, std::ios::binary | std::ios::ate);
+    bool ok = false;
+    std::vector<uint8_t> bytes_in;
+    if (df) {
+      const std::streamoff n = df.tellg();
+      if (n > 0) {
+        bytes_in.resize(static_cast<size_t>(n));
+        df.seekg(0);
+        ok = static_cast<bool>(df.read(reinterpret_cast<char*>(bytes_in.data()), n));
+      }
+    }
+    if (!ok) {
+      g_dxil_failed.fetch_add(1, std::memory_order_relaxed);
+      if (g_dxil_fail_logged < 8) {
+        ++g_dxil_fail_logged;
+        REXLOG_INFO("[ng2-plume] MATCHED BUT UNLOADABLE {} {:016X}: cannot read {}",
+                    want_pixel ? "PS" : "VS", h, it->second.artefact);
+      }
+      return false;
+    }
+    g_dxil_bytes.fetch_add(bytes_in.size(), std::memory_order_relaxed);
+    g_dxil_loaded.fetch_add(1, std::memory_order_relaxed);
+    dx = g_dxil.emplace(h, std::move(bytes_in)).first;
+  }
+
   auto& map = want_pixel ? g_pixel_shaders : g_vertex_shaders;
   auto& seen = map[guest_address];
   if (!seen.available) {
@@ -439,6 +494,7 @@ bool RegisterShaderMicrocode(ShaderStage stage, uint32_t guest_address, const ui
   }
   seen.available = true;
   seen.dwords = bytes / 4;
+  seen.hash = h;
   return true;
 #else
   (void)stage; (void)guest_address; (void)ucode; (void)bytes; (void)preamble128;

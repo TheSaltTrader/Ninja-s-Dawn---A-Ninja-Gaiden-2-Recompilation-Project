@@ -123,17 +123,41 @@ bool RegisterShaderMicrocode(ShaderStage stage, uint32_t guest_address, const ui
 //    Both are the same mistake: treating "no streams" as "a stream count of
 //    zero-plus-one" rather than as a case.
 //
-// 4. NEVER CPU-READ GUEST GEOMETRY. Index and vertex data are not obtainable by
-//    translating a guest address and dereferencing it: those pages are
-//    legitimately not CPU-resident. Measured - 1,889,699 faults out of
-//    1,889,700 indexed draws, on an address that was correct. The plugin's own
-//    CPU read (primitive_processor.cpp:699) is inside a CONVERSION branch only;
-//    the ordinary path calls shared_memory_.RequestRange (line 966) and the GPU
-//    reads from the shared-memory buffer. The vertex path is the same shape
+// 4. INDEX DATA IS CPU-READABLE THROUGH THE **PHYSICAL** TRANSLATION, AND THE
+//    CLAIM THAT IT IS NOT WAS AN INSTRUMENT DEFECT. Corrected 2026-09-17.
+//
+//    This constraint used to read "NEVER CPU-READ GUEST GEOMETRY... those pages
+//    are legitimately not CPU-resident", on the strength of 1,889,699 faults
+//    out of 1,889,700 indexed draws. That measurement was worthless, and its
+//    shape is the lesson: the probe evaluated BOTH interpretations inside ONE
+//    __try, with the VIRTUAL translation first. Virtual always faults, the
+//    handler fired, and the PHYSICAL interpretation was never evaluated on any
+//    draw. The instrument could not produce the answer it was asked for.
+//
+//    Re-measured with one guard per interpretation:
+//
+//      INDEX BASE of 155,050 draws: 0 virtual-only, 25,175 physical-only,
+//      0 both, 129,874 neither, 0 FAULTED (virt-fault 155,049, phys-fault 0)
+//
+//    ZERO physical faults. This agrees with the plugin, which CPU-reads the
+//    same address unguarded (primitive_processor.cpp:699,
+//    memory_.TranslatePhysical(guest_index_base)) and would crash constantly if
+//    those pages were not resident.
+//
+//    WHAT THIS DOES NOT ESTABLISH. TranslatePhysical is
+//    physical_membase + (addr & 0x1FFFFFFF), which always lands inside a large
+//    committed arena - so "it did not fault" is nearly free and is NOT evidence
+//    that the bytes are the right bytes. Only 25,175 of 155,050 reads look like
+//    a plausible 16-bit index run under the heuristic here, and the other
+//    129,874 are unexplained: they may be 32-bit indices, a different endian,
+//    or the heuristic's own bounds being too tight. READABILITY is settled;
+//    INTERPRETATION is not, and the draw path must not assume otherwise.
+//
+//    The residency path remains real and is still how the GPU gets the data:
+//    the ordinary path calls shared_memory_.RequestRange
+//    (primitive_processor.cpp:966) and the vertex path is the same shape
 //    (d3d12/command_processor.cpp:3159 requests vfetch_constant.address << 2).
-//    A renderer built on CPU reads WOULD WORK in the conversion cases and fail
-//    everywhere else, presenting as a data-correctness bug rather than a
-//    residency one.
+//    Reading CPU-side is now an OPTION rather than a closed door.
 //
 // 5. VERTEX AND PIXEL SHADER LOOKUP MUST BE SYMMETRIC, AND A MISS MUST BE LOUD.
 //    The sibling renderer had a translation path for vertex microcode and none

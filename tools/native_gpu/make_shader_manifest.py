@@ -103,7 +103,13 @@ def main():
             if h in by_hash and by_hash[h][0] != code:
                 print("COLLISION: %016X shared by %s and %s" % (h, by_hash[h][1], stem))
             by_hash.setdefault(h, (code, stem))
-            rows.append((h, len(code) // 4, "p" if is_pixel else "v", stem))
+            # THE PATH, NOT THE STEM. Merging two container sources into one
+            # manifest made a bare stem ambiguous about WHICH dxil directory
+            # holds it, and the runtime would have needed a search rule - one
+            # more place for the two sources to be treated differently. The
+            # path is unambiguous and the runtime needs no rule at all.
+            dxil = os.path.join(dxil_dir, stem + ".dxil").replace("\\", "/")
+            rows.append((h, len(code) // 4, "p" if is_pixel else "v", dxil))
         per_source.append((containers, len(rows) - before))
 
     with open(out_path, "w", encoding="ascii", newline="\n") as f:
