@@ -302,41 +302,57 @@ them all:
 So the coverage is **96%, not 91%**, and genuinely absent are three:
 `VS 0x1DACB000` (x10), `VS 0x1EE30000` (x4), `VS 0x1F02F000` (x1).
 
-### The microcode the GPU runs is a PATCHED copy
+### WITHDRAWN: "the microcode the GPU runs is a patched copy"
 
-Diffing the executed copy against the container's for `VS 0x1D701000`:
+That claim was made here and is **wrong**. It came from diffing a ring copy
+against a container anchored at the container's *region* start — but the
+`Shader` struct carries a `physicalOffset`, and **539 of NG2's 625 containers
+have `physicalOffset = 64`**. The code does not begin at the region start; it
+begins 64 bytes in. So the diff compared 64 bytes of real code against 64 bytes
+of preamble, and the "9 patched bytes inside vfetch operands" were an artefact
+of the anchor. Caught by the Fable II session.
 
-    body identical from +64 onward (that is how it was found)
-    9 of the first 64 bytes differ, at offsets 36,41,42,47,52,53,54,58,59
-    the first 32 bytes are byte-identical
+Anchoring correctly settles it in the other direction: the matches that hold are
+**100% exact over 360-2048 bytes**, every one at `physicalOffset=64` with the
+ring copy anchored at its own start. The ring copy *is* the container's code.
+Nothing is patched.
 
-Not a patched prologue — scattered dwords *inside* instructions, in the region
-where a Xenos `vfetch` encodes its operands. So the engine patches the microcode
-at or before upload, and the copy the container holds is not the program the GPU
-executed.
+### And the coverage figure was wrong twice
 
-**This matters beyond the census.** A native path that translates container
-copies translates something the GPU did not run. Whether the patched fields
-change behaviour or only encode bindings the native path supplies itself from
-the fetch constants is the next question — but it must be answered before
-trusting a translated shader, not after a scene renders subtly wrong. Probing by
-content at several offsets, as `check_shader_denominator.py` now does, is also
-what makes the patching visible at all.
+| claim | method | actual |
+|---|---|---|
+| 69 of 76 covered | 64-byte needle at offset 0 | too strict |
+| 73 of 76 covered | 48-byte needles at several offsets | **too loose** |
+| **54 of 87 covered** | >=256 bytes at >=98%, either anchor | measured |
 
-**What this does NOT establish.** These seven have no container *in the region
-that was dumped* — guest virtual 0x80000000-0xA0000000. Whether they have none
-anywhere needs a wider sweep; the Fable session's own search reported "no
-container anywhere" from a sweep that had never looked where the objects live,
-and was wrong for four versions before it was right. The honest claim is
-bounded to the window searched.
+A 48-byte needle collides on common microcode prologues — demonstrated: the
+single match that produced the "patched copy" diff was a coincidence, and no
+container matches that shader over any long span at either alignment.
 
-Either way the remedy is the same and it is already the Fable side's next piece:
-translate from microcode alone, by synthesising the header XenosRecomp scans
-for. The packet supplies what the header needs — the dword count is `IM_LOAD`'s
-second word and the type is its low two bits.
+So **real coverage is 62%, not 96%**, and the 33 without containers include the
+two busiest pixel shaders in the frame:
 
-**The first milestone does not wait for it.** 73 of 76 covers the frame's hot
-set, and the three can be added as they are needed.
+    PS 0x1EB47000 x178    PS 0x1EB3F000 x167    PS 0x1D6FC040 x73
+    VS 0x1D701000  x73    VS 0x1DACB000  x10    VS 0x1F000000   x9
+
+**This changes the plan.** Microcode-only translation is not a tidy-up for three
+stragglers; it is required for a third of the frame's shaders including the
+heaviest. NG2 is much closer to Fable II's situation (41 of 54 vertex shaders
+with no container) than the earlier numbers suggested. The Fable II side's
+generator is at `tools/native_gpu/synth_xvu.py` and iterates offline against
+microcode without a game run.
+
+Two traps recorded with it, both from that side: a synthetic container must set
+`physicalOffset` correctly or the recompiler starts 64 bytes early and runs 64
+bytes long (6 of their 13 segfaulted that way); and padding microcode with zeros
+raised their success rate 7/13 → 13/13 while *changing the decoded program* —
+one shader gave 643 lines through its real container, 644 synthetic, 640 padded,
+with different vertex inputs. A rising success rate is not evidence when what is
+counted is "did it produce output".
+
+**The first milestone still does not wait for it** — 54 shaders is enough to put
+geometry on screen — but the frame will not be correct until the other 33 are
+translated from microcode.
 
 ## Addendum 4: the input struct is complete (2026-09-17)
 
