@@ -684,3 +684,29 @@ Both axes, not one: every shader compiles **every time** and produces
 Each new question found something every previous question had passed. That is
 the argument for the correctness oracle being in place **before** the renderer
 draws anything, not after it draws something plausible.
+
+### One unreproduced anomaly, recorded rather than explained away
+
+Spot-checking the **real-container** 607 on the axis they had never been tested
+on — stability, not just compile success — one shader (`ng2_8204A270`) produced
+**2 distinct DXIL across 3 runs**.
+
+Chasing it did not reproduce it:
+
+    same shader, 8 runs:  7 succeeded, 1 segfaulted,
+                          all 7 produced IDENTICAL HLSL and identical arithmetic
+    one fixed HLSL, compiled 5 times by dxc: 1 distinct DXIL - dxc is deterministic
+
+So the two measurements disagree and neither explains the other. The most likely
+reading is a flaw in the first test rather than in the pipeline — it reused one
+scratch path across runs and a `.layout` sidecar persisted between them — but
+that is a hypothesis, not a result.
+
+Left standing as an open anomaly because the alternative is to write down the
+comfortable half. What *is* established: XenosRecomp's HLSL for this real
+container is deterministic across 7 runs, and dxc is deterministic across 5.
+What is not: why one run of one shader produced different DXIL.
+
+Worth re-checking when the renderer starts consuming the cache, because a shader
+that translates differently between builds of the cache is the kind of fault that
+would present as a scene changing between runs for no reason.
