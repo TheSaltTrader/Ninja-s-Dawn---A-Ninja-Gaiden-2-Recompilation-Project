@@ -228,28 +228,43 @@ what NG2's unnamed boolean constants (`b129`, `b137`) needed, which is why
 running XenosRecomp directly had failed: the raw binary compiles inline and
 never applies the fix-up pass.
 
-The 325 compile failures are concentrated, not scattered:
+**With a second NG2-specific pass (`tools/native_gpu/fix_hlsl_ng2.py`), every
+shader that translates now compiles: 607 of 607, 0 failures.** 18 of the 625
+containers crash the recompiler itself and produce no HLSL; that is the whole
+remaining gap.
 
-    215  use of undeclared identifier 'iPosition0'
-     58  use of undeclared identifier 'r32'
-     49  use of undeclared identifier 'iBinormal0'
-      1  use of undeclared identifier 'iDepth8'
+    XenosRecomp alone          0 compiled  (undeclared b129/b137 - no fix-up pass)
+    + fix_hlsl.py            291 compiled, 325 failed
+    + fix_hlsl_ng2.py        607 compiled,   0 failed
 
-`iPosition0` and `iBinormal0` are one cause. In a failing shader, `main()`
-declares **no vertex inputs at all** — only `SV_VertexID` — while the body reads
-`iPosition0`. Those are shaders whose attributes come from explicit `vfetch`
-instructions rather than a declared vertex layout, so XenosRecomp, which builds
-its input list from the container's definition table, emits references it never
-declared. The same family as the Fable side's local "duplicate vertex-input
-declarations" change.
+The pass does two things, both diagnosed from the error census rather than
+guessed:
 
-This is consistent with §2: NG2's draws are two thirds auto-index, and an
-auto-index draw has no input layout to declare — the shader fetches what it
-wants. So the shaders that fail to compile are likely the same population that
-makes NG2's frame unlike Fable's.
+**Vertex inputs the body fetches but `main()` never declares** (960 references
+to `iPosition0`, 224 to `iBinormal0`, 4 to `iDepth8`). XenosRecomp builds
+`main()`'s input list from the container's vertex definition table; a shader
+whose attributes come from explicit `vfetch` has no such table, so it emits a
+`main()` taking only `SV_VertexID` and a body reading `iPosition0` anyway. **This
+is the majority case for NG2 rather than a corner** - two thirds of its draws are
+auto-index (§2), and an auto-index draw has no input layout to declare. The
+shaders that failed to compile are largely the same population that makes NG2's
+frame unlike Fable II's.
 
-`r32` is separate: a GPR past the declared register count.
+**GPRs past the declared count** (`r32`..`r36`, 344 references). The recompiler
+sizes the register set from `SQ_PROGRAM_CNTL` and the microcode then uses more.
 
-Next, in order: declare the fetched attributes for the vfetch-only shaders, then
-`r32`. 291 compiled shaders is already enough to attempt the first milestone,
-since the frame's hot shaders are a small set (63-67 distinct per frame).
+One trap worth recording because it produced a *worse* result than the failure
+it fixed: matching the input identifiers as `i[A-Za-z]+\d+` also matches HLSL's
+own vector types `int2`, `int3`, `int4`, so the first version declared
+`in float4 int4 : NT4` and turned 2 compiling shaders into syntax errors. The
+recompiler capitalises the usage, so the correct pattern requires an upper-case
+character after the `i`. **A fix that introduces failures where there were none
+is worse than the failures it removes**, and it was only visible because the
+error census was re-read after the change rather than the total being compared.
+
+Per the Fable II side, two things the runtime will need that this pass does not
+supply: the sidecar's `computed` flag marks fetches indexed by the shader rather
+than by vertex id - those cannot be input-assembler attributes at all and must
+be bound as a buffer the shader indexes - and `declaredtype` must be checked
+against the fetch format, because D3D12 refuses a pipeline whose input element
+type class disagrees with the shader's declaration.
