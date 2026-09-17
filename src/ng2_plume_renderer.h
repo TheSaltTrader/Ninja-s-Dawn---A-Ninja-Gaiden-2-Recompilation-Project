@@ -79,6 +79,14 @@ enum class ShaderStage { kVertex, kPixel };
 bool WantShader(ShaderStage stage, uint32_t guest_address, uint32_t dword_count,
                 bool immediate);
 
+// Registers a program the consumer has already read from guest memory, keyed by
+// a hash of its FULL microcode. Returns true if the manifest knows it and the
+// stage agrees. Content-keyed because the offline containers and the runtime
+// IM_LOAD addresses live in different address spaces; whole-program because
+// fifteen of 625 containers share their first code dword.
+bool RegisterShaderMicrocode(ShaderStage stage, uint32_t guest_address, const uint8_t* ucode,
+                             uint32_t bytes);
+
 // STAGE 2b DESIGN CONSTRAINTS, written before the code so they are decisions
 // rather than repairs. Both come from defects found in the sibling project's
 // equivalent structures, in the same week, by reading rather than running.

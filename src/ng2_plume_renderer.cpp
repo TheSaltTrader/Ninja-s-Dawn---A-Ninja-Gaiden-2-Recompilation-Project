@@ -3,7 +3,11 @@
 #include <atomic>
 #include <cstdlib>
 #include <memory>
+#include <cstring>
+#include <fstream>
 #include <map>
+#include <sstream>
+#include <string>
 #include <mutex>
 #include <thread>
 #include <vector>
@@ -72,6 +76,61 @@ struct ShaderSeen {
 std::mutex g_shader_mutex;
 std::map<uint32_t, ShaderSeen> g_vertex_shaders;
 std::map<uint32_t, ShaderSeen> g_pixel_shaders;
+
+// THE MANIFEST: full-program microcode hash -> translated artefact.
+//
+// Keyed by CONTENT, not by address, and that is forced rather than preferred.
+// The containers were extracted from a guest memory dump and are named for
+// their offset in it; the runtime IM_LOAD addresses are physical. There is no
+// reliable mapping between those two address spaces from out here - but the
+// microcode is the same bytes in both, so content is the key that survives.
+//
+// The hash covers the WHOLE program. The first code dword of the first shader
+// this game loads, 0x30052003, is shared by fifteen of the 625 containers -
+// Xenos prologues are highly repetitive, and a short needle has already
+// produced one false finding on this project.
+struct ManifestEntry {
+  uint32_t dwords = 0;
+  bool is_pixel = false;
+  std::string artefact;
+};
+std::map<uint64_t, ManifestEntry> g_manifest;
+std::atomic<uint64_t> g_manifest_hits{0};
+std::atomic<uint64_t> g_manifest_unknown{0};
+std::atomic<uint64_t> g_manifest_stage_mismatch{0};
+
+uint64_t Fnv1a64(const uint8_t* p, size_t n) {
+  uint64_t h = 0xCBF29CE484222325ull;
+  for (size_t i = 0; i < n; ++i) {
+    h ^= p[i];
+    h *= 0x100000001B3ull;
+  }
+  return h;
+}
+
+void LoadManifest(const char* path) {
+  std::ifstream f(path);
+  if (!f) {
+    REXLOG_INFO("[ng2-plume] no shader manifest at {} - every lookup will miss", path);
+    return;
+  }
+  std::string line;
+  size_t n = 0;
+  while (std::getline(f, line)) {
+    if (line.empty() || line[0] == '#') continue;
+    std::istringstream is(line);
+    std::string hash_s, stage_s, name;
+    uint32_t dwords = 0;
+    if (!(is >> hash_s >> dwords >> stage_s >> name)) continue;
+    ManifestEntry e;
+    e.dwords = dwords;
+    e.is_pixel = (stage_s == "p");
+    e.artefact = name;
+    g_manifest[std::strtoull(hash_s.c_str(), nullptr, 16)] = e;
+    ++n;
+  }
+  REXLOG_INFO("[ng2-plume] shader manifest: {} programs ({} distinct hashes)", n, g_manifest.size());
+}
 std::atomic<uint64_t> g_vs_miss{0}, g_ps_miss{0};
 std::atomic<uint64_t> g_vs_immediate{0}, g_ps_immediate{0};
 
@@ -240,6 +299,12 @@ void Start() {
   if (!std::getenv("NG2_NATIVE_GPU_WINDOW")) return;
   if (g_running.exchange(true)) return;
   g_thread = std::thread(Thread);
+  // Forward slashes deliberately: written with backslashes, "D:\ng2_..." makes
+  // \n a NEWLINE and the path silently became "D:". The loader then reported
+  // "no shader manifest at D:" and every lookup missed, which looks exactly
+  // like an empty registry. Windows accepts forward slashes everywhere.
+  const char* manifest = std::getenv("NG2_SHADER_MANIFEST");
+  LoadManifest(manifest ? manifest : "D:/ng2_frameinterp/shaders/ng2_shaders.manifest");
   REXLOG_INFO("[ng2-plume] native shadow renderer starting (stage 2a: clear and present)");
 #endif
 }
@@ -292,7 +357,43 @@ void EndFrame() {
                 frame, drawn, handed, 100.0 * double(drawn) / double(handed), handed - drawn,
                 vs_n, ps_n, g_vs_miss.load(), g_ps_miss.load(),
                 g_vs_immediate.load(), g_ps_immediate.load());
+    REXLOG_INFO("[ng2-plume] manifest: {} programs, {} matched, {} unknown, {} stage-mismatch",
+                g_manifest.size(), g_manifest_hits.load(), g_manifest_unknown.load(),
+                g_manifest_stage_mismatch.load());
   }
+#endif
+}
+
+bool RegisterShaderMicrocode(ShaderStage stage, uint32_t guest_address, const uint8_t* ucode,
+                             uint32_t bytes) {
+#if defined(NG2_PLUME_ON)
+  if (!g_running.load(std::memory_order_relaxed) || !guest_address || !ucode || !bytes) return false;
+  const uint64_t h = Fnv1a64(ucode, bytes);
+
+  std::lock_guard<std::mutex> lock(g_shader_mutex);
+  auto it = g_manifest.find(h);
+  if (it == g_manifest.end()) {
+    g_manifest_unknown.fetch_add(1, std::memory_order_relaxed);
+    return false;
+  }
+  // THE STAGE MUST AGREE. A program that hashes to a pixel artefact while the
+  // ring is binding it as a vertex shader means the match is wrong however
+  // good the hash is, and serving it would be exactly the silent substitution
+  // this design forbids. Counted, named, refused.
+  const bool want_pixel = (stage == ShaderStage::kPixel);
+  if (it->second.is_pixel != want_pixel) {
+    g_manifest_stage_mismatch.fetch_add(1, std::memory_order_relaxed);
+    return false;
+  }
+  auto& map = want_pixel ? g_pixel_shaders : g_vertex_shaders;
+  auto& seen = map[guest_address];
+  if (!seen.available) g_manifest_hits.fetch_add(1, std::memory_order_relaxed);
+  seen.available = true;
+  seen.dwords = bytes / 4;
+  return true;
+#else
+  (void)stage; (void)guest_address; (void)ucode; (void)bytes;
+  return false;
 #endif
 }
 

@@ -1,0 +1,105 @@
+#!/usr/bin/env python3
+"""Build the runtime shader manifest: full-program hash -> translated artefact.
+
+WHY BY CONTENT AND NOT BY ADDRESS. The containers were extracted from a guest
+memory dump and are named for their offset in it (ng2_8200AC88), while the
+runtime IM_LOAD addresses are physical (1C464000). Those are different address
+spaces and there is no reliable mapping between them from outside. The microcode
+itself is the same bytes in both, so content is the key that survives.
+
+WHY THE WHOLE PROGRAM AND NOT A PREFIX. Measured here: the first code dword of
+the first shader the game loads, 0x30052003, is shared by FIFTEEN of the 625
+containers. Xenos microcode prologues are highly repetitive, and this project
+has already had one false finding from a 48-byte needle colliding. The rule
+recorded from that: match on at least 256 bytes at 98% or better. Hashing the
+full program is strictly stronger and costs nothing here, because the draw
+record carries the program's dword count.
+
+The manifest is a flat text file so the runtime loader needs no parser:
+    <hash16>  <dwords>  <v|p>  <artefact name>
+
+Usage: make_shader_manifest.py <container dir> <dxil dir> <out manifest>
+"""
+import os
+import struct
+import sys
+
+
+def fnv1a64(data):
+    h = 0xCBF29CE484222325
+    for b in data:
+        h ^= b
+        h = (h * 0x100000001B3) & 0xFFFFFFFFFFFFFFFF
+    return h
+
+
+def code_region(path):
+    """Return (bytes_of_code, is_pixel) or None."""
+    d = open(path, "rb").read()
+    if len(d) < 0x24:
+        return None
+    flags, vsize, psize = struct.unpack_from(">3I", d, 0)
+    if (flags & 0xFFFFFF00) != 0x102A1100:
+        return None
+    shoff = struct.unpack_from(">I", d, 0x18)[0]
+    if shoff + 8 > len(d):
+        return None
+    po, size = struct.unpack_from(">2I", d, shoff)
+    at = vsize + po
+    if at + size > len(d) or size == 0:
+        return None
+    # isPixelShader = (flags & 1) == 0
+    return d[at:at + size], (flags & 1) == 0
+
+
+def main():
+    if len(sys.argv) < 4:
+        print(__doc__)
+        return 2
+    containers, dxil_dir, out_path = sys.argv[1], sys.argv[2], sys.argv[3]
+
+    have_dxil = set()
+    if os.path.isdir(dxil_dir):
+        have_dxil = {f[:-5] for f in os.listdir(dxil_dir) if f.endswith(".dxil")}
+
+    rows, skipped, no_artefact = [], 0, 0
+    by_hash = {}
+    for name in sorted(os.listdir(containers)):
+        if not name.endswith(".xvu"):
+            continue
+        r = code_region(os.path.join(containers, name))
+        if r is None:
+            skipped += 1
+            continue
+        code, is_pixel = r
+        stem = name[:-4]
+        if stem not in have_dxil:
+            no_artefact += 1
+            continue
+        h = fnv1a64(code)
+        # A collision here would mean two DIFFERENT programs hashing the same,
+        # which would silently serve the wrong shader - exactly the failure the
+        # whole-program hash exists to prevent. Say so rather than overwrite.
+        if h in by_hash and by_hash[h][0] != code:
+            print("COLLISION: %016X shared by %s and %s" % (h, by_hash[h][1], stem))
+        by_hash.setdefault(h, (code, stem))
+        rows.append((h, len(code) // 4, "p" if is_pixel else "v", stem))
+
+    with open(out_path, "w", encoding="ascii", newline="\n") as f:
+        f.write("# full-program FNV-1a-64 of Xenos microcode -> translated artefact\n")
+        f.write("# hash              dwords stage name\n")
+        for h, dwords, stage, stem in rows:
+            f.write("%016X %6d %s %s\n" % (h, dwords, stage, stem))
+
+    print("containers scanned : %d" % (len(rows) + skipped + no_artefact))
+    print("  unparseable      : %d" % skipped)
+    print("  no .dxil artefact: %d" % no_artefact)
+    print("  IN MANIFEST      : %d  (%d vertex, %d pixel)"
+          % (len(rows), sum(1 for r in rows if r[2] == "v"), sum(1 for r in rows if r[2] == "p")))
+    print("  distinct hashes  : %d" % len(by_hash))
+    print("written: %s" % out_path)
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

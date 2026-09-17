@@ -7,6 +7,9 @@
 #include <cstdint>
 #include <cstdlib>
 #include <cstring>
+#include <mutex>
+#include <set>
+#include <vector>
 #include <string>
 #include <thread>
 
@@ -118,6 +121,11 @@ std::atomic<uint32_t> g_idx_sample_base{0};
 std::atomic<uint32_t> g_idx_sample_words{0};
 std::atomic<uint32_t> g_idx_sample_endian{0};
 
+std::atomic<uint64_t> g_ucode_read_ok{0};
+std::atomic<uint64_t> g_ucode_read_faulted{0};
+std::atomic<uint32_t> g_ucode_first_addr{0};
+std::atomic<uint32_t> g_ucode_first_word{0};
+
 // Read once at Start(), not per draw: this is on the per-draw path.
 bool g_check_inputs = false;
 
@@ -148,6 +156,11 @@ std::string Totals() {
         n, g_idx_virtual_ok.load(), g_idx_physical_ok.load(), g_idx_both.load(),
         g_idx_neither.load(), g_idx_faulted.load(), g_idx_sample_base.load(),
         g_idx_sample_words.load(), g_idx_sample_endian.load());
+  }
+  if (const uint64_t u = g_ucode_read_ok.load() + g_ucode_read_faulted.load()) {
+    idx += fmt::format(" | UCODE readable {} of {} (first {:08X} word0 {:08X})",
+                       g_ucode_read_ok.load(), u, g_ucode_first_addr.load(),
+                       g_ucode_first_word.load());
   }
   return fmt::format("{} draws ({} indexed, {} auto), {} indices{}{}{}{}{}",
                      g_draws.load(), g_indexed.load(), g_auto.load(), g_indices.load(), serial, idx,
@@ -302,6 +315,68 @@ void CheckIndexBuffer(const GpuDrawRecord* rec) {
 // frame: draws handed over against draws the renderer actually issued.
 void OnSwap(uint32_t, uint32_t, uint32_t) { render::EndFrame(); }
 
+// STAGE 2b STEP 2: is shader microcode READABLE at its IM_LOAD address?
+//
+// The gating question, asked before building a translation path on top of the
+// answer. Index data turned out not to be CPU-readable at all - those pages
+// reach the GPU through shared-memory residency - and 1,889,699 faults were
+// spent discovering that. If shader microcode is the same, a registry keyed on
+// runtime-read microcode is impossible and the mapping has to come from
+// somewhere else entirely.
+//
+// Reuses the same guarded read, so a fault is a datum rather than a crash.
+
+// Reads the WHOLE program and offers it to the registry. Measured readable:
+// 11,095 of 11,095 with zero faults, which is what makes this path possible at
+// all - index data, by contrast, is not CPU-readable and faulted 1,889,699
+// times out of 1,889,700.
+//
+// Only the first sighting of an address does the work. A program is thousands
+// of draws' worth of the same bytes, and hashing it every draw would put a
+// kilobyte-scale read on the per-draw path for no information.
+constexpr uint32_t kMaxUcodeBytes = 64u * 1024u;
+
+void ProbeShaderMicrocode(render::ShaderStage stage, uint32_t addr, uint32_t dwords) {
+  if (!addr || !dwords) return;
+  const uint32_t bytes = dwords * 4u;
+  if (bytes > kMaxUcodeBytes) return;
+
+  {
+    // Seen-set, so each address is read once rather than once per draw.
+    static std::mutex m;
+    static std::set<uint64_t> seen;
+    const uint64_t key = (uint64_t(stage == render::ShaderStage::kPixel) << 32) | addr;
+    std::lock_guard<std::mutex> lock(m);
+    if (!seen.insert(key).second) return;
+  }
+
+  auto* memory = REX_KERNEL_MEMORY();
+  if (!memory) return;
+  std::vector<uint8_t> buf(bytes);
+#if defined(_WIN32)
+  bool ok = false;
+  __try {
+    ok = ReadGuestBytes(memory->TranslatePhysical<const uint8_t*>(addr), bytes, buf.data());
+  } __except (EXCEPTION_EXECUTE_HANDLER) {
+    ok = false;
+  }
+#else
+  const bool ok = ReadGuestBytes(memory->TranslatePhysical<const uint8_t*>(addr), bytes, buf.data());
+#endif
+  if (!ok) {
+    g_ucode_read_faulted.fetch_add(1, std::memory_order_relaxed);
+    return;
+  }
+  g_ucode_read_ok.fetch_add(1, std::memory_order_relaxed);
+  uint32_t expected = 0;
+  if (g_ucode_first_addr.compare_exchange_strong(expected, addr, std::memory_order_relaxed)) {
+    g_ucode_first_word.store((uint32_t(buf[0]) << 24) | (uint32_t(buf[1]) << 16) |
+                                 (uint32_t(buf[2]) << 8) | uint32_t(buf[3]),
+                             std::memory_order_relaxed);
+  }
+  render::RegisterShaderMicrocode(stage, addr, buf.data(), bytes);
+}
+
 void OnDraw(const GpuDrawRecord* rec) {
   if (!rec || rec->struct_size != sizeof(GpuDrawRecord)) {
     g_bad_size.fetch_add(1, std::memory_order_relaxed);
@@ -347,6 +422,14 @@ void OnDraw(const GpuDrawRecord* rec) {
                                           rec->ps_dwords, rec->ps_immediate != 0);
   (void)have_vs;
   (void)have_ps;  // stage 2b: nothing is translated yet, so both are false
+
+  // Can the microcode behind those addresses actually be read?
+  // Both stages, symmetrically - the registration path must not favour one
+  // either, or it reintroduces the asymmetry the lookup was built to prevent.
+  if (!rec->vs_immediate)
+    ProbeShaderMicrocode(render::ShaderStage::kVertex, rec->vs_address, rec->vs_dwords);
+  if (!rec->ps_immediate)
+    ProbeShaderMicrocode(render::ShaderStage::kPixel, rec->ps_address, rec->ps_dwords);
 
   const uint32_t di = rec->vgt_draw_initiator;
   g_draws.fetch_add(1, std::memory_order_relaxed);
