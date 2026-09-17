@@ -85,7 +85,7 @@ bool WantShader(ShaderStage stage, uint32_t guest_address, uint32_t dword_count,
 // IM_LOAD addresses live in different address spaces; whole-program because
 // fifteen of 625 containers share their first code dword.
 bool RegisterShaderMicrocode(ShaderStage stage, uint32_t guest_address, const uint8_t* ucode,
-                             uint32_t bytes);
+                             uint32_t bytes, const uint8_t* preamble128 = nullptr);
 
 // STAGE 2b DESIGN CONSTRAINTS, written before the code so they are decisions
 // rather than repairs. Both come from defects found in the sibling project's
@@ -150,6 +150,28 @@ bool RegisterShaderMicrocode(ShaderStage stage, uint32_t guest_address, const ui
 //    on the one path where a wrong frame is hardest to notice. This costs
 //    nothing to do now, while the renderer still draws nothing, and cannot be
 //    retrofitted cheaply later.
+//
+// 7. AN EXCESS OF COVERAGE IS A DEFECT, NOT HEADROOM. The Xenos renders in
+//    BINS, and the bin is not carried by the draw - it lives in the surrounding
+//    state. So a replay that faithfully reissues every draw but loses the bin
+//    partition writes every bin into one full-screen target and paints the frame
+//    several times over. It FAILS UPWARD: the result looks more complete than
+//    the original, not less.
+//
+//    Measured in the sibling project, whose replay read brighter than the very
+//    control it was replaying: brighter by more than 30 in 66.6% of pixels while
+//    only 2.25% was newly lit. Same pixels painted repeatedly, not more scene -
+//    and their own comfortable explanation, "the bridge sees more draws than the
+//    hooks", would have closed the question wrongly.
+//
+//    THIS IS THE ONE THE ORACLE ABOVE CANNOT SEE. Counting handed-off against
+//    rendered is the right instrument for MISSING draws and is blind to this:
+//    every draw issued, every draw landed, wrong region. So when draws start
+//    reaching a surface, the test is a DIFFERENCE IMAGE against a control, split
+//    two ways - "brighter than the control" versus "lit where the control is
+//    black". Overdraw is a large first number with a small second one; genuinely
+//    extra geometry is the reverse. One coverage percentage cannot tell them
+//    apart, which is exactly how 99.4% there looked like success.
 //
 // And the reason all of these are stated here rather than discovered later:
 // reading and running catch DIFFERENT classes. These two are structural - visible to a
