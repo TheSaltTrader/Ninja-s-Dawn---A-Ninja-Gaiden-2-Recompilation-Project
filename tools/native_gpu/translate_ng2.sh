@@ -1,17 +1,36 @@
 #!/bin/sh
-# Translate NG2 shader containers with XenosRecomp and compile with dxc.
+# Translate NG2 shader containers with XenosRecomp and compile with dxc,
+# PRODUCING ONLY ARTEFACTS THAT REPRODUCE.
+#
+#   translate_ng2.sh <container dir> <out dir> [glob]     (glob default: *.xvu)
 #
 # Separate from translate_all.sh, which is the Fable II side's and runs only
 # fix_hlsl.py. NG2 needs a SECOND pass: two thirds of its draws are auto-index,
 # so most of its vertex shaders fetch their own attributes and the recompiler
 # emits a main() that never declares the inputs its body reads. That pass is
-# fix_hlsl_ng2.py and it is the difference between compiling and not for the
-# majority population here.
+# fix_hlsl_ng2.py.
 #
-#   translate_ng2.sh <container dir> <out dir> [glob]     (glob default: *.xvu)
+# WHY EVERY SHADER IS TRANSLATED SEVERAL TIMES. Measured over 80 containers,
+# three runs each, on an idle machine:
 #
-# Naming decides the target profile, as upstream: *_p.xvu is a pixel shader.
+#     STABLE 54 | UNSTABLE 13 | always failed 1 | SOMETIMES failed 12
+#
+# Thirty-one percent of containers do not translate to the same thing twice -
+# some produce different HLSL between successful runs, some segfault on one run
+# and succeed byte-identically on the next. A single pass therefore produces a
+# manifest that is one roll of the dice, and for the unstable ones WHICH
+# translation reached the artefact is a coin flip. So a result is only kept when
+# STABLE_RUNS attempts agree byte for byte; everything else is recorded and
+# refused. A smaller manifest that rebuilds identically beats a larger one that
+# cannot be reproduced.
+#
+# The comparison is of the RAW recompiler output, before the fix passes, because
+# that is where the non-determinism lives.
 IN="$1"; OUT="$2"; GLOB="${3:-*.xvu}"
+STABLE_RUNS="${STABLE_RUNS:-3}"
+TIME_CAP_S="${TIME_CAP_S:-120}"
+MEM_CAP_MB="${MEM_CAP_MB:-4096}"
+
 X=/c/Users/renoi/ClaudeCode/NativeGPU/build/xenosrecomp/XenosRecomp/XenosRecomp.exe
 # THE HEADER IS AN INPUT UNDER TEST, AND THE TWO ON DISK ARE NOT INTERCHANGEABLE.
 #
@@ -21,17 +40,18 @@ X=/c/Users/renoi/ClaudeCode/NativeGPU/build/xenosrecomp/XenosRecomp/XenosRecomp.
 # DEFINE_SHARED_CONSTANTS is a macro in the header, so that offset is fixed
 # text, nothing to do with the container. The stock upstream one puts the shared
 # block at c16 - inside the sampler descriptor arrays XenosRecomp emits - and
-# EVERY shader then fails with "packoffset overlap between 'g_HalfPixelOffset',
-# 'g_Sampler3_TextureCubeDescriptorIndex'". All 607 of NG2's real translations
-# were made with the fable2_ one, so that is the working header despite its name.
-#
-# translate_all.sh defaults to the stock header, and inheriting that default sent
-# a whole batch through the wrong one - the same substitution that has already
-# cost this project an afternoon via the plugin and via an env var. Whatever runs
-# the tool names the input and PRINTS it.
+# EVERY shader then fails with "packoffset overlap". All 625 of NG2's real
+# translations were made with the fable2_ one, so that is the working header
+# despite its name.
 H="${XENOS_COMMON:-/c/Users/renoi/ClaudeCode/NativeGPU/fable2_shader_common.h}"
 D=/c/Users/renoi/ClaudeCode/NativeGPU/reference/XenosRecomp/thirdparty/dxc-bin/bin/x64/dxc.exe
 TOOLS="$(cd "$(dirname "$0")" && pwd)"
+# A TIME CAP BOUNDS HOW LONG A PROCESS RUNS, NOT HOW MUCH IT TAKES WITH IT.
+# XenosRecomp reached a 55 GB working set on one container and took the machine
+# from 93.6 GB free to 0.5 GB, killing unrelated background work. Raising the
+# deadline made that WORSE by giving it longer to allocate. run_capped.py puts
+# both caps on, and tells crash (126) apart from time (124) and memory (125).
+CAP="python $TOOLS/run_capped.py $TIME_CAP_S $MEM_CAP_MB --"
 
 [ -x "$X" ] || { echo "no XenosRecomp at $X"; exit 1; }
 [ -f "$H" ] || { echo "no shader_common header at $H"; exit 1; }
@@ -40,42 +60,67 @@ TOOLS="$(cd "$(dirname "$0")" && pwd)"
 echo "HEADER UNDER TEST: $H"
 echo "  shared-constant base: $(sed -n 's/.*g_HalfPixelOffset : packoffset(\(c[0-9]*\).*/\1/p' "$H" | head -1)"
 echo "RECOMPILER       : $X"
+echo "STABILITY        : $STABLE_RUNS runs must agree byte-for-byte"
+echo "CAPS             : ${TIME_CAP_S}s, ${MEM_CAP_MB}MB"
 
-mkdir -p "$OUT/hlsl" "$OUT/dxil"
-: > "$OUT/errors.txt"; : > "$OUT/failed.txt"
-tr_ok=0; tr_bad=0; c_ok=0; c_bad=0
+mkdir -p "$OUT/hlsl" "$OUT/dxil" "$OUT/tmp"
+: > "$OUT/errors.txt"; : > "$OUT/failed.txt"; : > "$OUT/unstable.txt"
+tr_ok=0; tr_bad=0; unstable=0; c_ok=0; c_bad=0
 cd "$IN" || exit 1
 for f in $GLOB; do
   [ -f "$f" ] || continue
   n=${f%.xvu}; n=${n%.var}
-  case "$f" in *_p.xvu|*_p.var.xvu) t=ps_6_0;; *) t=vs_6_0;; esac
-  # A STALE ARTEFACT IS WORSE THAN A MISSING ONE: the manifest builder keys on
-  # "a .dxil with this stem exists", so a leftover from a previous run makes it
-  # claim an artefact for a shader that has since failed to translate. Remove
-  # this shader's outputs before trying, so absence means failure.
+  case "$f" in *_p.xvu|*_p.var.xvu|*_p.cpu.xvu) t=ps_6_0;; *) t=vs_6_0;; esac
+  # A STALE ARTEFACT IS WORSE THAN A MISSING ONE: the manifest keys on "a .dxil
+  # with this stem exists", so a leftover from a previous run makes it claim an
+  # artefact for a shader that has since failed. Absence must mean failure.
   rm -f "$OUT/dxil/$n.dxil" "$OUT/hlsl/$n.hlsl"
-  # TIMEOUT 120, NOT 15. At 15 seconds the result of this build step depended on
-  # MACHINE LOAD: a full run made while the sibling project was running a game
-  # reported 28 recompiler failures, and re-running the same containers on an
-  # idle machine translated 22 of them. Twenty-two shaders were "untranslatable"
-  # because another process was busy. A build step whose output changes with
-  # what else is running is not a build step, and it silently shrinks the
-  # manifest - which then reads as missing translations rather than as a
-  # confounded run.
-  if timeout 120 "$X" "$f" "$OUT/hlsl/$n.hlsl" "$H" >/dev/null 2>&1 && [ -s "$OUT/hlsl/$n.hlsl" ]; then
-    tr_ok=$((tr_ok+1))
-    python "$TOOLS/fix_hlsl.py" "$OUT/hlsl/$n.hlsl" "$OUT/hlsl/$n.hlsl.layout" >/dev/null 2>&1
-    python "$TOOLS/fix_hlsl_ng2.py" "$OUT/hlsl/$n.hlsl" >/dev/null 2>&1
-    if "$D" -T $t -E main -HV 2021 -all-resources-bound -Wno-ignored-attributes \
-            -Fo "$OUT/dxil/$n.dxil" "$OUT/hlsl/$n.hlsl" >"$OUT/dxil/$n.err" 2>&1; then
-      c_ok=$((c_ok+1))
-    else
-      c_bad=$((c_bad+1)); grep -m1 "error" "$OUT/dxil/$n.err" | sed "s/^/$n: /" >> "$OUT/errors.txt"
+
+  first=""; agreed=1; reason=""
+  i=1
+  while [ "$i" -le "$STABLE_RUNS" ]; do
+    out="$OUT/tmp/$n.$i.hlsl"
+    rm -f "$out"
+    $CAP "$X" "$f" "$out" "$H" >/dev/null 2>&1
+    rc=$?
+    if [ "$rc" -ne 0 ] || [ ! -s "$out" ]; then
+      agreed=0
+      case "$rc" in
+        124) reason="time cap";;
+        125) reason="MEMORY CAP";;
+        126) reason="crashed";;
+        *)   reason="no output (rc $rc)";;
+      esac
+      break
     fi
+    h=$(md5sum "$out" | cut -d' ' -f1)
+    if [ -z "$first" ]; then first="$h"
+    elif [ "$h" != "$first" ]; then agreed=0; reason="UNSTABLE output"; break; fi
+    i=$((i+1))
+  done
+
+  if [ "$agreed" -eq 0 ]; then
+    case "$reason" in
+      "UNSTABLE output") unstable=$((unstable+1)); echo "$f  $reason" >> "$OUT/unstable.txt";;
+      *) tr_bad=$((tr_bad+1)); echo "$f  $reason" >> "$OUT/failed.txt";;
+    esac
+    rm -f "$OUT/tmp/$n".*.hlsl
+    continue
+  fi
+
+  cp "$OUT/tmp/$n.1.hlsl" "$OUT/hlsl/$n.hlsl"
+  rm -f "$OUT/tmp/$n".*.hlsl
+  tr_ok=$((tr_ok+1))
+  python "$TOOLS/fix_hlsl.py" "$OUT/hlsl/$n.hlsl" "$OUT/hlsl/$n.hlsl.layout" >/dev/null 2>&1
+  python "$TOOLS/fix_hlsl_ng2.py" "$OUT/hlsl/$n.hlsl" >/dev/null 2>&1
+  if "$D" -T $t -E main -HV 2021 -all-resources-bound -Wno-ignored-attributes \
+          -Fo "$OUT/dxil/$n.dxil" "$OUT/hlsl/$n.hlsl" >"$OUT/dxil/$n.err" 2>&1; then
+    c_ok=$((c_ok+1))
   else
-    tr_bad=$((tr_bad+1)); echo "$f" >> "$OUT/failed.txt"
+    c_bad=$((c_bad+1)); grep -m1 "error" "$OUT/dxil/$n.err" | sed "s/^/$n: /" >> "$OUT/errors.txt"
   fi
 done
-echo "translated $tr_ok, recompiler failed $tr_bad; dxc compiled $c_ok, failed $c_bad"
+rmdir "$OUT/tmp" 2>/dev/null
+echo "reproducible $tr_ok, UNSTABLE $unstable, recompiler failed $tr_bad; dxc compiled $c_ok, failed $c_bad"
 [ -s "$OUT/errors.txt" ] && sed 's/^[^:]*: //' "$OUT/errors.txt" | sed 's/.*error: //' | cut -c1-90 | sort | uniq -c | sort -rn | head -8
 exit 0
