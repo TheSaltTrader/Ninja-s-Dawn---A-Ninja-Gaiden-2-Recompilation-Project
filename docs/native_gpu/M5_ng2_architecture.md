@@ -645,3 +645,42 @@ one silently corrupts every constant the shader uses.
 
 None was findable from where its fix eventually came, and each session's sample
 was structurally blind to at least one of them.
+
+### The fourth defect, and the end of the shader path
+
+The Fable II session applied the success-vs-correctness lesson to its own result
+immediately and it paid: running the 28 through the **rest** of the pipeline —
+`fix_hlsl`, then `dxc`, as the runtime actually does — rather than stopping at
+"it translated", **all 15 pixel shaders failed to compile.**
+
+A `PixelShader` header is its own struct (`{ field18; outputs; interpolators[] }`)
+and the generator emitted only the 24-byte `Shader` base, so the recompiler read
+the constant table as the interpolator list. **It is the vertex element bug one
+population over**, and it stayed hidden for exactly the reason the lesson names:
+the pixel shaders had only ever been asked whether they *translated*, and they
+did — byte-identically, 15 of 15, carrying plausible literals. Every instrument
+that existed passed them. (Fixing it then exposed `redefinition of 'r0'`:
+`Interpolator` is `usageIndex:4 | usage:4 | reg:4`, and a zero `reg` declares
+every interpolator into `r0`.)
+
+**NG2 confirms it and the shader path closes.** Through the full pipeline —
+translate, `fix_hlsl`, `fix_hlsl_ng2`, `dxc` — with all four fixes in place:
+
+    10 of 10 compiled to DXIL, 0 dxc failures, 0 recompiler failures
+    3 runs each: 3/3 compiled, 1 distinct DXIL apiece - STABLE
+
+Both axes, not one: every shader compiles **every time** and produces
+**identical** DXIL.
+
+### Four defects, and what each was invisible to
+
+| defect | invisible to |
+|---|---|
+| vertex element table | translate-rate (it crashed *sometimes*) |
+| sampler count | an all-vertex sample |
+| literal constants | stability — NaN is perfectly stable |
+| pixel shader header | everything short of compilation |
+
+Each new question found something every previous question had passed. That is
+the argument for the correctness oracle being in place **before** the renderer
+draws anything, not after it draws something plausible.

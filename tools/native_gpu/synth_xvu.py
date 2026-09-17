@@ -48,8 +48,16 @@ def build(microcode, is_vertex=True, pad=0, n_interpolators=8, preamble=None):
     DEF_HEADER = 20            # DefinitionTable's five header dwords
     DEF_BYTES = DEF_HEADER + 8 + 4 + 4 if preamble else 0   # one Float4Definition, then both terminators
     shader_off = HEADER
-    # Shader(24) + field18/count/field20(12) + the array
-    shader_bytes = 24 + 12 + (n_elems + n_interpolators) * 4 if is_vertex else 24
+    # A vertex shader header is Shader(24) + field18/count/field20(12) + the
+    # element and interpolator array. A PIXEL shader header is its own struct -
+    #   struct PixelShader : Shader { field18; outputs; interpolators[]; }
+    # - and emitting only the 24-byte base left the recompiler reading the
+    # constant table as its interpolator list, which produced HLSL referencing
+    # inputs it never declared. The vertex bug, one population over.
+    if is_vertex:
+        shader_bytes = 24 + 12 + (n_elems + n_interpolators) * 4
+    else:
+        shader_bytes = 24 + 8 + n_interpolators * 4
     def_off = shader_off + shader_bytes
     ctc_off = def_off + DEF_BYTES
     ct_off = ctc_off + 4
@@ -101,8 +109,18 @@ def build(microcode, is_vertex=True, pad=0, n_interpolators=8, preamble=None):
             # all the recompiler needs to declare each input once.
             p32(arr + i * 4, (addr & 0xFFF) | (USAGE_TEXCOORD << 12) | ((i & 0xF) << 16))
         for i in range(n_interpolators):
-            # Interpolator packs usageIndex first, then usage.
-            p32(arr + (n_elems + i) * 4, (i & 0xF) | (USAGE_TEXCOORD << 4))
+            # Interpolator: usageIndex:4 | usage:4 | reg:4. The reg is which
+            # shader register it lands in; leaving it zero put every
+            # interpolator in r0.
+            p32(arr + (n_elems + i) * 4, (i & 0xF) | (USAGE_TEXCOORD << 4) | ((i & 0xF) << 8))
+    else:
+        p32(shader_off + 0x18, 0)                  # field18
+        p32(shader_off + 0x1C, 1)                  # outputs: COLOR0
+        arr = shader_off + 0x20
+        # The pixel shader reads what the vertex shader writes, so the two
+        # interpolator lists have to agree: TexCoord0..N on both sides.
+        for i in range(n_interpolators):
+            p32(arr + i * 4, (i & 0xF) | (USAGE_TEXCOORD << 4) | ((i & 0xF) << 8))
 
     p32(ctc_off, ct_size + info_bytes + (cursor - (info_off + info_bytes)))
     p32(ct_off + 0x00, ct_size)
