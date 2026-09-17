@@ -73,6 +73,7 @@ def main():
         pairs.append((c, d))
 
     rows, skipped, no_artefact = [], 0, 0
+    superseded = []
     by_hash = {}
     per_source = []
     for containers, dxil_dir in pairs:
@@ -102,6 +103,28 @@ def main():
             # than overwrite.
             if h in by_hash and by_hash[h][0] != code:
                 print("COLLISION: %016X shared by %s and %s" % (h, by_hash[h][1], stem))
+            # THE FIRST SOURCE WINS, and the sources are given real-containers
+            # first. Three programs synthesised from runtime dumps turned out to
+            # HAVE containers all along - they had merely failed to translate
+            # under the wrong shader_common header.
+            #
+            # NOT because the real container carries a truer vertex element
+            # table. It was checked, and it does not: all three declare
+            # vertexElementCount == 0 while their microcode contains 3 to 6
+            # vfetch instructions, so the real container's table is EMPTY and
+            # the recompiler relies on fix_hlsl_ng2.py to declare the inputs
+            # afterwards, while the synthetic one derives them by scanning. Both
+            # compile. The real one is preferred because it is the game's own
+            # data and the fix pass is validated across the whole population,
+            # not because it is more informative here.
+            #
+            # The runtime loader assigns g_manifest[hash] per row, so a
+            # duplicate row would silently overwrite whichever came first;
+            # skipping it here is what makes the preference real rather than an
+            # accident of file order.
+            if h in by_hash:
+                superseded.append((stem, by_hash[h][1]))
+                continue
             by_hash.setdefault(h, (code, stem))
             # THE PATH, NOT THE STEM. Merging two container sources into one
             # manifest made a bare stem ambiguous about WHICH dxil directory
@@ -126,6 +149,10 @@ def main():
     print("  IN MANIFEST      : %d  (%d vertex, %d pixel)"
           % (len(rows), sum(1 for r in rows if r[2] == "v"), sum(1 for r in rows if r[2] == "p")))
     print("  distinct hashes  : %d" % len(by_hash))
+    if superseded:
+        print("  SUPERSEDED       : %d (same program from a later source, not emitted)" % len(superseded))
+        for later, first in superseded[:8]:
+            print("     %-28s already covered by %s" % (later, first))
     print("written: %s" % out_path)
     return 0
 
