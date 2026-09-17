@@ -117,8 +117,28 @@ Measured:
 | scope | result |
 |---|---|
 | 22 MiB window around the frame's IM_LOAD addresses | 1 raw signature, 0 valid |
-| whole 512 MiB physical space | 34 raw signatures, **0 valid** |
-| guest virtual 0x80000000-0xA0000000 | **not yet measured** - the dump wrote a zero-byte file |
+| whole 512 MiB physical space | 34 raw signatures, 0 valid |
+| **guest virtual 0x80000000-0xA0000000** | **663 raw, 663 VALID** |
+
+**RESOLVED, same evening. NG2 does use the XDK container format.** They are in
+the guest VIRTUAL space, from 0x8200AC88 upward, with constant tables and
+definition tables intact. They were never missing - the search was in the RAM
+alias, which is where the microcode lives and the container does not.
+
+The first virtual dump wrote a zero-byte file and the fix was the Fable
+session's diagnosis: the title's heap is *allocated*, not reserved wholesale, so
+a flat 512 MiB sweep crosses large unmapped holes. Page by page with a
+`QueryProtect` check, writing unmapped pages as zeros so every file offset stays
+its guest address: 14,976 pages mapped of 131,072, and every container found.
+
+So the PM4 route's bill at the container is smaller than the paragraph below
+says. It still does not get the container *from the packet* - but it does not
+need the shader object either. A signature scan of the title's heap finds all
+663, which keeps the route's independence from guest-side identification.
+
+Next: XenosRecomp parses them and fails at the HLSL compile - undeclared
+`b129`/`b137` bool constants and `iPosition0` - so NG2 needs its own
+`shader_common.h` rather than Fable II's. Bounded, known work.
 
 The Fable II side reads its containers at **shader object + 0x28** — it hooks
 the guest call, so it has the object. The PM4 route never sees the object.

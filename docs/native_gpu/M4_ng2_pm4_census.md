@@ -166,3 +166,36 @@ The census costs one already-loaded bool per packet when off.
 `xenos::SourceSelect` is `kDMA=0, kImmediate=1, kAutoIndex=2`, so the first slot
 is kDMA and the third is kAutoIndex. The `indexed=`/`auto=` counts printed
 alongside it are correct and were used for everything above.
+
+## 7. Not tiled — the draw counts above are per frame
+
+NG2 emits `SET_BIN_MASK_LO` six times a frame, which raises a question that
+would invalidate every number here if the answer went the other way: **if the
+frame is replayed once per EDRAM tile, the ring asks for each draw several times
+while the game issues it once**, and the counts in §2 are inflated by the tile
+count rather than being per-frame.
+
+Measured directly, by bucketing every executed draw on the `(bin_mask,
+bin_select)` pair in force and separately counting the draw packets the
+predicate *rejects*:
+
+    frame 1500  bins: 1 distinct (mask,select) pair [FFFFFFFFFFFFFFFF] = 2342
+                predicated draws = 673   rejected = 0
+
+One bucket, every draw in it, nothing rejected. **NG2 is not tiled.** 673 draws
+carry the predicate bit and all 673 pass, because both mask and select are
+all-ones — the title sets up for predication and never uses it, which is why the
+`SET_BIN_MASK` emitters exist and fire without a single replay behind them.
+
+The rejected-packet counter is what makes the bucket count trustworthy. A
+rejected packet returns from `ExecutePacketType3` before any census sees it, so
+an instrument that counts only what executes cannot distinguish a single-pass
+frame from a tiled frame whose other passes were all rejected. Counting from
+inside the predicate branch, before the early return, is the only place it can
+be seen.
+
+Credit where due: the doubt came from the Fable II session, which found the same
+emitters in its own entry-point table and realised its headline coverage number
+might be comparing per-tile ring draws against per-call API draws. The emitters
+being present proves nothing either way — which is exactly why it needed
+measuring rather than arguing.
