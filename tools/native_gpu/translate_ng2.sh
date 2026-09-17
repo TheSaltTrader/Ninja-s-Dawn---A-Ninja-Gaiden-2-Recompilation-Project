@@ -34,6 +34,17 @@ IN="$1"; OUT="$2"; GLOB="${3:-*.xvu}"
 STABLE_RUNS="${STABLE_RUNS:-5}"
 TIME_CAP_S="${TIME_CAP_S:-120}"
 MEM_CAP_MB="${MEM_CAP_MB:-4096}"
+# A FLOOR ON FREE MEMORY, because a machine condition must never be recorded as
+# a shader property. Under pressure XenosRecomp fails an allocation and dies
+# with the SAME exit code as the end-iterator crash - 11 containers were logged
+# "crashed" while another process on this machine held 66 GB, and the first one
+# I re-ran by hand translated cleanly at exit 0. Both causes produce 126 and
+# nothing in the code can tell them apart, so the only honest move is to refuse
+# to measure at all below a floor and say which containers were skipped.
+#
+# Deferred, not failed: with RESUME=1 a later pass picks them up, so a busy
+# machine costs coverage temporarily instead of corrupting the ledger.
+MEM_FLOOR_MB="${MEM_FLOOR_MB:-8192}"
 
 X=/c/Users/renoi/ClaudeCode/NativeGPU/build/xenosrecomp/XenosRecomp/XenosRecomp.exe
 # THE HEADER IS AN INPUT UNDER TEST, AND THE TWO ON DISK ARE NOT INTERCHANGEABLE.
@@ -68,7 +79,7 @@ echo "STABILITY        : $STABLE_RUNS runs must agree byte-for-byte"
 echo "CAPS             : ${TIME_CAP_S}s, ${MEM_CAP_MB}MB"
 
 mkdir -p "$OUT/hlsl" "$OUT/dxil" "$OUT/tmp"
-tr_ok=0; tr_bad=0; unstable=0; c_ok=0; c_bad=0
+tr_ok=0; tr_bad=0; unstable=0; c_ok=0; c_bad=0; deferred=0
 # RESUMABLE, because this machine is shared and a long run is not safe from it.
 # Two multi-hour regenerations were killed by the OS low-memory killer - not for
 # anything this script did, but because another process on the machine was
@@ -88,12 +99,18 @@ if [ "${RESUME:-0}" = "1" ] && [ -f "$OUT/stable.txt" ]; then
   unstable=$(wc -l < "$OUT/unstable.txt" 2>/dev/null); unstable=$((unstable))
   tr_bad=$(wc -l < "$OUT/failed.txt" 2>/dev/null); tr_bad=$((tr_bad))
 else
-  : > "$OUT/errors.txt"; : > "$OUT/failed.txt"; : > "$OUT/unstable.txt"; : > "$OUT/stable.txt"
+  : > "$OUT/errors.txt"; : > "$OUT/failed.txt"; : > "$OUT/unstable.txt"; : > "$OUT/stable.txt"; : > "$OUT/deferred.txt"
 fi
 cd "$IN" || exit 1
 for f in $GLOB; do
   [ -f "$f" ] || continue
   n=${f%.xvu}; n=${n%.var}
+  free_mb=$(awk '/^MemFree:/ {print int($2/1024)}' /proc/meminfo 2>/dev/null)
+  if [ -n "$free_mb" ] && [ "$free_mb" -lt "$MEM_FLOOR_MB" ]; then
+    deferred=$((deferred+1))
+    echo "$f  deferred, only ${free_mb}MB free" >> "$OUT/deferred.txt"
+    continue
+  fi
   if [ "${RESUME:-0}" = "1" ]; then
     if grep -qxF -- "$f  agreed $STABLE_RUNS/$STABLE_RUNS" "$OUT/stable.txt" 2>/dev/null ||
        grep -q -- "^$f  " "$OUT/unstable.txt" 2>/dev/null ||
@@ -170,6 +187,10 @@ want=$(wc -l < "$OUT/stable.txt" 2>/dev/null)
 if [ "$have" -ne "$c_ok" ] || [ "$want" -ne "$tr_ok" ]; then
   echo "INCONSISTENT: $have .dxil on disk, $c_ok compiled this run;" \
        "$want stable entries, $tr_ok reproducible this run - DO NOT build a manifest from this"
+fi
+if [ "$deferred" -gt 0 ]; then
+  echo "DEFERRED $deferred container(s): free memory was below ${MEM_FLOOR_MB}MB, so they were NOT"
+  echo "  measured rather than measured badly. Re-run with RESUME=1 on a quiet machine."
 fi
 echo "reproducible $tr_ok, UNSTABLE $unstable, recompiler failed $tr_bad; dxc compiled $c_ok, failed $c_bad"
 [ -s "$OUT/errors.txt" ] && sed 's/^[^:]*: //' "$OUT/errors.txt" | sed 's/.*error: //' | cut -c1-90 | sort | uniq -c | sort -rn | head -8
