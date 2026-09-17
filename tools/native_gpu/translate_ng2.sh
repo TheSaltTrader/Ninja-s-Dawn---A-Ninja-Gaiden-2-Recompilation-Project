@@ -130,6 +130,20 @@ for f in $GLOB; do
   fi
 done
 rmdir "$OUT/tmp" 2>/dev/null
+
+# THE SET MUST MATCH THE LEDGER. A `rm -rf` of this directory silently
+# half-failed once, because the previous run's children still held files, and
+# the output then held artefacts from TWO runs at once - 221 .dxil against 144
+# stable entries. The per-shader removal above means a COMPLETED run always ends
+# consistent, so a mismatch here means the run did not complete or something
+# else wrote into this directory. Either way the set is not what the ledger
+# says, and saying so is cheaper than trusting a count taken mid-run.
+have=$(ls "$OUT/dxil"/*.dxil 2>/dev/null | wc -l)
+want=$(wc -l < "$OUT/stable.txt" 2>/dev/null)
+if [ "$have" -ne "$c_ok" ] || [ "$want" -ne "$tr_ok" ]; then
+  echo "INCONSISTENT: $have .dxil on disk, $c_ok compiled this run;" \
+       "$want stable entries, $tr_ok reproducible this run - DO NOT build a manifest from this"
+fi
 echo "reproducible $tr_ok, UNSTABLE $unstable, recompiler failed $tr_bad; dxc compiled $c_ok, failed $c_bad"
 [ -s "$OUT/errors.txt" ] && sed 's/^[^:]*: //' "$OUT/errors.txt" | sed 's/.*error: //' | cut -c1-90 | sort | uniq -c | sort -rn | head -8
 exit 0
