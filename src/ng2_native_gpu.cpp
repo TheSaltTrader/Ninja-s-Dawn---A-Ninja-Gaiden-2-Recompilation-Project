@@ -334,6 +334,15 @@ void NoteSurface(const GpuDrawRecord* rec) {
   if (sd.width && sd.height) render::WantRenderTarget(sd);
 }
 
+// The pipeline this draw would need. Separate from NoteSurface because it is
+// wanted on EVERY draw, not only when a surface is new: the shader pair changes
+// far more often than the target does, and WantPipeline is cheap when the pair
+// and format are unchanged.
+void NotePipeline(const GpuDrawRecord* rec) {
+  if (!rec->registers || rec->register_count <= kRegRbColorInfo) return;
+  render::WantPipeline((rec->registers[kRegRbColorInfo] >> 16) & 0xF);
+}
+
 std::string SurfaceReport() {
   std::string out;
   std::lock_guard<std::mutex> lock(g_surf_mutex);
@@ -778,6 +787,7 @@ void OnDraw(const GpuDrawRecord* rec) {
   // the indexed count is zero.
   if (g_check_surface) NoteSurface(rec);
   if (g_check_surface) NoteBin(rec);
+  if (g_check_surface) NotePipeline(rec);
   if (((di >> 6) & 0x3) == kSourceDMA) {
     g_indexed.fetch_add(1, std::memory_order_relaxed);
     // Only indexed draws have an index buffer to resolve; the auto-index ones

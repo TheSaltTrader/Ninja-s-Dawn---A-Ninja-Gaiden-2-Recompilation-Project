@@ -117,6 +117,19 @@ struct SurfaceDesc {
 };
 bool WantRenderTarget(const SurfaceDesc& desc);
 
+// THE PIPELINE A DRAW WOULD NEED, from the current shader pair and the target's
+// colour format. Returns true if a host pipeline already exists.
+//
+// Creating one is the first hard validation of the whole translation: D3D12
+// checks the root signature against each shader's declared bindings at pipeline
+// creation, so a pipeline that builds proves the bindless layout of constraint
+// 9 matches what XenosRecomp emitted, and one that fails says so immediately -
+// without needing geometry, a bound target, or a frame. Pixels would not have
+// answered this question: every translated vertex shader reads through
+// ngpu_vload, so with no vertex data they compute from zeros and produce
+// degenerate triangles, and "no pixels" would have had two explanations at once.
+bool WantPipeline(uint32_t xenos_color_format);
+
 // STAGE 2b DESIGN CONSTRAINTS, written before the code so they are decisions
 // rather than repairs. Both come from defects found in the sibling project's
 // equivalent structures, in the same week, by reading rather than running.

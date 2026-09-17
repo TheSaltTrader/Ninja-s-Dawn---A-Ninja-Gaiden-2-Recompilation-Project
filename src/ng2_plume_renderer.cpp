@@ -144,6 +144,13 @@ int g_unknown_logged = 0;
 // that cannot say which it is cannot locate the gap.
 std::set<uint64_t> g_unknown_hashes;
 
+// THE PAIR THE NEXT DRAW WILL USE. Xenos state is a current vertex shader and a
+// current pixel shader, so the pipeline key is whatever was most recently made
+// available for each stage. Touched only from the GPU worker thread - the
+// callback's own thread - so no atomics, the same reasoning as g_last_serial.
+uint64_t g_cur_vs_hash = 0;
+uint64_t g_cur_ps_hash = 0;
+
 uint64_t Fnv1a64(const uint8_t* p, size_t n) {
   uint64_t h = 0xCBF29CE484222325ull;
   for (size_t i = 0; i < n; ++i) {
@@ -237,6 +244,180 @@ RenderFormat MapColorFormat(uint32_t xenos_format, bool* approximated, bool* unm
       *unmapped = true;
       return RenderFormat::UNKNOWN;
   }
+}
+
+// THE PIPELINE LAYOUT, matching the bindless model XenosRecomp emits EXACTLY.
+//
+// Measured from the translated HLSL rather than guessed (constraint 9):
+//     Texture2D    g_Texture2DDescriptorHeap[]   t0, space0
+//     Texture3D    g_Texture3DDescriptorHeap[]   t0, space1
+//     TextureCube  g_TextureCubeDescriptorHeap[] t0, space2
+//     SamplerState g_SamplerDescriptorHeap[]     s0, space3
+//     StructuredBuffer<uint> g_VertexStreamHeap[] t0, space4
+//     cbuffer VertexShaderConstants              b0, space4
+//     cbuffer SharedConstants                    b2, space4
+//
+// Plume maps descriptor SET INDEX to D3D12 REGISTER SPACE one to one
+// (plume_d3d12.cpp: descriptorRange.RegisterSpace = i), so the sets are built
+// in space order and the order is load-bearing.
+//
+// NO PUSH CONSTANTS. The push-constant path in the generated HLSL is inside
+// `#ifdef __spirv__`; these artefacts are DXIL, so the `#else` branch is live
+// and every constant arrives through the cbuffers above. Declaring a push
+// constant range anyway would not fail loudly - it would simply describe a
+// pipeline the shader never asked for.
+std::unique_ptr<RenderPipelineLayout> g_pipeline_layout;
+bool g_layout_failed = false;
+
+constexpr uint32_t kBoundless = 1024;  // upper bound for the variable-sized arrays
+
+bool EnsurePipelineLayout() {
+  if (g_pipeline_layout) return true;
+  if (g_layout_failed) return false;
+
+  const RenderDescriptorRange tex2d(RenderDescriptorRangeType::TEXTURE, 0, kBoundless);
+  const RenderDescriptorRange tex3d(RenderDescriptorRangeType::TEXTURE, 0, kBoundless);
+  const RenderDescriptorRange texcube(RenderDescriptorRangeType::TEXTURE, 0, kBoundless);
+  const RenderDescriptorRange samplers(RenderDescriptorRangeType::SAMPLER, 0, kBoundless);
+  // space4 holds three things, and the BOUNDLESS one must be last: Plume marks
+  // only the final range of a set as variable-sized.
+  const RenderDescriptorRange cb0(RenderDescriptorRangeType::CONSTANT_BUFFER, 0, 1);
+  const RenderDescriptorRange cb2(RenderDescriptorRangeType::CONSTANT_BUFFER, 2, 1);
+  const RenderDescriptorRange streams(RenderDescriptorRangeType::STRUCTURED_BUFFER, 0, kBoundless);
+  const RenderDescriptorRange space4[] = {cb0, cb2, streams};
+
+  const RenderDescriptorSetDesc sets[] = {
+      RenderDescriptorSetDesc(&tex2d, 1, true, kBoundless),
+      RenderDescriptorSetDesc(&tex3d, 1, true, kBoundless),
+      RenderDescriptorSetDesc(&texcube, 1, true, kBoundless),
+      RenderDescriptorSetDesc(&samplers, 1, true, kBoundless),
+      RenderDescriptorSetDesc(space4, 3, true, kBoundless),
+  };
+
+  RenderPipelineLayoutDesc desc;
+  desc.descriptorSetDescs = sets;
+  desc.descriptorSetDescsCount = 5;
+  // allowInputLayout: 320 of the 406 vertex shaders still DECLARE
+  // input-assembler inputs even though all of them read through the stream
+  // heap, so the layout has to permit an input layout to exist.
+  desc.allowInputLayout = true;
+  g_pipeline_layout = g_gpu.device->createPipelineLayout(desc);
+  if (!g_pipeline_layout) {
+    g_layout_failed = true;
+    REXLOG_INFO("[ng2-plume] pipeline layout creation FAILED - no pipeline can be built");
+    return false;
+  }
+  REXLOG_INFO("[ng2-plume] pipeline layout created: 5 bindless sets, spaces 0..4, no push constants");
+  return true;
+}
+
+// THE PIPELINE CACHE, keyed by the two shader hashes AND the target format.
+//
+// The format is part of the key because a pipeline is compiled against its
+// render target's format; the same shader pair drawn into an RGBA8 target and a
+// float target are two different pipelines, and keying on the pair alone would
+// silently return one for the other.
+struct PsoKey {
+  uint64_t vs, ps;
+  uint32_t format;
+  bool operator<(const PsoKey& o) const {
+    if (vs != o.vs) return vs < o.vs;
+    if (ps != o.ps) return ps < o.ps;
+    return format < o.format;
+  }
+};
+
+struct PsoEntry {
+  std::unique_ptr<RenderShader> vs_module, ps_module;
+  std::unique_ptr<RenderPipeline> pipeline;
+  bool created = false;
+  bool failed = false;
+};
+
+std::mutex g_pso_mutex;
+std::map<PsoKey, PsoEntry> g_pso;
+std::atomic<uint64_t> g_pso_created{0};
+std::atomic<uint64_t> g_pso_failed{0};
+std::atomic<uint64_t> g_pso_no_dxil{0};
+int g_pso_fail_logged = 0;
+
+// Called on the render thread. Two-phase like the render targets: the device is
+// never touched while the cache mutex is held, because the draw path takes that
+// same mutex and pipeline compilation is not a fast call.
+void CreatePendingPipelines() {
+  std::vector<PsoKey> pending;
+  {
+    std::lock_guard<std::mutex> lock(g_pso_mutex);
+    for (auto& kv : g_pso) {
+      if (!kv.second.created && !kv.second.failed) pending.push_back(kv.first);
+    }
+  }
+  if (pending.empty()) return;
+  if (!EnsurePipelineLayout()) return;
+
+  for (const PsoKey& key : pending) {
+    // Copy the DXIL out under the shader lock rather than holding a pointer
+    // into g_dxil across a device call - constraint 1, one level down.
+    std::vector<uint8_t> vs_bytes, ps_bytes;
+    {
+      std::lock_guard<std::mutex> lock(g_shader_mutex);
+      auto v = g_dxil.find(key.vs);
+      auto p = g_dxil.find(key.ps);
+      if (v != g_dxil.end()) vs_bytes = v->second;
+      if (p != g_dxil.end()) ps_bytes = p->second;
+    }
+    if (vs_bytes.empty() || ps_bytes.empty()) {
+      std::lock_guard<std::mutex> lock(g_pso_mutex);
+      auto it = g_pso.find(key);
+      if (it != g_pso.end() && !it->second.created) {
+        it->second.failed = true;
+        g_pso_no_dxil.fetch_add(1, std::memory_order_relaxed);
+      }
+      continue;
+    }
+
+    auto vs_mod = g_gpu.device->createShader(vs_bytes.data(), vs_bytes.size(), "main",
+                                             RenderShaderFormat::DXIL);
+    auto ps_mod = g_gpu.device->createShader(ps_bytes.data(), ps_bytes.size(), "main",
+                                             RenderShaderFormat::DXIL);
+    std::unique_ptr<RenderPipeline> pipe;
+    if (vs_mod && ps_mod) {
+      RenderGraphicsPipelineDesc desc;
+      desc.pipelineLayout = g_pipeline_layout.get();
+      desc.vertexShader = vs_mod.get();
+      desc.pixelShader = ps_mod.get();
+      desc.renderTargetCount = 1;
+      desc.renderTargetFormat[0] = static_cast<RenderFormat>(key.format);
+      desc.primitiveTopology = RenderPrimitiveTopology::TRIANGLE_LIST;
+      desc.cullMode = RenderCullMode::NONE;
+      pipe = g_gpu.device->createGraphicsPipeline(desc);
+    }
+
+    std::lock_guard<std::mutex> lock(g_pso_mutex);
+    auto it = g_pso.find(key);
+    if (it == g_pso.end() || it->second.created || it->second.failed) continue;
+    if (!pipe) {
+      it->second.failed = true;
+      g_pso_failed.fetch_add(1, std::memory_order_relaxed);
+      if (g_pso_fail_logged < 8) {
+        ++g_pso_fail_logged;
+        REXLOG_INFO("[ng2-plume] PIPELINE FAILED vs {:016X} ps {:016X} fmt {} -"
+                    " root signature and shader bindings disagree, or the DXIL is bad",
+                    key.vs, key.ps, key.format);
+      }
+      continue;
+    }
+    it->second.vs_module = std::move(vs_mod);
+    it->second.ps_module = std::move(ps_mod);
+    it->second.pipeline = std::move(pipe);
+    it->second.created = true;
+    g_pso_created.fetch_add(1, std::memory_order_relaxed);
+  }
+}
+
+size_t PsoWanted() {
+  std::lock_guard<std::mutex> lock(g_pso_mutex);
+  return g_pso.size();
 }
 
 // Called on the render thread, once per frame, for whatever the draw path asked
@@ -411,6 +592,7 @@ bool CreateDevice() {
 void RenderOneFrame() {
   if (!g_gpu.ready || g_gpu.swap->isEmpty()) return;
   CreatePendingRenderTargets();
+  CreatePendingPipelines();
   uint32_t index = 0;
   if (!g_gpu.swap->acquireTexture(g_gpu.acquire.get(), &index)) return;
 
@@ -560,13 +742,16 @@ void EndFrame() {
     REXLOG_INFO("[ng2-plume] manifest: {} programs | matched VS {} PS {} | unknown VS {} PS {}"
                 " | stage-mismatch {} | DXIL loaded {} ({} KB), UNLOADABLE {}"
                 " | RT wanted {} created {} failed {} UNMAPPED-FORMAT {} approximated {}"
-                " | immediate matched {} | unknown DISTINCT programs {}",
+                " | immediate matched {} | unknown DISTINCT programs {}"
+                " | PSO wanted {} created {} failed {} no-dxil {}",
                 g_manifest.size(), g_hit_vs.load(), g_hit_ps.load(), g_unknown_vs.load(),
                 g_unknown_ps.load(), g_manifest_stage_mismatch.load(), g_dxil_loaded.load(),
                 g_dxil_bytes.load() / 1024, g_dxil_failed.load(),
                 RtWanted(), g_rt_created.load(), g_rt_failed.load(),
                 g_rt_unmapped.load(), g_rt_approx.load(),
-                g_immediate_matched.load(), UnknownDistinct());
+                g_immediate_matched.load(), UnknownDistinct(),
+                PsoWanted(), g_pso_created.load(), g_pso_failed.load(),
+                g_pso_no_dxil.load());
   }
 #endif
 }
@@ -691,6 +876,7 @@ bool RegisterShaderMicrocode(ShaderStage stage, uint32_t guest_address, const ui
     g_manifest_hits.fetch_add(1, std::memory_order_relaxed);
     (want_pixel ? g_hit_ps : g_hit_vs).fetch_add(1, std::memory_order_relaxed);
     g_immediate_matched.fetch_add(1, std::memory_order_relaxed);
+    (want_pixel ? g_cur_ps_hash : g_cur_vs_hash) = h;
     return true;
   }
 
@@ -703,6 +889,7 @@ bool RegisterShaderMicrocode(ShaderStage stage, uint32_t guest_address, const ui
   seen.available = true;
   seen.dwords = bytes / 4;
   seen.hash = h;
+  (want_pixel ? g_cur_ps_hash : g_cur_vs_hash) = h;
   return true;
 #else
   (void)stage; (void)guest_address; (void)ucode; (void)bytes; (void)preamble128;
@@ -739,6 +926,9 @@ bool WantShader(ShaderStage stage, uint32_t guest_address, uint32_t dword_count,
     seen.immediate = false;
     ++seen.draws;
     available = seen.available;
+    if (available) {
+      (stage == ShaderStage::kVertex ? g_cur_vs_hash : g_cur_ps_hash) = seen.hash;
+    }
   }
 
   // A MISS IS COUNTED, NEVER SUBSTITUTED. Returning false means this draw
@@ -752,6 +942,47 @@ bool WantShader(ShaderStage stage, uint32_t guest_address, uint32_t dword_count,
   return available;
 #else
   (void)stage; (void)guest_address; (void)dword_count; (void)immediate;
+  return false;
+#endif
+}
+
+bool WantPipeline(uint32_t xenos_color_format) {
+#if defined(NG2_PLUME_ON)
+  if (!g_running.load(std::memory_order_relaxed)) return false;
+  // Both stages must be available before a pipeline means anything. A draw
+  // whose vertex program is known and whose pixel program is not is exactly the
+  // half-bound state constraint 5 forbids, and building a pipeline for it would
+  // pair a real shader with a stale one.
+  if (!g_cur_vs_hash || !g_cur_ps_hash) return false;
+
+  bool approx = false, unmapped = false;
+  const RenderFormat fmt = MapColorFormat(xenos_color_format, &approx, &unmapped);
+  if (unmapped) return false;
+
+  // ONLY WHEN THE TRIPLE CHANGES. This is called per draw, and taking a mutex
+  // and hashing a map key eight million times a run is the per-draw cost that
+  // has already bitten this project once. The comparison is three scalars on
+  // the callback's own thread.
+  static uint64_t last_vs = 0, last_ps = 0;
+  static uint32_t last_fmt = 0xFFFFFFFFu;
+  const uint32_t fmt_key = static_cast<uint32_t>(fmt);
+  if (g_cur_vs_hash == last_vs && g_cur_ps_hash == last_ps && fmt_key == last_fmt) {
+    return true;
+  }
+  last_vs = g_cur_vs_hash;
+  last_ps = g_cur_ps_hash;
+  last_fmt = fmt_key;
+
+  const PsoKey key{g_cur_vs_hash, g_cur_ps_hash, fmt_key};
+  std::lock_guard<std::mutex> lock(g_pso_mutex);
+  auto it = g_pso.find(key);
+  if (it == g_pso.end()) {
+    g_pso[key];  // requested; the render thread builds it
+    return false;
+  }
+  return it->second.created;
+#else
+  (void)xenos_color_format;
   return false;
 #endif
 }
