@@ -497,21 +497,50 @@ out-of-bounds read whose fault depends on heap layout: a XenosRecomp bug that no
 container-level change will fix, only move. A debug build is the next step for
 the vertex-shader faults.
 
-### One cause behind all of it: the missing definition table
+### Two different bugs, each invisible in the other's population
 
-The Fable II session's account, and it makes the whole evening cohere. The
-recompiler derives input and output semantics — and the literal constants — from
-the container's **definition table**. A synthetic container has none, so it reads
-uninitialised memory in its place. That single cause covers the
-non-deterministic crashes, the varying output, the renamed outputs, the
-unreliable vertex semantics, and `c255 = (0, 1.0, 0.5, 0)` coming back as zeros.
+The non-determinism and the pixel-shader crashes are **separate causes**, and
+neither session could have found both.
 
-Which means **"synthetic container minus definition table" is not a working
-configuration.** It is a program with correct arithmetic wired to random inputs —
-wrong in the way that renders rather than fails.
+**Cause 1 — the vertex ELEMENT table (Fable II session's find and fix).** A
+`VertexShader` extends `Shader` with a vertex element array, and XenosRecomp
+looks every vertex fetch up in it *by instruction address*, asserting when the
+lookup misses. A synthetic header that stops at the 24-byte `Shader` struct
+leaves the recompiler reading the constant table as the element array, indexed
+by whatever `field18` happens to hold. That is the uninitialised read behind the
+non-deterministic crashes *and* the varying output. Deriving the table from the
+microcode — walk the control flow, the sequence bits mark which instructions are
+fetches, a vertex fetch is opcode 0 in the low five bits — took their set from
+78/104 attempts with 0 of 13 shaders stable, to **104/104 with 13 of 13
+byte-identical across 8 runs**.
 
-Recoverable, though, and better specified than guessing: a `vfetch` instruction
-encodes its fetch slot and format, so the semantics and the decode can be
-*derived from the microcode* rather than invented. That is the next piece of
-work, and NG2's 33 are a second population to test it against — a different
-engine, and the pixel shaders the Fable II dump path does not currently build.
+**Cause 2 — the sampler count (found here).** Declaring 32 samplers rather than
+16 takes all five NG2 pixel shaders from 0/10 to 10/10, deterministically.
+
+**The split is total, and it confirms cause 1 independently.** A pixel shader has
+no vertex elements, so if the element table is the cause, pixel shader output
+should already be deterministic. Measured, 5 successful runs each:
+
+    all 5 PIXEL shaders    1 distinct output hash    DETERMINISTIC
+    all 5 vertex shaders   5 distinct output hashes  VARIES
+
+Five of five against five of five, split precisely on the predicted axis and on
+no other — from a different engine and from the shader type the Fable II dump
+path has never built. It also settles that the sampler result was never
+contaminated by the element-table mechanism: those shaders are deterministic in
+output *and* in crash behaviour, 0/10 and 10/10 with no flakiness at either end.
+
+An all-vertex sample cannot find the sampler bug; a pixel-only sample cannot find
+the element-table bug. Each session's population hid the other's cause.
+
+### Still open
+
+The **literal constants** — `c255 = (0, 1.0, 0.5, 0)` in a real translation,
+zeros in a synthetic one — do come from the definition table, correctly
+attributed but to the wrong symptom. A shader computing with 0.0 where it needs
+1.0 is wrong in the way that renders rather than fails.
+
+Semantic *names* are not recoverable and do not need to be: the native path binds
+vertex buffers from the fetch constants and builds its input layout from the same
+translation's sidecar, so the names only have to be self-consistent. That is why
+varying names were harmless and the varying **format decode** was not.
