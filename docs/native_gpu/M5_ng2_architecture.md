@@ -212,3 +212,44 @@ result must be able to demonstrate it could have reported a different one; a
 hash that returns a constant for every input reports "everything matched" and
 means "I am blind". Counting distinct hashes per frame separates those for one
 line of code.
+
+## Addendum 3: NG2's shaders translate — 616 of 625 (2026-09-16)
+
+The container gap closed and the pipeline ran. Using the Fable II side's
+`translate_all.sh` + `fix_hlsl.py` unchanged, against 625 unique containers
+extracted from the virtual-memory dump (`tools/native_gpu/extract_shader_containers.py`):
+
+    translated 616 of 625 (9 recompiler crashes)
+    dxc compiled 291, failed 325
+
+That is a working shader path for NG2 on its first proper run, and it needed no
+new tooling — the Fable header's `NGPU_BOOL` / `NGPU_LOOP` macros are exactly
+what NG2's unnamed boolean constants (`b129`, `b137`) needed, which is why
+running XenosRecomp directly had failed: the raw binary compiles inline and
+never applies the fix-up pass.
+
+The 325 compile failures are concentrated, not scattered:
+
+    215  use of undeclared identifier 'iPosition0'
+     58  use of undeclared identifier 'r32'
+     49  use of undeclared identifier 'iBinormal0'
+      1  use of undeclared identifier 'iDepth8'
+
+`iPosition0` and `iBinormal0` are one cause. In a failing shader, `main()`
+declares **no vertex inputs at all** — only `SV_VertexID` — while the body reads
+`iPosition0`. Those are shaders whose attributes come from explicit `vfetch`
+instructions rather than a declared vertex layout, so XenosRecomp, which builds
+its input list from the container's definition table, emits references it never
+declared. The same family as the Fable side's local "duplicate vertex-input
+declarations" change.
+
+This is consistent with §2: NG2's draws are two thirds auto-index, and an
+auto-index draw has no input layout to declare — the shader fetches what it
+wants. So the shaders that fail to compile are likely the same population that
+makes NG2's frame unlike Fable's.
+
+`r32` is separate: a GPR past the declared register count.
+
+Next, in order: declare the fetched attributes for the vfetch-only shaders, then
+`r32`. 291 compiled shaders is already enough to attempt the first milestone,
+since the frame's hot shaders are a small set (63-67 distinct per frame).
