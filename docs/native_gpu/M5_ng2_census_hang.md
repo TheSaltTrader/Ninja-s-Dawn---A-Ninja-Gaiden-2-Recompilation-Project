@@ -121,6 +121,39 @@ Still open: which call on the refresh path blocks with a submission open. The
 hang is a GPU worker that stops executing packets, so it is a wait taken inside
 the frame, not a wait for it.
 
+### What the cvar actually costs, measured
+
+The mechanism is upload volume, not waiting. From the `[hitch]` line's own
+`uploads N KB`, per frame:
+
+| `clear_memory_page_state` | samples | mean | min | max |
+|---|---:|---:|---:|---:|
+| `true` (froze) | 83 | **17,451 KB/frame** | 36 KB | 43,176 KB |
+| `false` (alive) | 88 | **820 KB/frame** | 8 KB | 43,172 KB |
+
+A 21x difference in the mean. At the 30 fps those runs sit at, 17.5 MB/frame is
+about 520 MB/s — inside the 460–700 MB/s Fable II measured for this refresh in
+v0.2.12, so it is the same phenomenon seen from NG2.
+
+The identical maxima matter: both configurations spike to ~43 MB on a streaming
+load, so this is not a difference in peak capacity. It is that the true-path
+pays a large cost on *every* frame where the false-path pays it only on real
+loads. Steady-state frames are the tell — 13,548 and 22,232 KB with the cvar on
+against 12 and 16 KB with it off, on frames drawing comparable geometry.
+
+The upload pool never fails, though. `Shared memory: Failed to get an upload
+buffer` appears **zero** times in all four frozen runs, and there is no
+`E_OUTOFMEMORY`. (The one "device removed" hit in every log is the
+`DRED (Device Removed Extended Data) enabled` banner, not a removal — worth
+checking before reporting it as one.) So the pool is not exhausting, it is
+churning ~17 MB of upload buffers per frame indefinitely, which fits a GPU
+worker that stalls with no fence wait ever firing.
+
+Which suggests where a fix lives: the refresh invalidates every CPU-uploaded
+page at frame close, so the next frame re-uploads all of them. Whether it needs
+to invalidate all of them, rather than only pages a resolve actually touched, is
+a question about what the refresh *marks* — not about who waits.
+
 ### The dev workaround
 
 `--clear_memory_page_state=false` on the command line. Character models degrade,
