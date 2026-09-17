@@ -250,6 +250,113 @@ std::string BinReport() {
   return out;
 }
 
+// Declared here because the stream census below uses it and its definition sits
+// with the other guest-memory probes further down. The alternative - moving the
+// definition up - would separate it from the comment explaining why it needs
+// SEH at all.
+bool ReadGuestBytes(const uint8_t* p, uint32_t bytes, uint8_t* out);
+
+// THE VERTEX STREAM CENSUS.
+//
+// 32 fetch slots, 2 dwords each, from SHADER_CONSTANT_FETCH_00_0. A slot whose
+// address is zero is unused; the rest name guest memory holding vertex data.
+constexpr uint32_t kRegShaderConstantFetch00 = 0x4800;
+constexpr uint32_t kFetchSlots = 32;
+
+struct StreamKey {
+  uint32_t address;   // guest byte address
+  uint32_t bytes;
+  bool operator==(const StreamKey& o) const {
+    return address == o.address && bytes == o.bytes;
+  }
+};
+
+constexpr int kMaxStreams = 64;
+std::mutex g_stream_mutex;
+StreamKey g_stream_keys[kMaxStreams];
+uint64_t g_stream_uses[kMaxStreams] = {};
+int g_stream_n = 0;
+std::atomic<uint64_t> g_stream_overflow{0};
+std::atomic<uint64_t> g_stream_readable{0};
+std::atomic<uint64_t> g_stream_unreadable{0};
+std::atomic<uint64_t> g_stream_bytes{0};
+
+void NoteVertexStreams(const GpuDrawRecord* rec) {
+  if (!rec->registers ||
+      rec->register_count <= kRegShaderConstantFetch00 + kFetchSlots * 2) {
+    return;
+  }
+  const uint32_t* r = rec->registers;
+  for (uint32_t i = 0; i < kFetchSlots; ++i) {
+    const uint32_t d0 = r[kRegShaderConstantFetch00 + i * 2];
+    const uint32_t d1 = r[kRegShaderConstantFetch00 + i * 2 + 1];
+    const uint32_t addr_dwords = d0 >> 2;      // type:2 then address:30
+    const uint32_t size_dwords = d1 >> 2;      // endian:2 then size:24
+    if (!addr_dwords || !size_dwords) continue;
+    StreamKey k{addr_dwords << 2, size_dwords << 2};
+
+    bool is_new = false;
+    {
+      std::lock_guard<std::mutex> lock(g_stream_mutex);
+      int found = -1;
+      for (int j = 0; j < g_stream_n; ++j) {
+        if (g_stream_keys[j] == k) { found = j; break; }
+      }
+      if (found >= 0) {
+        ++g_stream_uses[found];
+        continue;
+      }
+      if (g_stream_n >= kMaxStreams) {
+        g_stream_overflow.fetch_add(1, std::memory_order_relaxed);
+        continue;
+      }
+      g_stream_keys[g_stream_n] = k;
+      g_stream_uses[g_stream_n] = 1;
+      ++g_stream_n;
+      is_new = true;
+    }
+
+    // ONCE PER DISTINCT STREAM, outside the lock: is the geometry actually
+    // reachable? Constraint 4 was wrong about this for index data and the
+    // correction was only found by testing each interpretation separately, so
+    // this reads the first bytes rather than assuming they are there. SEH
+    // because an address this code cannot vouch for is exactly what it is.
+    if (is_new) {
+      g_stream_bytes.fetch_add(k.bytes, std::memory_order_relaxed);
+      auto* memory = REX_KERNEL_MEMORY();
+      if (memory) {
+        uint8_t probe[16];
+        bool ok = false;
+#if defined(_WIN32)
+        __try {
+          ok = ReadGuestBytes(memory->TranslatePhysical<const uint8_t*>(k.address),
+                              sizeof(probe), probe);
+        } __except (EXCEPTION_EXECUTE_HANDLER) {
+          ok = false;
+        }
+#endif
+        (ok ? g_stream_readable : g_stream_unreadable)
+            .fetch_add(1, std::memory_order_relaxed);
+      }
+    }
+  }
+}
+
+std::string StreamReport() {
+  std::string out;
+  std::lock_guard<std::mutex> lock(g_stream_mutex);
+  if (!g_stream_n) return out;
+  out = fmt::format(" | VERTEX STREAMS {} distinct, {} KB, readable {} unreadable {}",
+                    g_stream_n, g_stream_bytes.load() / 1024, g_stream_readable.load(),
+                    g_stream_unreadable.load());
+  if (const uint64_t o = g_stream_overflow.load()) out += fmt::format(" (+{} OVERFLOW)", o);
+  for (int i = 0; i < g_stream_n && i < 6; ++i) {
+    out += fmt::format("\n    [{}] {:08X} {} bytes, used {}",
+                       i, g_stream_keys[i].address, g_stream_keys[i].bytes, g_stream_uses[i]);
+  }
+  return out;
+}
+
 void NoteSurface(const GpuDrawRecord* rec) {
   // The register file must actually reach the index being read. A record whose
   // register_count is short is a DIFFERENT failure from a surface that varies,
@@ -418,7 +525,7 @@ std::string Totals() {
       : std::string();
   return fmt::format("{} draws ({} indexed, {} auto), {} indices{}{}{}{}{}{}{}",
                      g_draws.load(), g_indexed.load(), g_auto.load(), g_indices.load(), serial, idx,
-                     SurfaceReport() + BinReport(), skip,
+                     SurfaceReport() + BinReport() + StreamReport(), skip,
                      g_bad_size.load() ? fmt::format(" | {} ABI MISMATCH", g_bad_size.load()) : "",
                      g_no_regs.load() ? fmt::format(" | {} without registers", g_no_regs.load()) : "",
                      g_no_shader.load() ? fmt::format(" | {} without a shader", g_no_shader.load()) : "");
@@ -814,6 +921,7 @@ void OnDraw(const GpuDrawRecord* rec) {
   if (g_check_surface) NoteSurface(rec);
   if (g_check_surface) NoteBin(rec);
   if (g_check_surface) NotePipeline(rec);
+  if (g_check_surface) NoteVertexStreams(rec);
   if (((di >> 6) & 0x3) == kSourceDMA) {
     g_indexed.fetch_add(1, std::memory_order_relaxed);
     // Only indexed draws have an index buffer to resolve; the auto-index ones
