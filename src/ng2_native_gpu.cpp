@@ -49,6 +49,17 @@ struct GpuDrawRecord {
   uint32_t ps_address, ps_dwords;
   uint32_t vs_immediate, ps_immediate;
 
+  // The immediate microcode and a per-stage load counter. See constraint 8 in
+  // ng2_plume_renderer.h: for an immediate draw the ADDRESS fields above are
+  // stale rather than empty, so they cannot be used, and the bytes are the only
+  // identity this draw's shader has. Raw guest bytes, big-endian.
+  const uint8_t* vs_ucode;
+  uint32_t vs_ucode_dwords;
+  const uint8_t* ps_ucode;
+  uint32_t ps_ucode_dwords;
+  uint64_t vs_ucode_serial;
+  uint64_t ps_ucode_serial;
+
   const uint32_t* registers;
   uint32_t register_count;
 
@@ -516,6 +527,41 @@ bool TryIndexInterpretation(GuestMemory memory, bool physical, const GpuDrawReco
 #endif
 }
 
+// IMMEDIATE MICROCODE, REGISTERED ONCE PER LOAD RATHER THAN ONCE PER DRAW.
+//
+// The bytes only change when IM_LOAD_IMMEDIATE runs, and the record carries a
+// per-stage serial that counts those loads. Hashing per draw would run 166,118
+// times for vertex and 159,445 for pixel in a single measured frame; keyed on
+// the serial it runs once per load.
+//
+// The serials are touched only from the GPU worker thread - the callback's own
+// thread - so they need no atomic, the same reasoning as g_last_serial.
+uint64_t g_seen_vs_ucode_serial = 0;
+uint64_t g_seen_ps_ucode_serial = 0;
+std::atomic<uint64_t> g_immediate_registered{0};
+std::atomic<uint64_t> g_immediate_absent{0};
+
+void RegisterImmediate(render::ShaderStage stage, const uint8_t* ucode, uint32_t dwords,
+                       uint64_t serial) {
+  // A stage flagged immediate with NO bytes is a real outcome, not a no-op: the
+  // plugin refuses a program larger than it will carry rather than truncating
+  // it, because half a shader hashes to one that does not exist and would read
+  // as "unmatched" - sending the reader into the translation pipeline after a
+  // shader that was never whole.
+  if (!ucode || !dwords) {
+    g_immediate_absent.fetch_add(1, std::memory_order_relaxed);
+    return;
+  }
+  uint64_t& seen = (stage == render::ShaderStage::kVertex) ? g_seen_vs_ucode_serial
+                                                           : g_seen_ps_ucode_serial;
+  if (serial == seen) return;  // same program as the last draw
+  seen = serial;
+  // Guest address 0: an immediate program HAS no address, and passing the
+  // record's stale one would file it under another shader's identity.
+  render::RegisterShaderMicrocode(stage, 0, ucode, dwords * 4, nullptr);
+  g_immediate_registered.fetch_add(1, std::memory_order_relaxed);
+}
+
 void CheckIndexBuffer(const GpuDrawRecord* rec) {
   if (!rec->index_base || !rec->index_size_words) return;
 
@@ -713,8 +759,14 @@ void OnDraw(const GpuDrawRecord* rec) {
   // either, or it reintroduces the asymmetry the lookup was built to prevent.
   if (!rec->vs_immediate)
     ProbeShaderMicrocode(render::ShaderStage::kVertex, rec->vs_address, rec->vs_dwords);
+  else
+    RegisterImmediate(render::ShaderStage::kVertex, rec->vs_ucode, rec->vs_ucode_dwords,
+                      rec->vs_ucode_serial);
   if (!rec->ps_immediate)
     ProbeShaderMicrocode(render::ShaderStage::kPixel, rec->ps_address, rec->ps_dwords);
+  else
+    RegisterImmediate(render::ShaderStage::kPixel, rec->ps_ucode, rec->ps_ucode_dwords,
+                      rec->ps_ucode_serial);
 
   const uint32_t di = rec->vgt_draw_initiator;
   g_draws.fetch_add(1, std::memory_order_relaxed);

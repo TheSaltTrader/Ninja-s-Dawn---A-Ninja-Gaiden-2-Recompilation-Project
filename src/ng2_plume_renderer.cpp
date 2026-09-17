@@ -120,6 +120,11 @@ std::atomic<uint64_t> g_dxil_failed{0};
 std::atomic<uint64_t> g_dxil_bytes{0};
 int g_dxil_fail_logged = 0;
 std::atomic<uint64_t> g_manifest_hits{0};
+// Immediate programs matched by content. Separate from the address-keyed hits
+// because they are served by a different mechanism and their coverage can move
+// independently - folding them together would hide one path failing while the
+// other carried the total.
+std::atomic<uint64_t> g_immediate_matched{0};
 std::atomic<uint64_t> g_manifest_unknown{0};
 std::atomic<uint64_t> g_manifest_stage_mismatch{0};
 // PER STAGE. "unknown" without its stage cannot answer the question the
@@ -541,12 +546,14 @@ void EndFrame() {
                 g_vs_immediate.load(), g_ps_immediate.load());
     REXLOG_INFO("[ng2-plume] manifest: {} programs | matched VS {} PS {} | unknown VS {} PS {}"
                 " | stage-mismatch {} | DXIL loaded {} ({} KB), UNLOADABLE {}"
-                " | RT wanted {} created {} failed {} UNMAPPED-FORMAT {} approximated {}",
+                " | RT wanted {} created {} failed {} UNMAPPED-FORMAT {} approximated {}"
+                " | immediate matched {}",
                 g_manifest.size(), g_hit_vs.load(), g_hit_ps.load(), g_unknown_vs.load(),
                 g_unknown_ps.load(), g_manifest_stage_mismatch.load(), g_dxil_loaded.load(),
                 g_dxil_bytes.load() / 1024, g_dxil_failed.load(),
                 RtWanted(), g_rt_created.load(), g_rt_failed.load(),
-                g_rt_unmapped.load(), g_rt_approx.load());
+                g_rt_unmapped.load(), g_rt_approx.load(),
+                g_immediate_matched.load());
   }
 #endif
 }
@@ -554,7 +561,12 @@ void EndFrame() {
 bool RegisterShaderMicrocode(ShaderStage stage, uint32_t guest_address, const uint8_t* ucode,
                              uint32_t bytes, const uint8_t* preamble128) {
 #if defined(NG2_PLUME_ON)
-  if (!g_running.load(std::memory_order_relaxed) || !guest_address || !ucode || !bytes) return false;
+  // GUEST ADDRESS 0 MEANS "IMMEDIATE": the program came inline in the packet
+  // and has no address at all. It is registered by CONTENT only - the address
+  // map is skipped - because the record's address field is stale rather than
+  // empty for those draws (constraint 8), and filing this program under it
+  // would give one shader another's identity.
+  if (!g_running.load(std::memory_order_relaxed) || !ucode || !bytes) return false;
   const uint64_t h = Fnv1a64(ucode, bytes);
 
   std::lock_guard<std::mutex> lock(g_shader_mutex);
@@ -637,6 +649,15 @@ bool RegisterShaderMicrocode(ShaderStage stage, uint32_t guest_address, const ui
     g_dxil_bytes.fetch_add(bytes_in.size(), std::memory_order_relaxed);
     g_dxil_loaded.fetch_add(1, std::memory_order_relaxed);
     dx = g_dxil.emplace(h, std::move(bytes_in)).first;
+  }
+
+  // An immediate program is counted as a hit but NOT filed by address - there
+  // is no address it could honestly be filed under.
+  if (!guest_address) {
+    g_manifest_hits.fetch_add(1, std::memory_order_relaxed);
+    (want_pixel ? g_hit_ps : g_hit_vs).fetch_add(1, std::memory_order_relaxed);
+    g_immediate_matched.fetch_add(1, std::memory_order_relaxed);
+    return true;
   }
 
   auto& map = want_pixel ? g_pixel_shaders : g_vertex_shaders;
