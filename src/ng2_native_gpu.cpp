@@ -259,26 +259,68 @@ void NoteSurface(const GpuDrawRecord* rec) {
   const uint32_t w = brx > tlx ? brx - tlx : 0;
   const uint32_t h = bry > tly ? bry - tly : 0;
 
-  std::lock_guard<std::mutex> lock(g_surf_mutex);
-  for (int i = 0; i < g_surf_n; ++i) {
-    if (g_surf_keys[i] == k) {
-      ++g_surf_draws[i];
-      if (w < g_surf_w_min[i]) g_surf_w_min[i] = w;
-      if (w > g_surf_w_max[i]) g_surf_w_max[i] = w;
-      if (h < g_surf_h_min[i]) g_surf_h_min[i] = h;
-      if (h > g_surf_h_max[i]) g_surf_h_max[i] = h;
+  // THE CENSUS FIRST, AND ONLY THEN THE RENDERER - and only when something
+  // actually changed. Asking the renderer on EVERY draw would take a mutex
+  // millions of times per run on the GPU worker thread, contending with the
+  // render thread's own creation work, and the premise of this whole file is
+  // that the game runs identically whether the native path is on or off. A
+  // surface is new, or its extent grows, a few dozen times in a run.
+  bool tell_renderer = false;
+  {
+    std::lock_guard<std::mutex> lock(g_surf_mutex);
+    int found = -1;
+    for (int i = 0; i < g_surf_n; ++i) {
+      if (g_surf_keys[i] == k) {
+        found = i;
+        break;
+      }
+    }
+    if (found >= 0) {
+      ++g_surf_draws[found];
+      if (w < g_surf_w_min[found]) g_surf_w_min[found] = w;
+      if (h < g_surf_h_min[found]) g_surf_h_min[found] = h;
+      // Only a GROWN extent is news for the renderer: a target must be at
+      // least as large as anything drawn into it, and shrinking tells it
+      // nothing it can act on.
+      if (w > g_surf_w_max[found]) {
+        g_surf_w_max[found] = w;
+        tell_renderer = true;
+      }
+      if (h > g_surf_h_max[found]) {
+        g_surf_h_max[found] = h;
+        tell_renderer = true;
+      }
+    } else if (g_surf_n >= kMaxSurfaces) {
+      g_surf_overflow.fetch_add(1, std::memory_order_relaxed);
       return;
+    } else {
+      g_surf_keys[g_surf_n] = k;
+      g_surf_draws[g_surf_n] = 1;
+      g_surf_w_min[g_surf_n] = g_surf_w_max[g_surf_n] = w;
+      g_surf_h_min[g_surf_n] = g_surf_h_max[g_surf_n] = h;
+      ++g_surf_n;
+      tell_renderer = true;
     }
   }
-  if (g_surf_n >= kMaxSurfaces) {
-    g_surf_overflow.fetch_add(1, std::memory_order_relaxed);
-    return;
-  }
-  g_surf_keys[g_surf_n] = k;
-  g_surf_draws[g_surf_n] = 1;
-  g_surf_w_min[g_surf_n] = g_surf_w_max[g_surf_n] = w;
-  g_surf_h_min[g_surf_n] = g_surf_h_max[g_surf_n] = h;
-  ++g_surf_n;
+  if (!tell_renderer) return;
+
+  // OUTSIDE the census lock, so the two are never held at once and no lock
+  // order exists to get wrong later.
+  render::SurfaceDesc sd;
+  sd.pitch = k.pitch;
+  sd.msaa = k.msaa;
+  sd.color_base = k.color_base;
+  sd.color_format = k.color_format;
+  sd.depth_base = k.depth_base;
+  sd.edram_mode = k.edram_mode;
+  // A scissor of 8192 is the "no scissor" SENTINEL, not an extent. Making an
+  // 8192x8192 target out of it would allocate 256 MB for a pass that draws into
+  // 1280x720, sixty-one times over. The surface pitch IS the target's width in
+  // pixels, so that is the fallback; a height that is only the sentinel leaves
+  // the request incomplete and it is not made at all, rather than guessed.
+  sd.width = (w && w < 8192) ? w : k.pitch;
+  sd.height = (h && h < 8192) ? h : 0;
+  if (sd.width && sd.height) render::WantRenderTarget(sd);
 }
 
 std::string SurfaceReport() {

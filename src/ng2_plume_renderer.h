@@ -87,6 +87,36 @@ bool WantShader(ShaderStage stage, uint32_t guest_address, uint32_t dword_count,
 bool RegisterShaderMicrocode(ShaderStage stage, uint32_t guest_address, const uint8_t* ucode,
                              uint32_t bytes, const uint8_t* preamble128 = nullptr);
 
+// THE RENDER TARGET A DRAW WANTS.
+//
+// Measured, not assumed: NG2 uses SIXTY-ONE distinct render targets in Chapter
+// 1 gameplay, keyed by exactly these fields. A native path that assumes a
+// single back buffer is wrong sixty times over, so this is a cache from the
+// first line rather than a back buffer with a cache bolted on later.
+//
+// The consumer decodes the registers (it is the side that has them) and the
+// renderer owns creation, because D3D12 resources are created on the render
+// thread and the draws arrive on the GPU worker thread. So this only RECORDS
+// the request; the texture appears on the next frame the render thread runs.
+//
+// Returns true if a host target for this surface already exists.
+//
+// width/height are the renderer's best estimate from the surface pitch and the
+// widest scissor seen, and are PROVISIONAL: a Xenos EDRAM target does not carry
+// its own height, so this is a derivation rather than a reading, and it is
+// reported as such rather than presented as the surface's size.
+struct SurfaceDesc {
+  uint32_t pitch = 0;
+  uint32_t msaa = 0;
+  uint32_t color_base = 0;
+  uint32_t color_format = 0;
+  uint32_t depth_base = 0;
+  uint32_t edram_mode = 0;
+  uint32_t width = 0;
+  uint32_t height = 0;
+};
+bool WantRenderTarget(const SurfaceDesc& desc);
+
 // STAGE 2b DESIGN CONSTRAINTS, written before the code so they are decisions
 // rather than repairs. Both come from defects found in the sibling project's
 // equivalent structures, in the same week, by reading rather than running.
@@ -196,6 +226,38 @@ bool RegisterShaderMicrocode(ShaderStage stage, uint32_t guest_address, const ui
 //    black". Overdraw is a large first number with a small second one; genuinely
 //    extra geometry is the reverse. One coverage percentage cannot tell them
 //    apart, which is exactly how 99.4% there looked like success.
+//
+// 8. FOR AN IMMEDIATE SHADER THE ADDRESS FIELD IS STALE, NOT EMPTY - so a
+//    lookup that forgets to check the flag SUCCEEDS and returns the wrong
+//    program. Measured 2026-09-17 by reading the hand-off, not by running it.
+//
+//    IM_LOAD_IMMEDIATE carries the microcode inline in the packet, so there is
+//    no address to key on. The plugin's TrackShaderLoad sets the immediate flag
+//    and RETURNS WITHOUT UPDATING g_cur_vs / g_cur_ps, which keep whatever the
+//    last IM_LOAD put there. The record is then filled with
+//    rec.vs_address = g_cur_vs - a real, previously registered address that has
+//    nothing to do with this draw.
+//
+//    So the failure is not a miss. An address-keyed lookup finds a genuine
+//    entry, reports a hit, and binds a program the draw never asked for: a
+//    plausible wrong answer, which is the hardest kind to see and exactly what
+//    constraint 5 exists to prevent. WantShader is correct today - it returns
+//    on `immediate` before touching the address - and the guard has to stay
+//    that way in every path added later, including the one that binds.
+//
+//    THE SCALE MAKES THIS STRUCTURAL, NOT A CORNER. Shader load mode is
+//    scene-dependent here: IMMEDIATE dominates light frames (91.8% of draws in
+//    the sampled attract frames; one gameplay frame reported immediate VS
+//    166,118 / PS 159,445) while by-pointer wins in heavy ones, up to 8.4:1.
+//    A native draw path that can only serve by-pointer shaders therefore
+//    renders a MINORITY of draws in exactly the frames that look cheapest to
+//    get working first, and its coverage number will climb as scenes get
+//    heavier - which reads like progress and is not.
+//
+//    The immediate path needs the microcode carried across the ABI, since the
+//    plugin has it and the exe cannot recover it from an address. That is an
+//    ABI change, and the record's struct_size is what makes it detectable
+//    rather than silent.
 //
 // And the reason all of these are stated here rather than discovered later:
 // reading and running catch DIFFERENT classes. These two are structural - visible to a

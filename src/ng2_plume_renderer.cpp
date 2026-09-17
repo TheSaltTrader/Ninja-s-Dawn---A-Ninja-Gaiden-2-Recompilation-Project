@@ -140,6 +140,150 @@ uint64_t Fnv1a64(const uint8_t* p, size_t n) {
   return h;
 }
 
+// THE RENDER-TARGET CACHE.
+//
+// Sixty-one distinct surfaces were measured in Chapter 1 gameplay, so this is a
+// cache from the first line rather than a back buffer that grows one later.
+//
+// Created on the RENDER THREAD, requested from the GPU worker thread. The draw
+// path only records what it wants; nothing here calls the device off its own
+// thread, which is the kind of cross-thread resource creation that fails rarely
+// and far from its cause.
+struct RtKey {
+  uint32_t pitch, msaa, color_base, color_format, depth_base, edram_mode;
+  bool operator<(const RtKey& o) const {
+    if (pitch != o.pitch) return pitch < o.pitch;
+    if (msaa != o.msaa) return msaa < o.msaa;
+    if (color_base != o.color_base) return color_base < o.color_base;
+    if (color_format != o.color_format) return color_format < o.color_format;
+    if (depth_base != o.depth_base) return depth_base < o.depth_base;
+    return edram_mode < o.edram_mode;
+  }
+};
+
+struct RtEntry {
+  uint32_t width = 0, height = 0;
+  std::unique_ptr<RenderTexture> texture;
+  bool created = false;
+  bool failed = false;
+  bool unmapped_format = false;
+  bool approximated = false;
+};
+
+std::mutex g_rt_mutex;
+std::map<RtKey, RtEntry> g_rt;
+std::atomic<uint64_t> g_rt_created{0};
+std::atomic<uint64_t> g_rt_failed{0};
+std::atomic<uint64_t> g_rt_unmapped{0};
+std::atomic<uint64_t> g_rt_approx{0};
+int g_rt_unmapped_logged = 0;
+
+// XENOS COLOUR FORMAT -> HOST FORMAT, with the approximations NAMED.
+//
+// Three outcomes, not two. An EXACT mapping is a mapping; an APPROXIMATION is a
+// different format that happens to hold the values, and a renderer that
+// silently approximates produces a plausible picture built from the wrong
+// precision - the same shape as the silent shader substitution constraint 5 is
+// about. k_2_10_10_10_FLOAT is Xenos 7e3, which has no host equivalent at all;
+// k_16_16 and k_16_16_16_16 are FIXED point -32..32 stored in float targets
+// here. Those are counted separately so the number is never mistaken for
+// correctness.
+RenderFormat MapColorFormat(uint32_t xenos_format, bool* approximated, bool* unmapped) {
+  *approximated = false;
+  *unmapped = false;
+  switch (xenos_format) {
+    case 0:   // k_8_8_8_8
+      return RenderFormat::R8G8B8A8_UNORM;
+    case 1:   // k_8_8_8_8_GAMMA - the curve belongs in the shader, not the format
+      *approximated = true;
+      return RenderFormat::R8G8B8A8_UNORM;
+    case 2:   // k_2_10_10_10
+    case 10:  // k_2_10_10_10_AS_10_10_10_10
+      return RenderFormat::R10G10B10A2_UNORM;
+    case 3:   // k_2_10_10_10_FLOAT - Xenos 7e3, no host equivalent
+    case 12:  // k_2_10_10_10_FLOAT_AS_16_16_16_16
+      *approximated = true;
+      return RenderFormat::R16G16B16A16_FLOAT;
+    case 4:   // k_16_16 - fixed point -32..32
+      *approximated = true;
+      return RenderFormat::R16G16_FLOAT;
+    case 5:   // k_16_16_16_16 - fixed point -32..32
+      *approximated = true;
+      return RenderFormat::R16G16B16A16_FLOAT;
+    case 6:   // k_16_16_FLOAT
+      return RenderFormat::R16G16_FLOAT;
+    case 7:   // k_16_16_16_16_FLOAT
+      return RenderFormat::R16G16B16A16_FLOAT;
+    case 14:  // k_32_FLOAT
+      return RenderFormat::R32_FLOAT;
+    case 15:  // k_32_32_FLOAT
+      return RenderFormat::R32G32_FLOAT;
+    default:
+      // NEVER DEFAULTED TO RGBA8. An unknown format that quietly becomes the
+      // commonest one renders something, which is worse than rendering nothing.
+      *unmapped = true;
+      return RenderFormat::UNKNOWN;
+  }
+}
+
+// Called on the render thread, once per frame, for whatever the draw path asked
+// for since the last one.
+void CreatePendingRenderTargets() {
+  // TWO PHASE, so the device is never called with the lock held. The draw
+  // callback takes this same mutex, and createTexture is not a fast call:
+  // holding it across creation would stall the GPU worker thread on the frame
+  // sixty-one targets first appear. Collect what needs making, release, make
+  // it, then re-acquire to store.
+  std::vector<std::pair<RtKey, std::pair<uint32_t, uint32_t>>> pending;
+  {
+    std::lock_guard<std::mutex> lock(g_rt_mutex);
+    for (auto& kv : g_rt) {
+      if (kv.second.created || kv.second.failed) continue;
+      pending.emplace_back(kv.first, std::make_pair(kv.second.width, kv.second.height));
+    }
+  }
+  if (pending.empty()) return;
+
+  for (auto& p : pending) {
+    const RtKey& key = p.first;
+    const uint32_t want_w = p.second.first, want_h = p.second.second;
+    bool approx = false, unmapped = false;
+    const RenderFormat fmt = MapColorFormat(key.color_format, &approx, &unmapped);
+    std::unique_ptr<RenderTexture> tex;
+    if (!unmapped && want_w && want_h) {
+      tex = g_gpu.device->createTexture(RenderTextureDesc::ColorTarget(want_w, want_h, fmt));
+    }
+    std::lock_guard<std::mutex> lock(g_rt_mutex);
+    auto it = g_rt.find(key);
+    if (it == g_rt.end()) continue;
+    RtEntry& e = it->second;
+    if (e.created || e.failed) continue;
+    if (unmapped) {
+      e.failed = true;
+      e.unmapped_format = true;
+      g_rt_unmapped.fetch_add(1, std::memory_order_relaxed);
+      if (g_rt_unmapped_logged < 8) {
+        ++g_rt_unmapped_logged;
+        REXLOG_INFO("[ng2-plume] UNMAPPED colour format {} (pitch {} base {}) - no host target,"
+                    " and NOT substituted",
+                    key.color_format, key.pitch, key.color_base);
+      }
+      continue;
+    }
+    if (!tex) {
+      e.failed = true;
+      g_rt_failed.fetch_add(1, std::memory_order_relaxed);
+      continue;
+    }
+    e.texture = std::move(tex);
+    e.created = true;
+    e.approximated = approx;
+    if (approx) g_rt_approx.fetch_add(1, std::memory_order_relaxed);
+    g_rt_created.fetch_add(1, std::memory_order_relaxed);
+  }
+}
+
+
 void LoadManifest(const char* path) {
   std::ifstream f(path);
   if (!f) {
@@ -253,6 +397,7 @@ bool CreateDevice() {
 // is established would have two candidate explanations for every failure.
 void RenderOneFrame() {
   if (!g_gpu.ready || g_gpu.swap->isEmpty()) return;
+  CreatePendingRenderTargets();
   uint32_t index = 0;
   if (!g_gpu.swap->acquireTexture(g_gpu.acquire.get(), &index)) return;
 
@@ -359,6 +504,11 @@ void Stop() {
 #endif
 }
 
+size_t RtWanted() {
+  std::lock_guard<std::mutex> lock(g_rt_mutex);
+  return g_rt.size();
+}
+
 void EndFrame() {
 #if defined(NG2_PLUME_ON)
   if (!g_running.load(std::memory_order_relaxed)) return;
@@ -390,10 +540,13 @@ void EndFrame() {
                 vs_n, ps_n, g_vs_miss.load(), g_ps_miss.load(),
                 g_vs_immediate.load(), g_ps_immediate.load());
     REXLOG_INFO("[ng2-plume] manifest: {} programs | matched VS {} PS {} | unknown VS {} PS {}"
-                " | stage-mismatch {} | DXIL loaded {} ({} KB), UNLOADABLE {}",
+                " | stage-mismatch {} | DXIL loaded {} ({} KB), UNLOADABLE {}"
+                " | RT wanted {} created {} failed {} UNMAPPED-FORMAT {} approximated {}",
                 g_manifest.size(), g_hit_vs.load(), g_hit_ps.load(), g_unknown_vs.load(),
                 g_unknown_ps.load(), g_manifest_stage_mismatch.load(), g_dxil_loaded.load(),
-                g_dxil_bytes.load() / 1024, g_dxil_failed.load());
+                g_dxil_bytes.load() / 1024, g_dxil_failed.load(),
+                RtWanted(), g_rt_created.load(), g_rt_failed.load(),
+                g_rt_unmapped.load(), g_rt_approx.load());
   }
 #endif
 }
@@ -544,6 +697,25 @@ bool WantShader(ShaderStage stage, uint32_t guest_address, uint32_t dword_count,
   return available;
 #else
   (void)stage; (void)guest_address; (void)dword_count; (void)immediate;
+  return false;
+#endif
+}
+
+bool WantRenderTarget(const SurfaceDesc& desc) {
+#if defined(NG2_PLUME_ON)
+  if (!g_running.load(std::memory_order_relaxed)) return false;
+  const RtKey k{desc.pitch, desc.msaa, desc.color_base,
+                desc.color_format, desc.depth_base, desc.edram_mode};
+  std::lock_guard<std::mutex> lock(g_rt_mutex);
+  RtEntry& e = g_rt[k];
+  // The widest scissor seen wins, because a target must be at least as large as
+  // anything drawn into it. This is a DERIVATION - a Xenos EDRAM target does not
+  // carry its own height - and it is reported as provisional rather than read.
+  if (desc.width > e.width) e.width = desc.width;
+  if (desc.height > e.height) e.height = desc.height;
+  return e.created;
+#else
+  (void)desc;
   return false;
 #endif
 }
