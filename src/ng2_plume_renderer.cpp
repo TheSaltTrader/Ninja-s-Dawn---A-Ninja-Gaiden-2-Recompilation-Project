@@ -3,6 +3,7 @@
 #include <atomic>
 #include <cstdlib>
 #include <memory>
+#include <cstdio>
 #include <cstring>
 #include <fstream>
 #include <map>
@@ -98,6 +99,14 @@ std::map<uint64_t, ManifestEntry> g_manifest;
 std::atomic<uint64_t> g_manifest_hits{0};
 std::atomic<uint64_t> g_manifest_unknown{0};
 std::atomic<uint64_t> g_manifest_stage_mismatch{0};
+// PER STAGE. "unknown" without its stage cannot answer the question the
+// symmetric lookup exists to ask - which is precisely which stage is failing.
+std::atomic<uint64_t> g_hit_vs{0}, g_hit_ps{0};
+std::atomic<uint64_t> g_unknown_vs{0}, g_unknown_ps{0};
+// The first few unmatched programs, named, so the failure can be chased
+// offline against the manifest instead of by re-running.
+std::mutex g_unknown_log_mutex;
+int g_unknown_logged = 0;
 
 uint64_t Fnv1a64(const uint8_t* p, size_t n) {
   uint64_t h = 0xCBF29CE484222325ull;
@@ -357,9 +366,10 @@ void EndFrame() {
                 frame, drawn, handed, 100.0 * double(drawn) / double(handed), handed - drawn,
                 vs_n, ps_n, g_vs_miss.load(), g_ps_miss.load(),
                 g_vs_immediate.load(), g_ps_immediate.load());
-    REXLOG_INFO("[ng2-plume] manifest: {} programs, {} matched, {} unknown, {} stage-mismatch",
-                g_manifest.size(), g_manifest_hits.load(), g_manifest_unknown.load(),
-                g_manifest_stage_mismatch.load());
+    REXLOG_INFO("[ng2-plume] manifest: {} programs | matched VS {} PS {} | unknown VS {} PS {}"
+                " | stage-mismatch {}",
+                g_manifest.size(), g_hit_vs.load(), g_hit_ps.load(), g_unknown_vs.load(),
+                g_unknown_ps.load(), g_manifest_stage_mismatch.load());
   }
 #endif
 }
@@ -374,6 +384,34 @@ bool RegisterShaderMicrocode(ShaderStage stage, uint32_t guest_address, const ui
   auto it = g_manifest.find(h);
   if (it == g_manifest.end()) {
     g_manifest_unknown.fetch_add(1, std::memory_order_relaxed);
+    (stage == ShaderStage::kPixel ? g_unknown_ps : g_unknown_vs)
+        .fetch_add(1, std::memory_order_relaxed);
+    // DUMP IT, so the offline pipeline can translate it and the manifest can
+    // grow. The alternative was an address-keyed fallback for the shaders that
+    // have no container - but a second lookup path keyed differently from the
+    // first is precisely the asymmetry this design exists to prevent, and it
+    // would have to be kept in step by hand forever. Dumping keeps ONE key
+    // (content) and moves the gap into the pipeline where it belongs.
+    if (const char* dir = std::getenv("NG2_SHADER_DUMP")) {
+      char path[512];
+      std::snprintf(path, sizeof(path), "%s/ucode_%016llX_%s.bin", dir,
+                    static_cast<unsigned long long>(h),
+                    stage == ShaderStage::kPixel ? "p" : "v");
+      std::ofstream out(path, std::ios::binary);
+      if (out) out.write(reinterpret_cast<const char*>(ucode), bytes);
+    }
+    if (g_unknown_logged < 8) {
+      ++g_unknown_logged;
+      REXLOG_INFO("[ng2-plume] UNMATCHED {} at {:08X}: {} bytes, hash {:016X}, first dwords"
+                  " {:08X} {:08X} {:08X}",
+                  stage == ShaderStage::kPixel ? "PS" : "VS", guest_address, bytes, h,
+                  (uint32_t(ucode[0]) << 24) | (uint32_t(ucode[1]) << 16) |
+                      (uint32_t(ucode[2]) << 8) | ucode[3],
+                  bytes > 7 ? (uint32_t(ucode[4]) << 24) | (uint32_t(ucode[5]) << 16) |
+                                  (uint32_t(ucode[6]) << 8) | ucode[7] : 0u,
+                  bytes > 11 ? (uint32_t(ucode[8]) << 24) | (uint32_t(ucode[9]) << 16) |
+                                   (uint32_t(ucode[10]) << 8) | ucode[11] : 0u);
+    }
     return false;
   }
   // THE STAGE MUST AGREE. A program that hashes to a pixel artefact while the
@@ -387,7 +425,10 @@ bool RegisterShaderMicrocode(ShaderStage stage, uint32_t guest_address, const ui
   }
   auto& map = want_pixel ? g_pixel_shaders : g_vertex_shaders;
   auto& seen = map[guest_address];
-  if (!seen.available) g_manifest_hits.fetch_add(1, std::memory_order_relaxed);
+  if (!seen.available) {
+    g_manifest_hits.fetch_add(1, std::memory_order_relaxed);
+    (want_pixel ? g_hit_ps : g_hit_vs).fetch_add(1, std::memory_order_relaxed);
+  }
   seen.available = true;
   seen.dwords = bytes / 4;
   return true;
