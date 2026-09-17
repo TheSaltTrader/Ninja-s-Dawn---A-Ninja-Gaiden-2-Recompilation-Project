@@ -17,10 +17,37 @@ they constrain, so they are not rediscovered.
 
 ## Order, and why this order
 
-**1. A Plume device and window inside the plugin.** A shadow window beside the
-real one, as the Fable II side did, so the plugin's own output stays untouched
+**1. A Plume device and window — in the EXE, driven from the plugin.**
+
+*Corrected after writing this file.* The obvious reading of "the renderer lives
+on the GPU worker thread" is to put it inside the plugin, and that is wrong:
+`rexgpu-xenos.dll` is the **shared** SDK component both titles load, and a
+game-specific renderer does not belong in it. The Fable II side links Plume into
+its own exe, which is right for that reason even though their renderer runs on
+the wrong thread for the other one.
+
+Both constraints are satisfiable at once, and the Fable II session has already
+built the mechanism:
+
+- the **plugin** exports a game-agnostic draw callback
+  (`RexNgpuSetDrawCallback`, resolved by `GetProcAddress` on a plain C name,
+  with a `size` field first so a plugin and an exe built apart mismatch loudly
+  rather than reading garbage), fired from `ExecutePacketType3`'s draw branch
+  after the tiling predicate;
+- **ng2.exe** links Plume and implements the callback.
+
+The callback arrives on the GPU worker thread and NG2's renderer does its work
+there synchronously, so the renderer is in the game where it belongs and on the
+thread the draws arrive on. This is the arrangement that makes the Fable II
+side's 8 KB-per-draw queueing problem not arise — it was never solved, it is
+avoided.
+
+A shadow window beside the real one, so the plugin's own output stays untouched
 and the two can be compared frame to frame. Nothing renders yet — this step
 succeeds when a cleared window appears and the game still runs at 60 fps.
+
+    NGPU_PLUME_DIR  C:/Users/renoi/ClaudeCode/NativeGPU/reference/plume
+    NGPU_PLUME_LIB  C:/Users/renoi/ClaudeCode/NativeGPU/build/plume/plume.lib
 
 **2. Auto-index point sprites.** *First*, because they are 1,701 of 2,338 draws
 (§2). A path built for indexed geometry and extended to auto-index afterwards
@@ -77,10 +104,12 @@ last bound target (`EDRAM_AND_RESOLVES.md`).
 
 ## Things that are settled and must not be re-litigated
 
-- **Where the renderer lives: the GPU worker thread.** 100% of draws arrive
-  inside indirect buffers, so there is no guest-thread draw path to synchronise
-  with, and no per-draw state needs queueing across threads. The Fable II side's
-  8 KB-per-draw snapshot problem does not arise here.
+- **Where the renderer runs: the GPU worker thread. Where it LIVES: ng2.exe.**
+  Those are different questions and conflating them puts a game-specific
+  renderer inside the shared plugin. 100% of draws arrive inside indirect
+  buffers, so there is no guest-thread draw path to synchronise with and nothing
+  needs queueing across threads — the plugin hands the draw over on the worker
+  thread and the exe's renderer handles it there.
 - **NG2 is not tiled.** One `(bin_mask, bin_select)` bucket carries every draw,
   nothing rejected. Draw counts are per frame. (Fable II *is* three-bin tiled —
   bins are per title and this does not transfer.)
