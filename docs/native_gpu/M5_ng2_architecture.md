@@ -268,3 +268,46 @@ than by vertex id - those cannot be input-assembler attributes at all and must
 be bound as a buffer the shader indexes - and `declaredtype` must be checked
 against the fetch format, because D3D12 refuses a pipeline whose input element
 type class disagrees with the shader's declaration.
+
+### What "607 of 607" is a rate OVER
+
+Prompted by the Fable II session, which found that the shaders drawing two
+thirds of *its* frame have **no D3D9 container at all** — loaded by `IM_LOAD`
+from microcode blocks never wrapped in an API object, which is why sixty runs of
+elimination could not find them. If NG2 were the same, a compile rate over
+extracted containers would be a rate over the wrong denominator: the same shape
+as their 91-99% coverage measured over hooked wrappers.
+
+Checked by content rather than by address, because the two do not compare
+directly — `IM_LOAD` names GPU **physical** addresses (0x1D..0x1F) while the
+containers sit in the guest **virtual** heap (0x82xxxxxx), and the same shader
+legitimately exists in both places. So: take the microcode the frame actually
+asked for at each `IM_LOAD` address and look for those exact bytes inside the
+extracted containers (`tools/native_gpu/check_shader_denominator.py`).
+
+    distinct shaders the frame loaded (IM_LOAD)        76
+    microcode found inside an extracted container      69
+    NOT in any container                                7
+
+So the translated set covers **91% of the shaders a frame uses, not 100%**. The
+class Fable found exists in NG2 too — it is just 9% here rather than 66%. It is
+not negligible: the busiest of the seven is loaded **73 times in a single frame**.
+
+    VS 0x1D701000  x73     VS 0x1DACB000  x10    VS 0x1EFD7000  x6
+    VS 0x1EE30000   x4     PS 0x1D725000   x2    VS 0x1EFD8000  x2
+    VS 0x1F02F000   x1
+
+**What this does NOT establish.** These seven have no container *in the region
+that was dumped* — guest virtual 0x80000000-0xA0000000. Whether they have none
+anywhere needs a wider sweep; the Fable session's own search reported "no
+container anywhere" from a sweep that had never looked where the objects live,
+and was wrong for four versions before it was right. The honest claim is
+bounded to the window searched.
+
+Either way the remedy is the same and it is already the Fable side's next piece:
+translate from microcode alone, by synthesising the header XenosRecomp scans
+for. The packet supplies what the header needs — the dword count is `IM_LOAD`'s
+second word and the type is its low two bits.
+
+**The first milestone does not wait for it.** 69 of 76 covers the frame's hot
+set, and the seven can be added as they are needed.
