@@ -17,7 +17,32 @@ they constrain, so they are not rediscovered.
 
 ## Order, and why this order
 
-**1. A Plume device and window — in the EXE, driven from the plugin.**
+**1a. DONE — the plugin hands every draw over.** `rex_gpu_set_draw_callback`,
+a plain C export beside the existing plugin ABI (rexglue `ng2-native-gpu`
+d08c465), fired from `ExecutePacketType3`'s draw branch after the tiling
+predicate. `GpuDrawRecord` carries `struct_size` first, the draw initiator, the
+index buffer, both shader addresses with sizes and immediate flags, the register
+file, and the predication state. Game-agnostic, so it belongs in the shared
+plugin.
+
+Shader-load tracking was split out of the census as part of this: it now runs
+whenever *either* consumer is active, because a draw handed over with stale
+shader addresses is worse than one not handed over at all. The hand-off itself is
+gated on the callback pointer alone — a renderer must never depend on a
+diagnostic being enabled.
+
+Verified with `NGPU_DRAW_SELFTEST`, an internal counting consumer whose draw and
+index counts must equal the census's own for the same frame — two independent
+paths through the same packets:
+
+    2,347 draws / 764,123 indices handed over vs census 2,347 / 764,123 — reconciles
+
+at a steady 60 fps. The self-test earned its place on its first run by reporting
+0 draws against 156: `Emit()` runs at the next packet boundary, *after*
+`FrameEnd` resets the live counters, so it was reading post-reset zeros. Every
+other counter here is snapshotted for that exact reason.
+
+**1b. A Plume device and window — in the EXE, driven from the plugin.**
 
 *Corrected after writing this file.* The obvious reading of "the renderer lives
 on the GPU worker thread" is to put it inside the plugin, and that is wrong:
