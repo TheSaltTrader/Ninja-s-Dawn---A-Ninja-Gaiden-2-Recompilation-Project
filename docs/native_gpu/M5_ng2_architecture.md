@@ -414,3 +414,59 @@ Nothing further is blocked on understanding NG2. What remains is building:
 
 With the `computed` and `declaredtype` constraints from the Fable II side taken
 as inputs rather than discovered later.
+
+## Addendum 5: the 33 uncontained shaders are real programs, and most translate
+
+`tools/native_gpu/cf_extent.py` (from the Fable II side) decodes a block's own
+control flow and reports how far its program extends — answering the size
+question from the shader's declarations instead of by trying lengths. Run
+against the uncontained blocks:
+
+    PS 0x1EB47000 x178  CF 24 bytes, program to 120  [Exec Alloc ExecEnd]
+    PS 0x1EB3F000 x167  CF 24 bytes, program to 144  [Exec Alloc Exec ExecEnd]
+    VS 0x1D701000  x73  CF 36 bytes, program to 168  [Exec Alloc Exec Exec Alloc ExecEnd]
+    ...
+
+**All ten sampled blocks carry well-formed Xenos programs** — clean control flow,
+sensible extents of 84-168 bytes, a 24-byte CF section for pixel shaders and 36
+for vertex. They are small, complete shaders, and `cf_extent` gives their exact
+size, which is what a synthetic container needs.
+
+### The sampler count, and a fix that survives its control
+
+Synthetic containers built with the Fable II generator (`synth_xvu.py`,
+`pad=0` — padding is a proven false fix there):
+
+| | HLSL produced |
+|---|---|
+| 16 samplers declared | 3 of 10 — **all 5 pixel shaders crashed** |
+| 32 samplers declared | **9 of 10**, all 5 pixel among them |
+
+5-of-5 by shader type is a far louder signal than a count, and a pixel shader is
+where a `tfetch` above sampler slot 15 would live. The Fable II side had tested
+more samplers on its own set and seen only membership shuffle — the hypothesis
+was right, it was just invisible there.
+
+**The control, which is the point.** Compare the decoded *program*, not the file
+and not the count:
+
+    1EE30000   6 statements both builds, hash IDENTICAL
+    1D701000  12 statements both builds, differing by ONE line:
+        - oDepth5.xy         = r0.xy + -g_Consts(9).xy;
+        + oBlendIndices10.xy = r0.xy + -g_Consts(9).xy;
+
+Same arithmetic, different output *name*. That is what separates this from the
+two false fixes on the Fable side, where padding changed 643→644→640 lines with
+different vertex inputs and trimming broke two working shaders. **No computation
+changes here.** The name moves because output semantics come from the definition
+table a synthetic container lacks, so they are unreliable in *both* builds rather
+than broken by the change.
+
+**Not settled:** `VS 0x1EFD7000` produced HLSL at 16 samplers and crashes at 32.
+One shader moving the wrong way against nine moving the right way is not grounds
+to reject the change, but it is not rounded off either.
+
+**Still open and ahead of the crashes**, from the Fable II side: a synthetic
+container loses the definition table's literal constants — a real translation
+ends `c255 = (0, 1.0, 0.5, 0)`, a synthetic one has zeros. A shader computing
+with 0.0 where it needs 1.0 is wrong in a way that renders rather than fails.
