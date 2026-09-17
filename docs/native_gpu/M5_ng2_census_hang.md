@@ -320,6 +320,46 @@ fixed delay in the upload path, cvar-gated, no hashing. If a pure delay
 suppresses the freeze it is a race and the volume story is dead; if only real
 hashing suppresses it, touching those pages matters and it is a different bug.
 
+### Two distinct failures, and how to tell them apart
+
+These logs contain two different deaths. Conflating them cost a wrong report,
+so check which one a run actually hit before counting it.
+
+**1. The freeze.** 12–17 swap reports, then the log simply stops. Watchdog
+reports guest thread 17 in `NtSignalAndWaitForSingleObjectEx` on Event
+`F800003C`, usually preceded by thread 8 on `40004BC4` and thread 13 on
+`F80000CC`. **No GPU error of any kind.** The last frame stays on screen. This
+is the one under investigation.
+
+**2. The ring-buffer desync.** Zero swap reports — it dies during boot, before
+the first `[swap]` line. Loud, not silent:
+
+    ExecutePacketType0 overflow (read count 00000024, packet count 0000FE00)
+    **** INDIRECT RINGBUFFER: Failed to execute packet.
+    ExecutePacketType0 overflow (read count 00000018, packet count 00007B90)
+
+Seen twice, in `touch_3` and `spin5k_1`, and **the values are byte-identical
+across both runs** — `24/FE00` then `18/7B90`, different probes, minutes apart.
+Identical garbage twice is not a race scattering random bytes; the reader is
+deterministically reading the same wrong memory. It appears in **none** of the
+other seventeen runs, only in the two using the newest `shared_memory_upload_touch`
+and `shared_memory_upload_spin_ns` probes.
+
+In `spin5k_1` the line immediately before the first overflow is the shared
+tree's own v0.2.12 diagnostic:
+
+    [diag] gpu-written pages invalidated by a CPU write: 920 page(s) at 1F3DD000 len 3768320
+
+Adjacency is not causation, but the ring buffer lives in guest memory, and
+anything in the page-state path that can invalidate or re-upload pages holding
+the ring itself would produce exactly this — structurally valid packets with
+impossible counts.
+
+**Detector note.** The freeze detector originally required `swaps > 0` before it
+would declare a freeze, which made failure (2) invisible: the counter sits at
+zero, the guard rejects it, and a real death reads as a timeout. It now watches
+the log file growing instead, since a live game always writes something.
+
 ### The dev workaround
 
 `--clear_memory_page_state=false` on the command line. Character models degrade,
