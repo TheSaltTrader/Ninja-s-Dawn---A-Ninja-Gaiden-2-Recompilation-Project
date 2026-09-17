@@ -371,13 +371,24 @@ each N=3, same plugin and same criterion:
 | `upload_touch` (one byte per page) | almost no time, same pages touched | **no** — froze at 17 and 13 |
 | `upload_spin_ns=5000` (busy-spin, touches nothing) | time only | **no** — froze at 19 and 20 |
 
-So neither half alone reproduces it. Page contact does not suppress the freeze,
-and neither does pure delay at 5 µs/range — a figure chosen to match churn's own
-estimated cost. Only the probe that does *both* suppresses it.
+Pure delay at 5 µs/range — a figure chosen to match churn's own estimated cost —
+does not suppress the freeze. That much stands, and it kills the clean "it is a
+timing race" reading.
 
-That kills the clean "it is a timing race" reading. Latency alone, injected at
-the same place and in comparable quantity, leaves the freeze exactly where it
-was. Whatever churn is doing is not reducible to the time it takes.
+**But "neither half suppresses" was wrong, and the error is worth keeping.**
+`touch` is not the memory half at full strength: it reads one byte per 4 KB
+page, one cache line in sixty-four, about **1.5% of churn's traffic**. So the
+three probes are not {time, memory, both} but:
+
+    spin    0% of the traffic,    full time
+    touch   ~1.5% of the traffic, ~no time
+    churn   100% of the traffic,  full time
+
+Read correctly, the result is not "neither half suppresses" but **"suppression
+appears somewhere between 1.5% and 100% of the traffic"** — an enormous untested
+gap, and the obvious place for the mechanism to live. The coverage sweep
+(4 KB / 8 KB / whole-range) was a dose-response in **bytes read**, not in delay,
+which makes it the most informative leg rather than a footnote.
 
 **The invalidation adjacency is also dead.** The `[diag] gpu-written pages
 invalidated by a CPU write` lines that precede one failure are at **fixed
@@ -387,17 +398,18 @@ in runs that reached 45 alike. Something that happens identically in every run
 cannot be what distinguishes them, and its appearing just before an overflow is
 coincidence: it appears just before everything.
 
-**The spin probe has its own failure**, unrelated to the freeze: it triggers
-the ring-buffer desync at both doses tested, and MORE OFTEN AT THE LOWER ONE.
+**The spin probe has its own failure**, unrelated to the freeze: the ring-buffer
+desync appeared in 1 of 3 runs at 5000 ns and 2 of 3 at 200 ns.
 
-    spin 5000 ns   1 of 3 desync,  2 of 3 froze normally (19 and 20 swaps)
-    spin  200 ns   2 of 3 desync,  1 of 3 froze normally (13 swaps)
+**That is not evidence of an inverse relationship**, and reading it as one here
+was an error. One event's difference at N=3 is what three samples look like: a
+single underlying rate near 0.5 produces that split about a third of the time.
+It does not rule out the lag explanation and must not be quoted as doing so.
 
-A 25x reduction in injected delay producing *more* corruption is the opposite
-of dose-dependence. That rules out the leading explanation for the desync -
-that a delayed reader falls behind a wrapping ring and reads bytes the guest
-has already overwritten. Whatever spin does to the ring is not proportional to
-the delay it injects.
+What does need explaining, and is a real signal: **the desync appears only in
+probe runs** — zero in seventeen runs without a probe, several in the handful
+with. The honest position is that its mechanism is unknown, not that one has
+been ruled out.
 
 ### The dev workaround
 
