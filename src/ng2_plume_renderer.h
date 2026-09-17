@@ -71,8 +71,54 @@ void NoteDrawRendered();
 //    address, by code hash, by microcode - this is a live hazard rather than a
 //    theoretical one. It has already occurred once in the sibling codebase.
 //
-// And the reason both are stated here rather than discovered later: reading and
-// running catch DIFFERENT classes. These two are structural - visible to a
+// 3. A DRAW NEED NOT BIND ANY VERTEX STREAM. 343 of NG2's 411 vertex
+//    containers declare vertexElementCount == 0 - 83.5%, against Fable II's
+//    6.6% - because two thirds of NG2's draws are auto-index POINT sprites,
+//    which have nothing to fetch. Corroborated three ways: this scan, an
+//    independent vfetch scan, and the PM4 census, all agreeing on 68 shaders
+//    WITH fetches. A path that assumes a bound stream discards most of the
+//    picture here, where in the sibling title it costs a fraction of a frame.
+//
+//    Two concrete bugs found in their stream-binding code, both of which this
+//    path would inherit by imitation and neither of which is structural:
+//      - a fill loop running s = 0..max_stream INCLUSIVE still executes once
+//        when the stream mask is EMPTY, and takes the first-bound-stream
+//        pointer as the filler for an unbound slot - null, and dereferenced;
+//      - binding max_stream + 1 views binds one UNINITIALISED view when there
+//        are no streams at all.
+//    Both are the same mistake: treating "no streams" as "a stream count of
+//    zero-plus-one" rather than as a case.
+//
+// 4. NEVER CPU-READ GUEST GEOMETRY. Index and vertex data are not obtainable by
+//    translating a guest address and dereferencing it: those pages are
+//    legitimately not CPU-resident. Measured - 1,889,699 faults out of
+//    1,889,700 indexed draws, on an address that was correct. The plugin's own
+//    CPU read (primitive_processor.cpp:699) is inside a CONVERSION branch only;
+//    the ordinary path calls shared_memory_.RequestRange (line 966) and the GPU
+//    reads from the shared-memory buffer. The vertex path is the same shape
+//    (d3d12/command_processor.cpp:3159 requests vfetch_constant.address << 2).
+//    A renderer built on CPU reads WOULD WORK in the conversion cases and fail
+//    everywhere else, presenting as a data-correctness bug rather than a
+//    residency one.
+//
+// 5. VERTEX AND PIXEL SHADER LOOKUP MUST BE SYMMETRIC, AND A MISS MUST BE LOUD.
+//    The sibling renderer had a translation path for vertex microcode and none
+//    for pixel; the lookup miss fell through to a stale device value, so 2,197
+//    draws in a frame used ONE pixel shader. The frame rendered correct
+//    geometry and was uniformly unlit - a symptom that looks like a lighting or
+//    shading bug and is actually a lookup falling through. Whatever this path
+//    cannot resolve must be counted and named, never silently substituted.
+//
+// 6. GATE EVERY DRAW-PATH FEATURE, DEFAULT OFF, FROM THE FIRST LINE. The
+//    sibling session put an ungated change on the path that draws the picture,
+//    and when the run crashed there was nothing to compare against - a control
+//    is the same binary with the feature off, and that had been made impossible
+//    on the one path where a wrong frame is hardest to notice. This costs
+//    nothing to do now, while the renderer still draws nothing, and cannot be
+//    retrofitted cheaply later.
+//
+// And the reason all of these are stated here rather than discovered later:
+// reading and running catch DIFFERENT classes. These two are structural - visible to a
 // reader, invisible to a run that never evicts or never takes the branch. The
 // complement is stage 2a's lesson, where the code was built, linked and
 // symbol-verified and simply never called, which no amount of reading would have
