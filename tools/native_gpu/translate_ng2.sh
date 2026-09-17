@@ -79,6 +79,25 @@ echo "STABILITY        : $STABLE_RUNS runs must agree byte-for-byte"
 echo "CAPS             : ${TIME_CAP_S}s, ${MEM_CAP_MB}MB"
 
 mkdir -p "$OUT/hlsl" "$OUT/dxil" "$OUT/tmp"
+
+# ONE WRITER PER OUTPUT DIRECTORY. Stopping a background run does not
+# necessarily stop its children promptly, so a RESUME started straight
+# afterwards can race the run it is resuming - two processes appending to the
+# same ledgers. That is what made the consistency check fire: the resumed run
+# reported "keeping 23 stable" and added none, while stable.txt kept growing
+# underneath it. The ledger was genuinely corrupt, so the check was right; the
+# cause was a second writer, which is worth preventing rather than detecting.
+LOCK="$OUT/.writer.lock"
+if [ -e "$LOCK" ]; then
+  holder=$(cat "$LOCK" 2>/dev/null)
+  if kill -0 "$holder" 2>/dev/null; then
+    echo "REFUSING: another run (pid $holder) is writing $OUT - stop it first"
+    exit 1
+  fi
+  echo "note: stale lock from pid $holder, taking it"
+fi
+echo $$ > "$LOCK"
+trap 'rm -f "$LOCK"' EXIT INT TERM
 tr_ok=0; tr_bad=0; unstable=0; c_ok=0; c_bad=0; deferred=0
 # RESUMABLE, because this machine is shared and a long run is not safe from it.
 # Two multi-hour regenerations were killed by the OS low-memory killer - not for
