@@ -199,3 +199,25 @@ emitters in its own entry-point table and realised its headline coverage number
 might be comparing per-tile ring draws against per-call API draws. The emitters
 being present proves nothing either way — which is exactly why it needed
 measuring rather than arguing.
+
+**Bins are per title, and NG2's answer does not carry.** Run on Fable II, the
+same instrument found the opposite: two `bin_select` values carrying **exactly
+1455 draws each**, with `15555555` and `2AAAAAAA` as complementary halves of an
+alternating bit pattern. That is a frame replayed per bin. A shared native
+device that assumes a single bin is right for NG2 and silently wrong for Fable —
+silently, because the error is a multiplier on counts rather than a crash.
+
+**The instrument has to enumerate its own subjects.** As first written the
+bucket table held 8 entries and dropped draws *with no counter* once full: the
+Fable run lost 2,422 draws a frame, 36% of the frame, into that hole, so the
+tool meant to settle the question could not observe enough of the frame to
+settle it. It now carries an overflow counter, per-bucket index totals (two
+passes over the same scene carry the same indices; a different pass of similar
+draw count does not), and a reconciliation — bucketed + overflow must equal
+`indexed + auto` from §2, and the line says `reconciles` or
+`DOES NOT RECONCILE` rather than looking clean either way.
+
+NG2's numbers were re-checked against that arithmetic: 2342 = 641 + 1701,
+1903 = 541 + 1362, 3618 = 1111 + 2507, six frames, overflow zero. The verdict
+stands — but it stood by luck, because the overflow it happened never to hit
+would have been invisible.
