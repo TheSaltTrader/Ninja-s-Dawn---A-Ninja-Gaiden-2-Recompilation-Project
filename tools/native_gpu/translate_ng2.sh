@@ -26,6 +26,22 @@
 #
 # The comparison is of the RAW recompiler output, before the fix passes, because
 # that is where the non-determinism lives.
+#
+# A KNOWN LIMIT, STATED SO THE NUMBERS ARE NOT OVER-TRUSTED. On a shared machine
+# whose free memory oscillates faster than a container takes to translate five
+# times - measured here swinging between 2 GB and 46 GB within minutes - the
+# FAILED column is not reliable. A refused allocation and the translator's own
+# end-iterator crash both exit 126; the floor catches the case where memory is
+# low when a container STARTS, and the post-failure re-check catches the case
+# where it is still low when the container FINISHES, but neither catches a
+# collapse that happens and recovers in between. Spot-checked: a container
+# recorded "crashed" translated cleanly by hand minutes later, twice, on
+# different runs.
+#
+# So FAILED is PROVISIONAL until re-measured on a quiet machine. STABLE and
+# UNSTABLE are not affected: pressure can stop a translation happening, but it
+# cannot make two completed translations of the same input agree when they
+# would otherwise differ, nor differ when they would otherwise agree.
 IN="$1"; OUT="$2"; GLOB="${3:-*.xvu}"
 # FIVE, NOT THREE, AND "STABLE IN N RUNS" IS NOT "DETERMINISTIC". Two censuses
 # over the same 80 containers named DIFFERENT containers as unstable, so N runs
