@@ -97,3 +97,50 @@ One frame, Plume window, NG2's own geometry: the 637 indexed triangle strips
 with translated shaders and no textures. Recognisable scene silhouette is the
 bar, matching what the Fable side called M4-d. Everything needed to attempt it
 is in the census; nothing is blocked on further recon.
+
+## Addendum: the container gap (2026-09-16, same day)
+
+The interception decision above survives, but it has a cost that was not visible
+when it was written, and it is worth stating next to the decision rather than
+buried in a later note.
+
+**The packet gives the microcode's ADDRESS, not the container that wraps it.**
+XenosRecomp does not accept bare microcode: it scans for shader containers by
+signature (`(flags & 0xFFFFFF00) == 0x102A1100`, sized by
+`virtualSize + physicalSize`) and hands the container to the recompiler, because
+the container carries the **constant table**. `IM_LOAD` names a physical address
+in GPU memory; what sits there is raw control-flow microcode with zeros in front
+of it.
+
+Measured:
+
+| scope | result |
+|---|---|
+| 22 MiB window around the frame's IM_LOAD addresses | 1 raw signature, 0 valid |
+| whole 512 MiB physical space | 34 raw signatures, **0 valid** |
+| guest virtual 0x80000000-0xA0000000 | **not yet measured** - the dump wrote a zero-byte file |
+
+The Fable II side reads its containers at **shader object + 0x28** — it hooks
+the guest call, so it has the object. The PM4 route never sees the object.
+
+That is the honest statement of the trade, in the Fable session's words: *the
+PM4 route buys independence from guest hooks and pays for it at the container;
+the hooks route buys the container and pays for it in coverage — it sees half
+the scene.* Neither route is free.
+
+Three ways out, in the order they should be tried:
+
+1. **Finish the search.** `TranslatePhysical` masks to `0x1FFFFFFF` and can only
+   show the RAM alias; the shader object is allocated in the title's heap at a
+   CPU virtual address. Until the virtual dump works, "NG2 has no containers" is
+   a claim about the wrong address space.
+2. **Synthesize the container.** The recompiler needs the header for sizes,
+   flags and the table offsets; the packet supplies the dword count
+   (`IM_LOAD`'s second word) and the type (its low two bits). A native path
+   driven by PM4 does not need the constant table's *names* — it reads the ALU
+   constants and fetch constants off the stream directly — so an empty constant
+   table may be sufficient. Untested.
+3. **Identify the shader object guest-side after all**, which is the part of the
+   design this decision was meant to avoid. It would be a narrow exception
+   rather than a return to full guest-call interception: one object, not a
+   draw path.
