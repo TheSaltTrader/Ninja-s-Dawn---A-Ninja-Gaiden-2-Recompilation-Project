@@ -133,6 +133,182 @@ std::atomic<uint32_t> g_ucode_first_word{0};
 
 // Read once at Start(), not per draw: this is on the per-draw path.
 bool g_check_inputs = false;
+bool g_check_surface = false;
+
+// THE SURFACE CENSUS.
+//
+// Xenos register indices, from the SDK's register_table.inc - declared here
+// rather than included for the same reason the draw record is: this is a
+// consumer in another codebase, and a constant that is right by construction
+// cannot catch a divergence.
+constexpr uint32_t kRegRbSurfaceInfo = 0x2000;
+constexpr uint32_t kRegRbColorInfo = 0x2001;
+constexpr uint32_t kRegRbDepthInfo = 0x2002;
+constexpr uint32_t kRegPaScWindowScissorTL = 0x2081;
+constexpr uint32_t kRegPaScWindowScissorBR = 0x2082;
+constexpr uint32_t kRegRbModecontrol = 0x2208;
+
+// THE SCISSOR IS NOT PART OF RENDER-TARGET IDENTITY, and folding it in was a
+// design error the overflow counter caught: with tl/br in the key the census
+// reported "24 distinct (+399,552 OVERFLOW)" - more draws spilled than the
+// whole table held - because the scissor is PER-DRAW state that changes
+// constantly while the target underneath does not. Two different things were
+// being counted as one, and the row count exploded.
+//
+// A render target is the surface: pitch, msaa, colour base and format, depth
+// base, edram mode. The scissor is kept alongside as a RANGE, so its variation
+// is still reported without becoming a row per value.
+struct SurfaceKey {
+  uint32_t pitch, msaa, color_base, color_format, depth_base, edram_mode;
+  bool operator==(const SurfaceKey& o) const {
+    return pitch == o.pitch && msaa == o.msaa && color_base == o.color_base &&
+           color_format == o.color_format && depth_base == o.depth_base &&
+           edram_mode == o.edram_mode;
+  }
+};
+
+// A FIXED TABLE WITH AN OVERFLOW COUNTER, not a growing map. This runs on the
+// draw callback for every draw - 22 million in a four-minute run - so it must
+// not allocate. The cap means the census can be INCOMPLETE, and an incomplete
+// census that does not say so is the failure this project keeps finding, hence
+// g_surf_overflow: distinct surfaces that did not fit are counted, never
+// dropped silently.
+constexpr int kMaxSurfaces = 192;
+std::mutex g_surf_mutex;
+SurfaceKey g_surf_keys[kMaxSurfaces];
+uint64_t g_surf_draws[kMaxSurfaces] = {};
+// The scissor as a RANGE per surface, so per-draw variation stays visible
+// without becoming a separate row for every value it takes.
+uint32_t g_surf_w_min[kMaxSurfaces] = {}, g_surf_w_max[kMaxSurfaces] = {};
+uint32_t g_surf_h_min[kMaxSurfaces] = {}, g_surf_h_max[kMaxSurfaces] = {};
+int g_surf_n = 0;
+std::atomic<uint64_t> g_surf_overflow{0};
+std::atomic<uint64_t> g_surf_no_regs{0};
+
+// THE BIN CENSUS. Same shape as the surface one: a fixed table, an overflow
+// counter, and every distinct tuple as its own row rather than a summary.
+struct BinKey {
+  uint64_t mask, select;
+  uint32_t predicated;
+  bool operator==(const BinKey& o) const {
+    return mask == o.mask && select == o.select && predicated == o.predicated;
+  }
+};
+constexpr int kMaxBins = 16;
+std::mutex g_bin_mutex;
+BinKey g_bin_keys[kMaxBins];
+uint64_t g_bin_draws[kMaxBins] = {};
+int g_bin_n = 0;
+std::atomic<uint64_t> g_bin_overflow{0};
+
+void NoteBin(const GpuDrawRecord* rec) {
+  BinKey k{rec->bin_mask, rec->bin_select, rec->predicated};
+  std::lock_guard<std::mutex> lock(g_bin_mutex);
+  for (int i = 0; i < g_bin_n; ++i) {
+    if (g_bin_keys[i] == k) {
+      ++g_bin_draws[i];
+      return;
+    }
+  }
+  if (g_bin_n >= kMaxBins) {
+    g_bin_overflow.fetch_add(1, std::memory_order_relaxed);
+    return;
+  }
+  g_bin_keys[g_bin_n] = k;
+  g_bin_draws[g_bin_n] = 1;
+  ++g_bin_n;
+}
+
+std::string BinReport() {
+  std::string out;
+  std::lock_guard<std::mutex> lock(g_bin_mutex);
+  if (!g_bin_n) return out;
+  out = fmt::format(" | BINS {} distinct", g_bin_n);
+  if (const uint64_t o = g_bin_overflow.load()) out += fmt::format(" (+{} OVERFLOW)", o);
+  for (int i = 0; i < g_bin_n; ++i) {
+    out += fmt::format("\n    bin mask {:016X} select {:016X} predicated {} draws {}",
+                       g_bin_keys[i].mask, g_bin_keys[i].select, g_bin_keys[i].predicated,
+                       g_bin_draws[i]);
+  }
+  return out;
+}
+
+void NoteSurface(const GpuDrawRecord* rec) {
+  // The register file must actually reach the index being read. A record whose
+  // register_count is short is a DIFFERENT failure from a surface that varies,
+  // and reading past the end would be indistinguishable from either.
+  if (!rec->registers || rec->register_count <= kRegRbModecontrol) {
+    g_surf_no_regs.fetch_add(1, std::memory_order_relaxed);
+    return;
+  }
+  const uint32_t* r = rec->registers;
+  const uint32_t si = r[kRegRbSurfaceInfo];
+  const uint32_t ci = r[kRegRbColorInfo];
+  const uint32_t di = r[kRegRbDepthInfo];
+  const uint32_t tl = r[kRegPaScWindowScissorTL];
+  const uint32_t br = r[kRegPaScWindowScissorBR];
+  SurfaceKey k{};
+  k.pitch = si & 0x3FFF;               // surface_pitch : 14, in pixels
+  k.msaa = (si >> 16) & 0x3;           // msaa_samples : 2
+  k.color_base = ci & 0xFFF;           // color_base : 11 + bit_11, in tiles
+  k.color_format = (ci >> 16) & 0xF;   // ColorRenderTargetFormat : 4
+  k.depth_base = di & 0xFFF;
+  k.edram_mode = r[kRegRbModecontrol] & 0x7;
+  const uint32_t tlx = tl & 0x3FFF, tly = (tl >> 16) & 0x3FFF;
+  const uint32_t brx = br & 0x3FFF, bry = (br >> 16) & 0x3FFF;
+  const uint32_t w = brx > tlx ? brx - tlx : 0;
+  const uint32_t h = bry > tly ? bry - tly : 0;
+
+  std::lock_guard<std::mutex> lock(g_surf_mutex);
+  for (int i = 0; i < g_surf_n; ++i) {
+    if (g_surf_keys[i] == k) {
+      ++g_surf_draws[i];
+      if (w < g_surf_w_min[i]) g_surf_w_min[i] = w;
+      if (w > g_surf_w_max[i]) g_surf_w_max[i] = w;
+      if (h < g_surf_h_min[i]) g_surf_h_min[i] = h;
+      if (h > g_surf_h_max[i]) g_surf_h_max[i] = h;
+      return;
+    }
+  }
+  if (g_surf_n >= kMaxSurfaces) {
+    g_surf_overflow.fetch_add(1, std::memory_order_relaxed);
+    return;
+  }
+  g_surf_keys[g_surf_n] = k;
+  g_surf_draws[g_surf_n] = 1;
+  g_surf_w_min[g_surf_n] = g_surf_w_max[g_surf_n] = w;
+  g_surf_h_min[g_surf_n] = g_surf_h_max[g_surf_n] = h;
+  ++g_surf_n;
+}
+
+std::string SurfaceReport() {
+  std::string out;
+  std::lock_guard<std::mutex> lock(g_surf_mutex);
+  if (!g_surf_n) return out;
+  // SCENE-ARRIVAL GUARD. A run that never left the menus has zero indexed
+  // draws, and every number taken from it describes a title screen. The
+  // sibling session lost a whole A/B to this: their pad script is time-based,
+  // so making one leg CHEAPER let the guest run faster, the timed presses
+  // missed, and the world never loaded - the harness silently turned "this
+  // configuration is faster" into "this configuration measured a different
+  // scene". My pad scripts are time-based too, so the guard belongs where the
+  // numbers are read, not in the launcher.
+  if (!g_indexed.load()) {
+    return " | SURFACES: MENU ONLY - 0 indexed draws, this run reached no scene, DO NOT SCORE";
+  }
+  out = fmt::format(" | SURFACES {} distinct", g_surf_n);
+  if (const uint64_t o = g_surf_overflow.load()) out += fmt::format(" (+{} OVERFLOW)", o);
+  if (const uint64_t n = g_surf_no_regs.load()) out += fmt::format(" ({} no-regs)", n);
+  for (int i = 0; i < g_surf_n; ++i) {
+    const SurfaceKey& k = g_surf_keys[i];
+    out += fmt::format("\n    [{}] pitch {} msaa {} colour base {} fmt {} depth base {} edram {}"
+                       " | scissor {}x{}..{}x{} | draws {}",
+                       i, k.pitch, k.msaa, k.color_base, k.color_format, k.depth_base,
+                       k.edram_mode, g_surf_w_min[i], g_surf_h_min[i], g_surf_w_max[i],
+                       g_surf_h_max[i], g_surf_draws[i]);
+  }
+  return out;
+}
 
 GpuSetDrawCallbackFn g_setter = nullptr;
 GpuSetSwapCallbackFn g_swap_setter = nullptr;
@@ -169,8 +345,9 @@ std::string Totals() {
                        g_ucode_read_ok.load(), u, g_ucode_first_addr.load(),
                        g_ucode_first_word.load());
   }
-  return fmt::format("{} draws ({} indexed, {} auto), {} indices{}{}{}{}{}",
+  return fmt::format("{} draws ({} indexed, {} auto), {} indices{}{}{}{}{}{}",
                      g_draws.load(), g_indexed.load(), g_auto.load(), g_indices.load(), serial, idx,
+                     SurfaceReport() + BinReport(),
                      g_bad_size.load() ? fmt::format(" | {} ABI MISMATCH", g_bad_size.load()) : "",
                      g_no_regs.load() ? fmt::format(" | {} without registers", g_no_regs.load()) : "",
                      g_no_shader.load() ? fmt::format(" | {} without a shader", g_no_shader.load()) : "");
@@ -500,10 +677,17 @@ void OnDraw(const GpuDrawRecord* rec) {
   const uint32_t di = rec->vgt_draw_initiator;
   g_draws.fetch_add(1, std::memory_order_relaxed);
   g_indices.fetch_add(di >> 16, std::memory_order_relaxed);
+  // EVERY DRAW, not just the indexed ones. A render target is state that
+  // applies to the whole stream, and two thirds of NG2's draws are auto-index -
+  // censusing only the indexed third would have described a third of the
+  // picture while looking complete, and reported NOTHING at all in menus, where
+  // the indexed count is zero.
+  if (g_check_surface) NoteSurface(rec);
+  if (g_check_surface) NoteBin(rec);
   if (((di >> 6) & 0x3) == kSourceDMA) {
     g_indexed.fetch_add(1, std::memory_order_relaxed);
     // Only indexed draws have an index buffer to resolve; the auto-index ones
-    // (two thirds of NG2's draws) carry no address at all.
+    // carry no address at all.
     if (g_check_inputs) CheckIndexBuffer(rec);
   } else {
     g_auto.fetch_add(1, std::memory_order_relaxed);
@@ -547,6 +731,7 @@ void Start() {
               sizeof(GpuDrawRecord));
 
   g_check_inputs = std::getenv("NG2_NATIVE_GPU_INPUTS") != nullptr;
+  g_check_surface = std::getenv("NG2_NATIVE_GPU_SURFACE") != nullptr;
   if (g_check_inputs)
     REXLOG_INFO("[ng2-ngpu] resolving index buffers from guest memory (stage 2b step 1)");
 
