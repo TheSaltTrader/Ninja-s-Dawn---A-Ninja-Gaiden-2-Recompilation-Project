@@ -108,7 +108,7 @@ for f in $GLOB; do
       "UNSTABLE output") unstable=$((unstable+1)); echo "$f  $reason" >> "$OUT/unstable.txt";;
       *) tr_bad=$((tr_bad+1)); echo "$f  $reason" >> "$OUT/failed.txt";;
     esac
-    rm -f "$OUT/tmp/$n".*.hlsl
+    rm -f "$OUT/tmp/$n".*.hlsl "$OUT/tmp/$n".*.hlsl.layout
     continue
   fi
 
@@ -118,7 +118,7 @@ for f in $GLOB; do
   # majority" must not both read as "translated".
   echo "$f  agreed $STABLE_RUNS/$STABLE_RUNS" >> "$OUT/stable.txt"
   cp "$OUT/tmp/$n.1.hlsl" "$OUT/hlsl/$n.hlsl"
-  rm -f "$OUT/tmp/$n".*.hlsl
+  rm -f "$OUT/tmp/$n".*.hlsl "$OUT/tmp/$n".*.hlsl.layout
   tr_ok=$((tr_ok+1))
   python "$TOOLS/fix_hlsl.py" "$OUT/hlsl/$n.hlsl" "$OUT/hlsl/$n.hlsl.layout" >/dev/null 2>&1
   python "$TOOLS/fix_hlsl_ng2.py" "$OUT/hlsl/$n.hlsl" >/dev/null 2>&1
