@@ -312,10 +312,20 @@ begins 64 bytes in. So the diff compared 64 bytes of real code against 64 bytes
 of preamble, and the "9 patched bytes inside vfetch operands" were an artefact
 of the anchor. Caught by the Fable II session.
 
-Anchoring correctly settles it in the other direction: the matches that hold are
-**100% exact over 360-2048 bytes**, every one at `physicalOffset=64` with the
-ring copy anchored at its own start. The ring copy *is* the container's code.
-Nothing is patched.
+Anchoring correctly settles it in the other direction, and with positive
+counter-evidence rather than an absence of evidence: **54 used shaders match a
+container 100% exactly over 360-2048 bytes**, every one at `physicalOffset=64`
+with the ring copy anchored at its own start. A patched copy would not be
+byte-identical for two kilobytes. The ring copy *is* the container's code.
+
+Worse, the specific diff that produced the claim was not merely mis-anchored — it
+was **a diff against the wrong shader**. `VS 0x1D701000` matches no container
+over any long span at either alignment; the 48-byte needle had hit a common
+microcode prologue. So the nine "patched" bytes were code from one shader
+compared against a preamble from another.
+
+**Scope:** refuted for the 54 that have containers; unknowable for the 33 that
+do not, since there is nothing to compare against.
 
 ### And the coverage figure was wrong twice
 
