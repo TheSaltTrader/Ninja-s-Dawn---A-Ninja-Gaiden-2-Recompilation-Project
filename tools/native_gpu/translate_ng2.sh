@@ -54,7 +54,15 @@ for f in $GLOB; do
   # claim an artefact for a shader that has since failed to translate. Remove
   # this shader's outputs before trying, so absence means failure.
   rm -f "$OUT/dxil/$n.dxil" "$OUT/hlsl/$n.hlsl"
-  if timeout 15 "$X" "$f" "$OUT/hlsl/$n.hlsl" "$H" >/dev/null 2>&1 && [ -s "$OUT/hlsl/$n.hlsl" ]; then
+  # TIMEOUT 120, NOT 15. At 15 seconds the result of this build step depended on
+  # MACHINE LOAD: a full run made while the sibling project was running a game
+  # reported 28 recompiler failures, and re-running the same containers on an
+  # idle machine translated 22 of them. Twenty-two shaders were "untranslatable"
+  # because another process was busy. A build step whose output changes with
+  # what else is running is not a build step, and it silently shrinks the
+  # manifest - which then reads as missing translations rather than as a
+  # confounded run.
+  if timeout 120 "$X" "$f" "$OUT/hlsl/$n.hlsl" "$H" >/dev/null 2>&1 && [ -s "$OUT/hlsl/$n.hlsl" ]; then
     tr_ok=$((tr_ok+1))
     python "$TOOLS/fix_hlsl.py" "$OUT/hlsl/$n.hlsl" "$OUT/hlsl/$n.hlsl.layout" >/dev/null 2>&1
     python "$TOOLS/fix_hlsl_ng2.py" "$OUT/hlsl/$n.hlsl" >/dev/null 2>&1

@@ -10,6 +10,7 @@
 #include <sstream>
 #include <string>
 #include <mutex>
+#include <set>
 #include <thread>
 #include <vector>
 
@@ -135,6 +136,13 @@ std::atomic<uint64_t> g_unknown_vs{0}, g_unknown_ps{0};
 // offline against the manifest instead of by re-running.
 std::mutex g_unknown_log_mutex;
 int g_unknown_logged = 0;
+// UNKNOWN EVENTS AND UNKNOWN PROGRAMS ARE DIFFERENT QUESTIONS, and this project
+// has already read one as the other once: 54,018 per-draw misses looked like a
+// broken lookup when the truth was ten heavily-used programs. Immediate shaders
+// make the gap far wider - the game reloads the same program thousands of times,
+// so 13,611 unknown vertex EVENTS came from just 4 distinct programs. A count
+// that cannot say which it is cannot locate the gap.
+std::set<uint64_t> g_unknown_hashes;
 
 uint64_t Fnv1a64(const uint8_t* p, size_t n) {
   uint64_t h = 0xCBF29CE484222325ull;
@@ -509,6 +517,11 @@ void Stop() {
 #endif
 }
 
+size_t UnknownDistinct() {
+  std::lock_guard<std::mutex> lock(g_shader_mutex);
+  return g_unknown_hashes.size();
+}
+
 size_t RtWanted() {
   std::lock_guard<std::mutex> lock(g_rt_mutex);
   return g_rt.size();
@@ -547,13 +560,13 @@ void EndFrame() {
     REXLOG_INFO("[ng2-plume] manifest: {} programs | matched VS {} PS {} | unknown VS {} PS {}"
                 " | stage-mismatch {} | DXIL loaded {} ({} KB), UNLOADABLE {}"
                 " | RT wanted {} created {} failed {} UNMAPPED-FORMAT {} approximated {}"
-                " | immediate matched {}",
+                " | immediate matched {} | unknown DISTINCT programs {}",
                 g_manifest.size(), g_hit_vs.load(), g_hit_ps.load(), g_unknown_vs.load(),
                 g_unknown_ps.load(), g_manifest_stage_mismatch.load(), g_dxil_loaded.load(),
                 g_dxil_bytes.load() / 1024, g_dxil_failed.load(),
                 RtWanted(), g_rt_created.load(), g_rt_failed.load(),
                 g_rt_unmapped.load(), g_rt_approx.load(),
-                g_immediate_matched.load());
+                g_immediate_matched.load(), UnknownDistinct());
   }
 #endif
 }
@@ -575,13 +588,34 @@ bool RegisterShaderMicrocode(ShaderStage stage, uint32_t guest_address, const ui
     g_manifest_unknown.fetch_add(1, std::memory_order_relaxed);
     (stage == ShaderStage::kPixel ? g_unknown_ps : g_unknown_vs)
         .fetch_add(1, std::memory_order_relaxed);
+    g_unknown_hashes.insert(h);
     // DUMP IT, so the offline pipeline can translate it and the manifest can
     // grow. The alternative was an address-keyed fallback for the shaders that
     // have no container - but a second lookup path keyed differently from the
     // first is precisely the asymmetry this design exists to prevent, and it
     // would have to be kept in step by hand forever. Dumping keeps ONE key
     // (content) and moves the gap into the pipeline where it belongs.
-    if (const char* dir = std::getenv("NG2_SHADER_DUMP")) {
+    // ONCE PER PROGRAM, AND THE ENVIRONMENT READ ONCE FOR THE PROCESS.
+    //
+    // This branch used to call getenv and open a file on EVERY unmatched
+    // registration. That was tolerable while unmatched meant ten programs; it
+    // stopped being tolerable the moment immediate shaders were registered too,
+    // because immediate reloads constantly - this run counted 366,103 unmatched
+    // vertex events and 260,078 pixel. That is 626,181 getenv calls and 626,181
+    // file opens on the GPU worker thread, rewriting the same handful of files
+    // over and over.
+    //
+    // The sibling project lost three experiments to exactly this shape: a
+    // string cvar read per draw, constructing and destroying a std::string
+    // every time, which slowed the guest enough that it never reached the
+    // world. Nothing in the call's spelling says it is expensive.
+    //
+    // Both statics are written only under g_shader_mutex, which this function
+    // already holds.
+    static const char* const dump_dir = std::getenv("NG2_SHADER_DUMP");
+    static std::set<uint64_t> dumped;
+    if (dump_dir && dumped.insert(h).second) {
+      const char* dir = dump_dir;
       char path[512];
       std::snprintf(path, sizeof(path), "%s/ucode_%016llX_%s.bin", dir,
                     static_cast<unsigned long long>(h),
