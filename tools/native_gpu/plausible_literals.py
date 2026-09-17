@@ -45,7 +45,17 @@ def plausible(preamble: bytes) -> bool:
         # Shader literals are ordinary numbers - 1.0, 0.5, 4.0, 16.0, 0.25.
         # Denormals and astronomically large values are not constants, they are
         # whatever happened to be in memory.
-        if a < 1e-6 or a > 1e6:
+        # The bound is INCLUSIVE of 1e-6, which a strict `a < 1e-6` is not:
+        # float32's nearest value to 1e-6 is 0x358637BD = 9.9999997e-07, which
+        # compares BELOW 1e-6 as a double and was rejected - the guard threw out
+        # the exact constant this comment calls ordinary. 1e-6 is a standard
+        # shader epsilon and it cost two of NG2's ten uncontained vertex shaders
+        # their literal block, both of them carrying (0, 1.0, 1e-6, 0).
+        #
+        # This does not weaken the guard: the measured rejects are 1.18e-41,
+        # 1.19e-41, 2.79e-28 and 1.29e-10, all orders of magnitude below the
+        # relaxed floor, so the same bytes are still thrown out.
+        if a < 9.9e-7 or a > 1e6:
             return False
     return True
 

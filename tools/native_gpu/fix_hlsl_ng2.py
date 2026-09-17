@@ -93,6 +93,24 @@ else:
             add = "".join("\n\tfloat4 r%d = 0.0;" % r for r in extra)
             src = src[:last.end()] + add + src[last.end():]
 
+# --- 3. WRITES WITH AN EMPTY DESTINATION MASK ---------------------------------
+# XenosRecomp emits the destination mask and the source swizzle straight from
+# the instruction, so a fetch whose write mask is EMPTY comes out as
+#
+#     r5. = tfetchTexcoord(g_SwappedTexcoords, iTexCoord0, 0).;
+#
+# which is not parseable HLSL - "expected unqualified-id" on both the bare dot
+# and the trailing one. A maskless write stores no components, so the statement
+# is a no-op and the faithful repair is to remove it rather than invent a mask:
+# guessing .xyzw would make a discarded fetch land in a register the shader goes
+# on to use, turning a dead instruction into a live wrong one. In the case that
+# found this, the three lines after it zero the same register outright.
+masked_out = len(re.findall(r"^\s*r\d+\.\s*=", src, re.M))
+if masked_out:
+    src = re.sub(r"^([ \t]*)(r\d+\.\s*=.*;)\s*$",
+                 r"\1// [fix_hlsl_ng2] empty write mask, stores nothing: \2",
+                 src, flags=re.M)
+
 if src != orig:
     open(path, "w", encoding="utf-8", newline="").write(src)
     bits = []
@@ -100,4 +118,6 @@ if src != orig:
         bits.append("declared %d fetched input(s): %s" % (len(missing), ", ".join(missing)))
     if widened:
         bits.append("widened GPRs %d -> %d" % widened)
+    if masked_out:
+        bits.append("commented out %d maskless write(s)" % masked_out)
     print("%s: %s" % (path, "; ".join(bits)))

@@ -374,7 +374,35 @@ void ProbeShaderMicrocode(render::ShaderStage stage, uint32_t addr, uint32_t dwo
                                  (uint32_t(buf[2]) << 8) | uint32_t(buf[3]),
                              std::memory_order_relaxed);
   }
-  render::RegisterShaderMicrocode(stage, addr, buf.data(), bytes);
+  // THE LITERAL PREAMBLE TOO, when the registry wants to dump this program.
+  //
+  // A synthetic container built from code alone loses the shader's literal
+  // constants - c252..c255 for a vertex shader - and a program that needs 1.0
+  // then computes with 0.0. That RENDERS rather than fails, which is the
+  // hardest class to notice, and this project has already been caught by it.
+  //
+  // 128 bytes is the largest preamble observed across 625 containers
+  // (physicalOffset 0, 64 or 128); the offline tool decides how many are real
+  // from the microcode's own lowest high-range constant register. Reading
+  // BEFORE a valid address can land on an unmapped page, so it goes through
+  // the same guard - a fault here costs the preamble, not the program.
+  std::vector<uint8_t> pre(128);
+  bool have_pre = false;
+  if (addr > 128) {
+#if defined(_WIN32)
+    __try {
+      have_pre = ReadGuestBytes(memory->TranslatePhysical<const uint8_t*>(addr - 128), 128,
+                                pre.data());
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+      have_pre = false;
+    }
+#else
+    have_pre = ReadGuestBytes(memory->TranslatePhysical<const uint8_t*>(addr - 128), 128,
+                              pre.data());
+#endif
+  }
+  render::RegisterShaderMicrocode(stage, addr, buf.data(), bytes,
+                                  have_pre ? pre.data() : nullptr);
 }
 
 void OnDraw(const GpuDrawRecord* rec) {

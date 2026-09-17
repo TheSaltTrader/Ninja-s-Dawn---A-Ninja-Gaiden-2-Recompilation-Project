@@ -19,6 +19,13 @@ The manifest is a flat text file so the runtime loader needs no parser:
     <hash16>  <dwords>  <v|p>  <artefact name>
 
 Usage: make_shader_manifest.py <container dir> <dxil dir> <out manifest>
+                               [<container dir>=<dxil dir> ...]
+
+The extra pairs exist because the containers come from TWO places and must land
+in ONE manifest: the 625 extracted from the memory dump, and the ones
+SYNTHESISED from microcode dumped at runtime for shaders that have no container
+at all (only 54 of the 87 a frame loads do). Both are keyed by the same content
+hash, so they merge without a second lookup path - which is the whole point.
 """
 import os
 import struct
@@ -57,33 +64,47 @@ def main():
         print(__doc__)
         return 2
     containers, dxil_dir, out_path = sys.argv[1], sys.argv[2], sys.argv[3]
-
-    have_dxil = set()
-    if os.path.isdir(dxil_dir):
-        have_dxil = {f[:-5] for f in os.listdir(dxil_dir) if f.endswith(".dxil")}
+    pairs = [(containers, dxil_dir)]
+    for extra in sys.argv[4:]:
+        if "=" not in extra:
+            print("extra sources are <container dir>=<dxil dir>, got: %s" % extra)
+            return 2
+        c, _, d = extra.partition("=")
+        pairs.append((c, d))
 
     rows, skipped, no_artefact = [], 0, 0
     by_hash = {}
-    for name in sorted(os.listdir(containers)):
-        if not name.endswith(".xvu"):
-            continue
-        r = code_region(os.path.join(containers, name))
-        if r is None:
-            skipped += 1
-            continue
-        code, is_pixel = r
-        stem = name[:-4]
-        if stem not in have_dxil:
-            no_artefact += 1
-            continue
-        h = fnv1a64(code)
-        # A collision here would mean two DIFFERENT programs hashing the same,
-        # which would silently serve the wrong shader - exactly the failure the
-        # whole-program hash exists to prevent. Say so rather than overwrite.
-        if h in by_hash and by_hash[h][0] != code:
-            print("COLLISION: %016X shared by %s and %s" % (h, by_hash[h][1], stem))
-        by_hash.setdefault(h, (code, stem))
-        rows.append((h, len(code) // 4, "p" if is_pixel else "v", stem))
+    per_source = []
+    for containers, dxil_dir in pairs:
+        have_dxil = set()
+        if os.path.isdir(dxil_dir):
+            have_dxil = {f[:-5] for f in os.listdir(dxil_dir) if f.endswith(".dxil")}
+        if not os.path.isdir(containers):
+            print("no container dir: %s" % containers)
+            return 2
+        before = len(rows)
+        for name in sorted(os.listdir(containers)):
+            if not name.endswith(".xvu"):
+                continue
+            r = code_region(os.path.join(containers, name))
+            if r is None:
+                skipped += 1
+                continue
+            code, is_pixel = r
+            stem = name[:-4]
+            if stem not in have_dxil:
+                no_artefact += 1
+                continue
+            h = fnv1a64(code)
+            # A collision here would mean two DIFFERENT programs hashing the
+            # same, which would silently serve the wrong shader - exactly the
+            # failure the whole-program hash exists to prevent. Say so rather
+            # than overwrite.
+            if h in by_hash and by_hash[h][0] != code:
+                print("COLLISION: %016X shared by %s and %s" % (h, by_hash[h][1], stem))
+            by_hash.setdefault(h, (code, stem))
+            rows.append((h, len(code) // 4, "p" if is_pixel else "v", stem))
+        per_source.append((containers, len(rows) - before))
 
     with open(out_path, "w", encoding="ascii", newline="\n") as f:
         f.write("# full-program FNV-1a-64 of Xenos microcode -> translated artefact\n")
@@ -91,6 +112,8 @@ def main():
         for h, dwords, stage, stem in rows:
             f.write("%016X %6d %s %s\n" % (h, dwords, stage, stem))
 
+    for src, n in per_source:
+        print("  from %-44s %4d" % (src, n))
     print("containers scanned : %d" % (len(rows) + skipped + no_artefact))
     print("  unparseable      : %d" % skipped)
     print("  no .dxil artefact: %d" % no_artefact)

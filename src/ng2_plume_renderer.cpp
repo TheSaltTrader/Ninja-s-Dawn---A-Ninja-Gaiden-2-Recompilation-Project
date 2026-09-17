@@ -375,7 +375,7 @@ void EndFrame() {
 }
 
 bool RegisterShaderMicrocode(ShaderStage stage, uint32_t guest_address, const uint8_t* ucode,
-                             uint32_t bytes) {
+                             uint32_t bytes, const uint8_t* preamble128) {
 #if defined(NG2_PLUME_ON)
   if (!g_running.load(std::memory_order_relaxed) || !guest_address || !ucode || !bytes) return false;
   const uint64_t h = Fnv1a64(ucode, bytes);
@@ -399,6 +399,14 @@ bool RegisterShaderMicrocode(ShaderStage stage, uint32_t guest_address, const ui
                     stage == ShaderStage::kPixel ? "p" : "v");
       std::ofstream out(path, std::ios::binary);
       if (out) out.write(reinterpret_cast<const char*>(ucode), bytes);
+      // The preamble beside it, so the offline synthesis has the literals.
+      if (preamble128) {
+        std::snprintf(path, sizeof(path), "%s/pre_%016llX_%s.bin", dir,
+                      static_cast<unsigned long long>(h),
+                      stage == ShaderStage::kPixel ? "p" : "v");
+        std::ofstream pout(path, std::ios::binary);
+        if (pout) pout.write(reinterpret_cast<const char*>(preamble128), 128);
+      }
     }
     if (g_unknown_logged < 8) {
       ++g_unknown_logged;
@@ -433,7 +441,7 @@ bool RegisterShaderMicrocode(ShaderStage stage, uint32_t guest_address, const ui
   seen.dwords = bytes / 4;
   return true;
 #else
-  (void)stage; (void)guest_address; (void)ucode; (void)bytes;
+  (void)stage; (void)guest_address; (void)ucode; (void)bytes; (void)preamble128;
   return false;
 #endif
 }

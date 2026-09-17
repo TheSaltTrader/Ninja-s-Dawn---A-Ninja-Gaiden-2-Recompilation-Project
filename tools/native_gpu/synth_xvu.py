@@ -28,6 +28,10 @@ from vfetch_scan import scan
 
 USAGE_TEXCOORD = 5
 
+# The declared sampler count, which the register-set table below must agree
+# with - one constant so the two cannot drift apart. See the note in build().
+N_SAMPLERS = 32
+
 
 def build(microcode, is_vertex=True, pad=0, n_interpolators=8, preamble=None):
     """preamble: the 64 bytes that sit immediately BEFORE the code in guest
@@ -35,8 +39,16 @@ def build(microcode, is_vertex=True, pad=0, n_interpolators=8, preamble=None):
     64, and points a definition table at them: they are the shader's literal
     constants, c252..c255 for a vertex shader. Without them a shader that needs
     1.0 computes with 0.0, which renders rather than fails."""
+    # THIRTY-TWO SAMPLERS, NOT SIXTEEN, and the count is load-bearing.
+    # XenosRecomp sizes the descriptor arrays for 32 samplers regardless, but
+    # derives the base of the SHARED constants from the number the container
+    # declares. Declare 16 and it puts g_HalfPixelOffset at packoffset(c16.z) -
+    # inside the TextureCube array it just emitted - and every shader fails to
+    # compile with "packoffset overlap between 'g_HalfPixelOffset',
+    # 'g_Sampler3_TextureCubeDescriptorIndex'". Declaring 32 puts it at c32.z,
+    # which is where the real containers put it too.
     names = ["g_Consts"]
-    names += ["g_Sampler%d" % i for i in range(16)]
+    names += ["g_Sampler%d" % i for i in range(N_SAMPLERS)]
     names += ["g_Bool%d" % i for i in range(32)]
     n = len(names)
 
@@ -135,10 +147,10 @@ def build(microcode, is_vertex=True, pad=0, n_interpolators=8, preamble=None):
         at = ct_off + info_off + i * 20
         if i == 0:
             rset, idx, cnt = 2, 0, (256 if is_vertex else 224)
-        elif i <= 16:
+        elif i <= N_SAMPLERS:
             rset, idx, cnt = 3, i - 1, 1
         else:
-            rset, idx, cnt = 0, i - 17, 1
+            rset, idx, cnt = 0, i - (N_SAMPLERS + 1), 1
         p32(at + 0x00, name_at[i])
         p16(at + 0x04, rset)
         p16(at + 0x06, idx)
@@ -156,7 +168,16 @@ def build(microcode, is_vertex=True, pad=0, n_interpolators=8, preamble=None):
         # DefinitionTable: five header dwords, then Float4Definitions
         # (registerIndex:16, count:16, physicalOffset:32) terminated by 0, then
         # Int4Definitions terminated by 0. count is in DWORDS.
-        p16(def_off + DEF_HEADER + 0, 252 if is_vertex else 252 + 256)
+        # FIRST LITERAL REGISTER, DERIVED FROM THE BLOCK SIZE - not hardcoded.
+        # The block is anchored at the TOP of the shader's half of the constant
+        # file and ends where the code begins, so
+        #     firstLiteralRegister = TOP - len(pre)/16
+        # which is 252 (vertex) / 508 (pixel) at 64 bytes - what this used to
+        # say - and 248 / 504 at 128. The old constant silently declared c252
+        # with EIGHT float4s for a 128-byte block, running off the end of the
+        # vertex half into the pixel one.
+        top = 256 if is_vertex else 512
+        p16(def_off + DEF_HEADER + 0, top - len(pre) // 16)
         p16(def_off + DEF_HEADER + 2, len(pre) // 4)
         p32(def_off + DEF_HEADER + 4, 0)           # the literals sit at physical offset 0
         p32(def_off + DEF_HEADER + 8, 0)           # end of the Float4 list
