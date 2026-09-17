@@ -576,3 +576,28 @@ uncontained ones translating deterministically through synthesis.**
 
 Both were reproduced on a different engine from the one they were found on,
 which is what makes them fixes rather than local workarounds.
+
+### Both bugs confirmed in both directions
+
+The Fable II session added pixel shaders to its dump path — the population it had
+never built — and the sampler bug reproduces there exactly as here:
+
+    Fable II PIXEL shaders, 15 shaders x 5 runs
+      16 samplers:   0 / 75 attempts
+      32 samplers:  75 / 75, 15 of 15 byte-identical
+
+Deterministic below the threshold and above it, with none of the vertex shaders'
+random faults. And all 14 of their vertex shaders execute the *identical*
+program at 16 and 32 samplers, only the declarations differing — a check that was
+impossible before the element-table fix, because a file hash cannot be compared
+across configurations while it is unstable within one.
+
+So each fix was confirmed from the population its finder did not have: NG2's
+pixel shaders predicted the element-table cause by already being deterministic;
+Fable's pixel shaders confirmed the sampler cause by failing 0-for-75 without it.
+**Neither session had the sample that would have revealed the other's bug**,
+which is why both spent the night explaining their own symptom with the other's
+cause.
+
+NG2's 411 containers at `field18 = 1` with 68 MATCH also confirm the element
+table layout is shared, so nothing in the generator is Fable-specific.
