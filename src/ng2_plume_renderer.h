@@ -259,6 +259,43 @@ bool WantRenderTarget(const SurfaceDesc& desc);
 //    ABI change, and the record's struct_size is what makes it detectable
 //    rather than silent.
 //
+// 9. GEOMETRY REACHES A TRANSLATED SHADER THROUGH A BINDLESS STRUCTURED
+//    BUFFER, NOT THROUGH AN INPUT LAYOUT. Measured across the translated set,
+//    2026-09-17, by reading what XenosRecomp actually emits:
+//
+//        vertex shaders using ONLY the stream heap : 86
+//        using ONLY input-assembler inputs         : 0
+//        using BOTH                                : 320
+//
+//    Every one of the 406 translated vertex shaders reads through
+//    `ngpu_vload(StructuredBuffer<uint> b, uint a, uint fmt, ...)` against
+//        StructuredBuffer<uint> g_VertexStreamHeap[] : register(t0, space4);
+//    and NONE relies on an input layout alone. So the draw path does not bind
+//    vertex buffers in the D3D12 sense at all: it publishes guest vertex data
+//    as structured buffers and lets the shader address them.
+//
+//    This is what constraint 3 was circling. "A draw need not bind any vertex
+//    stream" is true, and the reason is structural rather than incidental -
+//    there IS no stream to bind, which is also why NG2's 83.5% fetchless
+//    population costs the translation nothing.
+//
+//    It is also the whole of the "stream cache" the sibling project hit as its
+//    second obstacle, and it is now unblocked from the other side: constraint 4
+//    was corrected today, and guest geometry IS readable through
+//    TranslatePhysical (0 faults in 155,050 draws), so these buffers can be
+//    filled by copying rather than requiring shared-memory residency.
+//
+//    The rest of the binding model is bindless too, and the root signature has
+//    to match it exactly or nothing will execute:
+//        Texture2D   g_Texture2DDescriptorHeap[]   t0, space0
+//        Texture3D   g_Texture3DDescriptorHeap[]   t0, space1
+//        TextureCube g_TextureCubeDescriptorHeap[] t0, space2
+//        SamplerState g_SamplerDescriptorHeap[]    s0, space3
+//        StructuredBuffer<uint> g_VertexStreamHeap[] t0, space4
+//        cbuffer VertexShaderConstants             b0, space4   (g_Consts[256])
+//        cbuffer SharedConstants                   b2, space4
+//        push constants (root constants on D3D12)
+//
 // And the reason all of these are stated here rather than discovered later:
 // reading and running catch DIFFERENT classes. These two are structural - visible to a
 // reader, invisible to a run that never evicts or never takes the branch. The
