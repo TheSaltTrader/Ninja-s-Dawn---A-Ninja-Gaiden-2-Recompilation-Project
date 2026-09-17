@@ -680,6 +680,7 @@ Both axes, not one: every shader compiles **every time** and produces
 | sampler count | an all-vertex sample |
 | literal constants | stability — NaN is perfectly stable |
 | pixel shader header | everything short of compilation |
+| interpolator count | a shader that happens not to export high |
 
 Each new question found something every previous question had passed. That is
 the argument for the correctness oracle being in place **before** the renderer
@@ -702,11 +703,37 @@ reading is a flaw in the first test rather than in the pipeline — it reused on
 scratch path across runs and a `.layout` sidecar persisted between them — but
 that is a hypothesis, not a result.
 
-Left standing as an open anomaly because the alternative is to write down the
-comfortable half. What *is* established: XenosRecomp's HLSL for this real
-container is deterministic across 7 runs, and dxc is deterministic across 5.
-What is not: why one run of one shader produced different DXIL.
+**RESOLVED — it was the test.** Re-run with a **clean directory per run**, so no
+`.layout` sidecar survives, and counting *produced* separately from *distinct* so
+that "no output" cannot read as "same output":
 
-Worth re-checking when the renderer starts consuming the cache, because a shader
-that translates differently between builds of the cache is the kind of fault that
-would present as a scene changing between runs for no reason.
+    ng2_8204A270   produced 2/3, distinct 1   STABLE
+    ng2_82171030   produced 3/3, distinct 1   STABLE
+    ng2_82038D78   produced 3/3, distinct 1   STABLE
+
+The Fable II session reproduced the same result on its own population. So the
+pipeline is deterministic and the first measurement was an artefact of reusing
+one scratch path across runs — the hypothesis, tested rather than assumed.
+
+Worth keeping the shape of it: an instrument that shares state between its own
+trials measures the state as much as the thing. And counting produced-vs-distinct
+separately matters — the Fable II session's first version of this same check
+reported "4 of 4 unstable" because stale filenames meant nothing was produced at
+all and its classifier counted **zero outputs as zero distinct hashes**. It could
+not tell "no output" from "different output": the success-is-not-correctness
+conflation, occurring inside the instrument written to catch it.
+
+
+### The fifth defect: interpolator count
+
+The recompiler resolves an export through `interpolators.find(instr.vectorDest)`,
+so a shader exporting above the **declared** interpolator count misses the lookup
+and emits an assignment with **no target at all** (`.w = 1.0`). The generator
+declared 8.
+
+NG2's sampled shaders do not trigger it — 0 nameless assignments at 8, and still
+10 of 10 compiling at 16 — but it is latent, and 16 is the Xenos maximum, so it
+covers every shader rather than the ones that happened to be sampled. Raised.
+
+Five defects now, and the pattern held for every one: **invisible to every
+instrument that existed when it was introduced.**
