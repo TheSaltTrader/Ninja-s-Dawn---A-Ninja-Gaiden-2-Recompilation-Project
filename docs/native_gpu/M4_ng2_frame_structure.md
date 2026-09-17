@@ -79,11 +79,25 @@ is the third-hottest call at 266/frame across 8 sites.
 
 ## What is still missing, and why
 
-- **Caller return address.** The Fable session's second logging ask. Not done:
-  mid-asm hooks can only pass GPRs, and `lr` is a raw `uint64_t` in PPCContext
-  rather than a `PPCRegister`, so requesting it does not compile. The transcript
-  recovers most of what the call graph would have given for pass structure, but
-  not which engine function drives each cycle.
+- **Caller return address: NOT POSSIBLE with this SDK.** A hard limit, tested,
+  not an open task. Two routes were tried and both fail:
+
+  1. *A context-taking hook.* Setting `context = true` and dropping the
+     `registers` list makes the codegen emit `void ngpu_X(void)` - a
+     ZERO-ARGUMENT hook, not `PPCContext&`. The signature comes solely from the
+     `registers` list and an unrecognised key is silently ignored rather than
+     rejected. A generator change cannot reach what the codegen will not emit.
+  2. *Hooking at +4 and reading r12 after the prologue's `mflr r12`.* `mflr` is
+     ELIDED - in the generated code it is a bare comment with no emitted
+     statement, while the following `stw r12,-8(r1)` stores whatever `ctx.r12`
+     already held. LR is handled out of band by the host call mechanism, so no
+     GPR ever materialises the return address.
+
+  This needs an SDK change. Recorded here so it is not re-attempted. The
+  transcript recovers most of what the call graph would have given for pass
+  structure - the state block and the pass-boundary preamble are both easier to
+  read in call order than they would have been in a call graph - but not which
+  engine function drives each cycle.
 - **First ring dwords per PM4 emitter.** Their fourth ask — "writes the ring" is
   50 functions, "writes a packet whose opcode is a draw" is three. Not yet done.
 - The cycle interpretations above are inference from argument shapes. The next
