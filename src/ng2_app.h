@@ -658,7 +658,10 @@ class Ng2App : public rex::ReXApp {
   //
   //   NG2_WIDTH / NG2_HEIGHT        window size (default 1280x720)
   //   NG2_FULLSCREEN=1              borderless fullscreen
-  //   NG2_FPS                       guest refresh rate, 30-144 (default 60)
+  //   NG2_FPS                       guest refresh rate, 30-60 (default 60). A
+  //                                 higher value is clamped to 60 by Clamp()
+  //                                 below - above 60 this title runs fast, not
+  //                                 smooth, so there is no test lever for it.
   //   NG2_RENDER_WIDTH / _HEIGHT    guest video mode, defaults to window size
   static int EnvInt(const char* name, int fallback) {
     const char* e = std::getenv(name);
@@ -820,8 +823,10 @@ class Ng2App : public rex::ReXApp {
     }
 
     // The title paces itself off the reported display refresh rate, so this is
-    // the frame-rate control. Clamped to 30-144 rather than unlocked: the game
-    // ties logic to the display rate and misbehaves outside that band.
+    // the frame-rate control - it sets game SPEED as much as smoothness. Clamped
+    // to 30-60: above 60 the game runs fast rather than smooth, which is a crash
+    // a player actually hit at 144, so the menu no longer offers it and Clamp()
+    // brings an old settings file down to 60.
     REXCVAR_SET(video_mode_refresh_rate, double(settings_.fps));
 
     // The internal render size patch. These are our own cvars, read by the

@@ -254,11 +254,21 @@ int ResolutionIndex(const Ng2Settings& s) {
   return kResolutionCount;  // Custom
 }
 
-// 30 and 60 are what the console offered. 120 and 144 are here because they
-// were asked for; the row says plainly what they do to a game that paces
-// itself off the display.
-constexpr int kFpsValues[] = {30, 60, 120, 144};
-const char* const kFpsNames[] = {"30 Hz", "60 Hz (as shipped)", "120 Hz", "144 Hz"};
+// 30 and 60 are what the console offered, and they are all this row offers.
+//
+// 120 and 144 used to be here, with a line underneath saying they make the game
+// run faster rather than smoother. That was not enough: a player picked 144 and
+// the game crashed. This title paces its logic off the refresh rate it is told
+// the display has, so anything above 60 is a speed change, not a smoothness
+// setting - and a menu that offers it is promising a choice that does not exist.
+// Removed rather than warned about.
+//
+// Frame interpolation was built to give the smoothness those options implied
+// without the speed-up - it reached evenly-paced 120 fps with the simulation
+// still at 60 - but it hung the game on heavy loads and was abandoned. The
+// reasoning is in FrameInterp/PLAN.md if it is ever revisited.
+constexpr int kFpsValues[] = {30, 60};
+const char* const kFpsNames[] = {"30 Hz", "60 Hz (as shipped)"};
 
 int FpsIndex(int fps) {
   for (int i = 0; i < IM_ARRAYSIZE(kFpsValues); ++i)
@@ -450,10 +460,9 @@ bool DrawSettings(Ng2Settings& s, const PageOptions& opts) {
       changed = true;
     }
     if (!live) RestartTag();
-    // Not a preference but a behaviour change, so it stays on the page rather
-    // than hiding behind a marker.
-    if (s.fps > 60)
-      Muted("Above 60 the game runs faster, not smoother.");
+    // The "above 60 the game runs faster, not smoother" line that used to sit
+    // here is gone with the options it described. A warning under a setting is
+    // not a substitute for not offering it.
     ImGui::EndDisabled();
 
     RowStart("V-Sync",
