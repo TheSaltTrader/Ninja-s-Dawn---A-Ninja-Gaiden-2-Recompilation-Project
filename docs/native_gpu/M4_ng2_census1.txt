@@ -1,0 +1,75 @@
+[2026-09-16 19:48:30.813] [info] [core] [t61324] [ngpu] census at 80.1 s (calls total / last 10 s)
+[2026-09-16 19:48:30.814] [info] [core] [t61324] [ngpu] sub_83734370 lib sites=3 SET_BIN_MASK_HI,SET_BIN_MASK_LO,SET_BIN_SELECT_LO calls=4628 +581
+[2026-09-16 19:48:30.814] [info] [core] [t61324] [ngpu] sub_83734810 lib sites=1 calls=82026 +20723
+[2026-09-16 19:48:30.814] [info] [core] [t61324] [ngpu] sub_83734A78 lib sites=1 calls=269076 +181018
+[2026-09-16 19:48:30.814] [info] [core] [t61324] [ngpu] sub_83734B10 lib sites=1 calls=278835 +182690
+[2026-09-16 19:48:30.814] [info] [core] [t61324] [ngpu] sub_837351D0 lib sites=1 calls=92724 +40059
+[2026-09-16 19:48:30.814] [info] [core] [t61324] [ngpu] sub_83735CF8 lib sites=1 calls=74369 +7335
+[2026-09-16 19:48:30.814] [info] [core] [t61324] [ngpu] sub_83736290 lib sites=1 calls=45298 +29116
+[2026-09-16 19:48:30.814] [info] [core] [t61324] [ngpu] sub_837363D8 lib sites=55 calls=629624 +129496
+[2026-09-16 19:48:30.814] [info] [core] [t61324] [ngpu] sub_83736568 lib sites=55 calls=629624 +129496
+[2026-09-16 19:48:30.814] [info] [core] [t61324] [ngpu] sub_83736908 lib sites=1 calls=370046 +46400
+[2026-09-16 19:48:30.814] [info] [core] [t61324] [ngpu] sub_837369A8 lib sites=4 calls=764938 +441292
+[2026-09-16 19:48:30.814] [info] [core] [t61324] [ngpu] sub_83736A28 lib sites=1 calls=374671 +46981
+[2026-09-16 19:48:30.814] [info] [core] [t61324] [ngpu] sub_83736DC8 lib sites=6 calls=100528 +23043
+[2026-09-16 19:48:30.814] [info] [core] [t61324] [ngpu] sub_83736EC8 lib sites=12 calls=82026 +20723
+[2026-09-16 19:48:30.814] [info] [core] [t61324] [ngpu] sub_83737068 lib sites=2 calls=32 +0
+[2026-09-16 19:48:30.814] [info] [core] [t61324] [ngpu] sub_837370F0 lib sites=10 calls=155713 +151667
+[2026-09-16 19:48:30.814] [info] [core] [t61324] [ngpu] sub_83737180 lib sites=29 calls=99634 +27074
+[2026-09-16 19:48:30.814] [info] [core] [t61324] [ngpu] sub_837374E8 lib sites=30 calls=63520 +18395
+[2026-09-16 19:48:30.814] [info] [core] [t61324] [ngpu] sub_837377C0 lib sites=1 calls=8 +0
+[2026-09-16 19:48:30.814] [info] [core] [t61324] [ngpu] sub_83737950 lib sites=2 calls=18200 +10829
+[2026-09-16 19:48:30.814] [info] [core] [t61324] [ngpu] sub_83737BB8 lib sites=1 calls=1 +0
+[2026-09-16 19:48:30.814] [info] [core] [t61324] [ngpu] sub_83738A38 lib sites=0 SET_BIN_MASK_LO calls=25362 +2903
+[2026-09-16 19:48:30.814] [info] [core] [t61324] [ngpu] sub_837390C8 lib sites=21 calls=25362 +2903
+[2026-09-16 19:48:30.814] [info] [core] [t61324] [ngpu] sub_83739188 lib sites=1 calls=25362 +2903
+[2026-09-16 19:48:30.814] [info] [core] [t61324] [ngpu] sub_837397E0 lib sites=2 calls=277580 +76260
+[2026-09-16 19:48:30.814] [info] [core] [t61324] [ngpu] sub_83739CF0 lib sites=0 INDIRECT_BUFFER calls=53768 +24222
+[2026-09-16 19:48:30.814] [info] [core] [t61324] [ngpu] sub_8373A088 lib sites=0 EVENT_WRITE_SHD calls=26884 +12111
+[2026-09-16 19:48:30.814] [info] [core] [t61324] [ngpu] sub_8373A3D0 lib sites=6 calls=26884 +12111
+[2026-09-16 19:48:30.814] [info] [core] [t61324] [ngpu] sub_8373A4D0 lib sites=1 calls=9260 +1162
+[2026-09-16 19:48:30.814] [info] [core] [t61324] [ngpu] sub_8373A5A8 lib sites=1 calls=13881 +1743
+[2026-09-16 19:48:30.814] [info] [core] [t61324] [ngpu] sub_8373A7D0 lib sites=2 calls=6 +0
+[2026-09-16 19:48:30.814] [info] [core] [t61324] [ngpu] sub_8373A918 lib sites=2 ME_INIT VdSetSystemCommandBufferGpuIdentifierAddress,VdInitializeRingBuffer,VdEnableRingBufferRPtrWriteBack,VdSetSystemCommandBufferGpuIdentifierAddress calls=3 +0
+[2026-09-16 19:48:30.814] [info] [core] [t61324] [ngpu] sub_8373B060 lib sites=0 DRAW_INDX_2 calls=1 +0
+[2026-09-16 19:48:30.814] [info] [core] [t61324] [ngpu] sub_8373B1F8 lib sites=26 calls=689314 +454717
+[2026-09-16 19:48:30.814] [info] [core] [t61324] [ngpu] sub_8373B2E0 lib sites=10 calls=248310 +75837
+[2026-09-16 19:48:30.814] [info] [core] [t61324] [ngpu] sub_8373B3C8 lib sites=20 calls=197 +33
+[2026-09-16 19:48:30.814] [info] [core] [t61324] [ngpu] sub_8373B4D8 lib sites=34 calls=283313 +162321
+[2026-09-16 19:48:30.814] [info] [core] [t61324] [ngpu] sub_8373B790 lib sites=18 calls=302 +6
+[2026-09-16 19:48:30.814] [info] [core] [t61324] [ngpu] sub_8373B880 lib sites=32 calls=203690 +120945
+[2026-09-16 19:48:30.814] [info] [core] [t61324] [ngpu] sub_8373BBE0 lib sites=12 calls=1257 +0
+[2026-09-16 19:48:30.814] [info] [core] [t61324] [ngpu] sub_8373BC68 lib sites=14 calls=37442 +12194
+[2026-09-16 19:48:30.814] [info] [core] [t61324] [ngpu] sub_8373BD50 lib sites=49 calls=126541 +27644
+[2026-09-16 19:48:30.814] [info] [core] [t61324] [ngpu] sub_8373C1F0 lib sites=4 calls=1230 +1230 [40001E80 00000006 00000000 00000012 00000012 00000001 00000010 7034F564] [40001E80 00000006 00000000 00000012 00000012 00000001 00000010 7034F564] [40001E80 00000006 00000000 00000012 00000012 00000001 00000010 7034F564] [40001E80 00000006 00000000 00000012 00000012 00000001 00000010 7034F564]
+[2026-09-16 19:48:30.814] [info] [core] [t61324] [ngpu] sub_8373C720 lib sites=3 calls=20122 +12751
+[2026-09-16 19:48:30.814] [info] [core] [t61324] [ngpu] sub_8373CB08 lib sites=6 calls=151086 +151086 [40001E80 00000006 00000000 00000000 0000022F 161A3003 40001E80 10002312] [40001E80 00000006 00000000 00000000 0000022F 16199003 40001E80 10002312] [40001E80 00000006 00000000 00000000 00000020 176CF003 40001E80 10000272] [40001E80 00000006 00000000 00000000 0000022F 1619E003 40001E80 10002312]
+[2026-09-16 19:48:30.814] [info] [core] [t61324] [ngpu] sub_8373D570 lib sites=43 IM_LOAD_IMMEDIATE,INVALIDATE_STATE,WAIT_REG_MEM calls=50938 +16707
+[2026-09-16 19:48:30.814] [info] [core] [t61324] [ngpu] sub_8373E5B8 lib sites=3 WAIT_REG_MEM calls=64 +0
+[2026-09-16 19:48:30.814] [info] [core] [t61324] [ngpu] sub_8373E848 lib sites=13 calls=64 +0
+[2026-09-16 19:48:30.814] [info] [core] [t61324] [ngpu] sub_8373E970 lib sites=20 calls=5 +0
+[2026-09-16 19:48:30.814] [info] [core] [t61324] [ngpu] sub_8373E9E8 lib sites=40 calls=4636 +579
+[2026-09-16 19:48:30.814] [info] [core] [t61324] [ngpu] sub_8373EA90 lib sites=8 calls=493099 +131934
+[2026-09-16 19:48:30.814] [info] [core] [t61324] [ngpu] sub_8373EB20 lib sites=2 calls=2 +0
+[2026-09-16 19:48:30.814] [info] [core] [t61324] [ngpu] sub_8373ED50 lib sites=1 calls=4 +0
+[2026-09-16 19:48:30.814] [info] [core] [t61324] [ngpu] sub_8373F498 lib sites=0 VdGetCurrentDisplayGamma calls=8 +0
+[2026-09-16 19:48:30.814] [info] [core] [t61324] [ngpu] sub_8373F928 lib sites=0 COND_WRITE calls=3 +0
+[2026-09-16 19:48:30.814] [info] [core] [t61324] [ngpu] sub_8373FAF8 lib sites=1 calls=2 +0
+[2026-09-16 19:48:30.814] [info] [core] [t61324] [ngpu] sub_83741B08 lib sites=2 VdQueryVideoMode calls=3 +0
+[2026-09-16 19:48:30.814] [info] [core] [t61324] [ngpu] sub_83741DC0 lib sites=2 calls=2 +0
+[2026-09-16 19:48:30.814] [info] [core] [t61324] [ngpu] sub_83741F00 lib sites=0 VdInitializeEngines,VdSetGraphicsInterruptCallback,VdIsHSIOTrainingSucceeded calls=1 +0
+[2026-09-16 19:48:30.814] [info] [core] [t61324] [ngpu] sub_83742C10 lib sites=0 EVENT_WRITE calls=281377 +184452
+[2026-09-16 19:48:30.814] [info] [core] [t61324] [ngpu] sub_83743268 lib sites=0 WAIT_REG_MEM calls=4628 +581
+[2026-09-16 19:48:30.814] [info] [core] [t61324] [ngpu] sub_83744D90 lib sites=1 calls=4627 +581
+[2026-09-16 19:48:30.814] [info] [core] [t61324] [ngpu] sub_837452C0 lib sites=1 VdGetSystemCommandBuffer,VdSwap,VdSetDisplayMode,VdGetCurrentDisplayInformation,VdPersistDisplay calls=4627 +581
+[2026-09-16 19:48:30.814] [info] [core] [t61324] [ngpu] sub_83745B20 lib sites=2 calls=2 +0
+[2026-09-16 19:48:30.814] [info] [core] [t61324] [ngpu] sub_83746F50 lib sites=0 VdQueryVideoMode calls=2 +0
+[2026-09-16 19:48:30.814] [info] [core] [t61324] [ngpu] sub_83747498 lib sites=0 VdQueryVideoFlags calls=5 +0
+[2026-09-16 19:48:30.814] [info] [core] [t61324] [ngpu] sub_837475C0 lib sites=0 VdInitializeScalerCommandBuffer calls=2 +0
+[2026-09-16 19:48:30.814] [info] [core] [t61324] [ngpu] sub_83747790 lib sites=0 VdCallGraphicsNotificationRoutines calls=3 +0
+[2026-09-16 19:48:30.814] [info] [core] [t61324] [ngpu] sub_83748F18 lib sites=0 REG_RMW calls=1 +0
+[2026-09-16 19:48:30.814] [info] [core] [t61324] [ngpu] sub_83749AE0 lib sites=0 EVENT_WRITE_SHD calls=9254 +1162
+[2026-09-16 19:48:30.814] [info] [core] [t61324] [ngpu] sub_83749BC0 lib sites=0 VdEnableDisableClockGating,VdEnableDisableClockGating calls=4627 +581
+[2026-09-16 19:48:30.814] [info] [core] [t61324] [ngpu] sub_8374B6A8 lib sites=0 VdGetCurrentDisplayInformation calls=2 +0
+[2026-09-16 19:48:30.814] [info] [core] [t61324] [ngpu] sub_8374C4D0 lib sites=0 VdRetrainEDRAMWorker,VdRetrainEDRAM,VdRetrainEDRAM calls=4628 +581
+[2026-09-16 19:48:30.814] [info] [core] [t61324] [ngpu] sub_8374C5B8 lib sites=4 SET_BIN_MASK_LO calls=4627 +581
