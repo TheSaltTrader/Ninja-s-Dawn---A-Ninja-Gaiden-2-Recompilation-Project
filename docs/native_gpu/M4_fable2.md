@@ -2396,3 +2396,7 @@ with Ninja Gaiden 2 and must be coordinated - see the shared-tree hazard note.
 The emitters take the device in r3 and a per-draw structure pointer in r5,
 which changes every call; that structure is where a library draw's parameters
 live if anyone needs to hook this path later.
+
+Run 262 closes the last of the cheap hypotheses: with `ngpu_skip_impostor=false`
+the plaza is black exactly as before, so the impostor filter added this session
+is not hiding it either.
