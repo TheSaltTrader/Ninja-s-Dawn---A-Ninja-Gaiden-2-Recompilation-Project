@@ -61,12 +61,71 @@ not. Both select the same render target path (`rov`) and the same
 `clear_memory_page_state` (true — forcing the branch build to match made no
 difference, so the Fable II 0.2.12 default flip is not the cause either).
 
-The builds are not close. The shipped plugin is 6.6 MB with 10,934 printable
-strings; the branch build is 3.5 MB with 5,962. The worktree was configured
-with `REXGLUE_USE_VULKAN=OFF` and `REXGLUE_FIDELITYFX_SPATIAL_ONLY=OFF` where
-the working tree has both ON. Matching the configuration is the next test; the
+The builds are not close. The worktree was configured with
+`REXGLUE_USE_VULKAN=OFF` and `REXGLUE_FIDELITYFX_SPATIAL_ONLY=OFF` where the
+working tree has both ON. Matching the configuration was the next test; the
 point of recording it here is that "my source change" was never the right place
 to look once the gated-off control had hung.
+
+## The answer, measured 2026-09-17
+
+**It is `clear_memory_page_state`.** Not the census, not the draw hand-off, not
+the build configuration, and not this branch at all.
+
+Rebuilding with the shared tree's exact configuration did not fix it. What
+settled it was swapping only the plugin while holding `ng2.exe` and
+`rexruntime.dll` constant:
+
+| plugin | result |
+|---|---:|
+| shipped v1.0.21 | alive 240 s, 50 swap reports, 60 fps |
+| shared tree current | froze at 14 swap reports |
+| this branch (= shared + 2 env-gated files) | froze at 13 |
+
+The shared tree's own plugin hangs NG2, so nothing on this branch is
+implicated. Then one variable on an already-built binary:
+
+| `clear_memory_page_state` | result |
+|---|---|
+| `true` — the setting NG2 requires | froze at 13–14, twice |
+| `false` | alive past 32 swap reports, at 60 fps |
+
+NG2 forces the cvar true (Xenia's compat entry for 544307D5 carries
+`requires_clear_memory_page_state_true`; without the page refresh Team Ninja
+titles lose character models). Fable II made it default **false** in v0.2.12,
+because the refresh was re-uploading every CPU page each frame. So after that
+change NG2 became the only title exercising the true-path — which is why only
+NG2 finds the bug, and why it looked like an NG2-branch problem.
+
+**The cvar costs more than stability: it halves the frame rate.** Every
+cvar-true run sits at 30.0 guest fps; cvar-false reaches 60.0 and holds. So the
+refresh is worth fixing rather than working around.
+
+### What it is not, with the counter that proves it
+
+The first hypothesis was `LandImpostorReadbackBeforeUpload` taking a GPU wait
+from inside a draw, because it tests `AllPagesValid` — a predicate the frame-end
+refresh deliberately invalidates. Plausible, and wrong. The plugin's own
+`[gpu] fence waits` line counts landing waits separately, and it reads **zero in
+every configuration, including before the fix with the cvar on**:
+
+    before fix, cvar TRUE  (froze)   landings 0 x 0.0 ms   submissions 300-530
+    before fix, cvar FALSE (alive)   landings 0 x 0.0 ms   submissions 600-602
+    with fix,   cvar TRUE  (froze)   landings 0 x 0.0 ms   submissions 302
+
+A wait that is never taken cannot be the wait that hangs. And the submission
+counts are not a difference either: 600 per 5 s at 60 fps and 300 at 30 fps are
+both two per frame, so that column tracks frame rate, not blocking.
+
+Still open: which call on the refresh path blocks with a submission open. The
+hang is a GPU worker that stops executing packets, so it is a wait taken inside
+the frame, not a wait for it.
+
+### The dev workaround
+
+`--clear_memory_page_state=false` on the command line. Character models degrade,
+which does not matter for counting draws — the stage-1 hand-off measurement
+(5,593,900 draws, serials unbroken) was taken through it.
 
 ## What this does and does not affect
 
