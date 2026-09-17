@@ -254,11 +254,21 @@ int ResolutionIndex(const Ng2Settings& s) {
   return kResolutionCount;  // Custom
 }
 
-// 30 and 60 are what the console offered. 120 and 144 are here because they
-// were asked for; the row says plainly what they do to a game that paces
-// itself off the display.
-constexpr int kFpsValues[] = {30, 60, 120, 144};
-const char* const kFpsNames[] = {"30 Hz", "60 Hz (as shipped)", "120 Hz", "144 Hz"};
+// 30 and 60 are what the console offered, and they are all this row offers.
+//
+// 120 and 144 used to be here, with a line underneath saying they make the game
+// run faster rather than smoother. That was not enough: a player picked 144 and
+// the game crashed. This title paces its logic off the refresh rate it is told
+// the display has, so anything above 60 is a speed change, not a smoothness
+// setting - and a menu that offers it is promising a choice that does not exist.
+// Removed rather than warned about.
+//
+// Frame interpolation was built to give the smoothness those options implied
+// without the speed-up - it reached evenly-paced 120 fps with the simulation
+// still at 60 - but it hung the game on heavy loads and was abandoned. The
+// reasoning is in FrameInterp/PLAN.md if it is ever revisited.
+constexpr int kFpsValues[] = {30, 60};
+const char* const kFpsNames[] = {"30 Hz", "60 Hz (as shipped)"};
 
 int FpsIndex(int fps) {
   for (int i = 0; i < IM_ARRAYSIZE(kFpsValues); ++i)
@@ -450,22 +460,18 @@ bool DrawSettings(Ng2Settings& s, const PageOptions& opts) {
       changed = true;
     }
     if (!live) RestartTag();
-    // Not a preference but a behaviour change, so it stays on the page rather
-    // than hiding behind a marker.
-    if (s.fps > 60)
-      Muted("Above 60 the game runs faster, not smoother.");
+    // The "above 60 the game runs faster, not smoother" line that used to sit
+    // here is gone with the options it described. A warning under a setting is
+    // not a substitute for not offering it.
     ImGui::EndDisabled();
 
-    RowStart("V-Sync",
-             "Off does not just tear here. The game paces its logic off the "
-             "display, so without V-Sync it runs faster than it should.");
-    changed |= ImGui::Checkbox("##vsync", &s.vsync);
-    // Same hazard as fps > 60 one row up, so it gets the same treatment: the
-    // consequence is stated on the page, not only in a tooltip nobody hovers.
-    // Off raises the guest's vblank from 60 Hz to 1000 Hz, and this title
-    // advances its logic on vblank.
-    if (!s.vsync)
-      Muted("Off makes the game run faster than it should, not just tear.");
+    // V-Sync is not offered. It was a checkbox with a line underneath saying
+    // "Off makes the game run faster than it should, not just tear" - the same
+    // pattern, and the same hazard, as the 120/144 frame-rate options removed
+    // above. Off raises the guest's vblank from 60 Hz to 1000 Hz and this title
+    // advances its logic on vblank, so it is a speed control wearing the name of
+    // a tearing control. The field survives in the settings file so old files
+    // load; Clamp() and the tuning both force it on regardless of what one says.
 
     RowStart("Keep aspect ratio",
              "Pillarbox the 16:9 picture on a wider window instead of "
@@ -860,7 +866,10 @@ void ApplyLiveSettings(const Ng2Settings& s, rex::ui::Window* window) {
   SetCvar("present_cas_additional_sharpness", std::to_string(s.cas_sharpness));
   SetCvar("present_dither", s.present_dither ? "true" : "false");
   SetCvar("present_letterbox", s.letterbox ? "true" : "false");
-  SetCvar("vsync", s.vsync ? "true" : "false");
+  // Unconditional, not from the setting: vsync off is a game-speed change on this
+  // title, the row is no longer offered, and this live path must not be able to
+  // reintroduce it from a stale value.
+  SetCvar("vsync", "true");
   // Ultrawide 3D FOV (ng2_fov_k), live. Mirrors Ng2App::ApplyFov: on, the 3D is
   // widened by the render/display aspect so the 16:9 frame filled to the wider
   // screen keeps correct proportions; off, k=1. The plugin caches the per-shader
