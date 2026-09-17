@@ -337,3 +337,54 @@ second word and the type is its low two bits.
 
 **The first milestone does not wait for it.** 73 of 76 covers the frame's hot
 set, and the three can be added as they are needed.
+
+## Addendum 4: the input struct is complete (2026-09-17)
+
+The last unlocated input was the geometry itself. A vertex fetch constant is two
+dwords — type in the low 2 bits, a 30-bit address **in dwords**, then endian and
+a 24-bit size in words — and 96 of them are overlaid on the same registers the
+texture fetches use six dwords at a time. Decoded per draw, a real scene draw
+now reads:
+
+    #2 DRAW_INDX prim=TRI_STRIP indices=523
+       IB guest=0x19738000 words=523 fmt=u16 endian=1
+       VS=0x1DB62040 450 dw   PS=0x1DAF7040 123 dw
+       RT colour base=0 fmt=3 | depth base=32 | pitch=320 msaa=0 | edram_mode=4
+       depthctl=00700766 blend0=00010001 colorctl=87000004 mask=0000000F
+       rast=00218002 progcntl=1031050A
+       viewport scale=(128,-64,-1) offset=(128,64,1) scissor=..00800100
+       vertex buffers: 11 slots hold a vertex fetch
+                       [1]guest=0x003FE1FC 2624784B  [2]guest=0x003D0240 801304B
+                       [5]guest=0x003D0000 2584B     [7]guest=0x0059E4FC 2626580B ...
+       texture fetches: 10 of 32 slots typed kTexture
+
+Topology, index buffer, both shaders, render targets, blend and depth state,
+rasteriser, viewport, scissor, vertex buffers and textures — **every field a
+native draw call takes, off the stream, with nothing left to identify.**
+
+**What the slot count does NOT say.** It reports which slots *hold a well-formed
+vertex fetch*, not which the draw *uses* — a slot the shader never reads can
+hold stale state from an earlier draw, and one early draw showed a slot pointing
+at guest address 0x000000FC, which is not a vertex buffer. Which slots are live
+is decided by the shader's `vfetch` instructions and needs the translator.
+
+There is a cheap discriminator in the meantime: **the slots that change between
+draws are the ones being rebound.** Across consecutive draws slots 0 and 95
+moved (0x0A4E1CBC → 0x0A4E1D10 → 0x08B800D0) while 4, 7 and 43 stayed fixed.
+That separates live per-draw bindings from residue without waiting on shader
+analysis.
+
+### Recon is finished; the rest is a renderer
+
+Nothing further is blocked on understanding NG2. What remains is building:
+
+1. A Plume device and window inside the plugin (Plume is already built and has
+   rendered on this machine).
+2. Auto-index point sprites first — two thirds of the frame.
+3. Indexed triangle strips, the one geometry shape.
+4. The 607 compiled shaders, keyed on the `IM_LOAD` address, covering 73 of the
+   76 a frame uses.
+5. Textures, via the fetch constants above.
+
+With the `computed` and `declaredtype` constraints from the Fable II side taken
+as inputs rather than discovered later.
