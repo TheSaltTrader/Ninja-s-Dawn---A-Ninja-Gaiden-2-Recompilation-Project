@@ -148,6 +148,21 @@ for f in $GLOB; do
   done
 
   if [ "$agreed" -eq 0 ]; then
+    # RE-CHECK MEMORY AFTER A FAILURE, not only before the attempts. The floor
+    # above is tested once per container, but a container takes STABLE_RUNS
+    # translations and the machine can collapse during them - which is exactly
+    # what happened: 37 "failures" were recorded in a window when another
+    # process was taking the machine from 26 GB free to under 2, and a crash
+    # from a refused allocation is indistinguishable from the translator's own.
+    # So a failure is only attributed to the SHADER if the machine was still
+    # healthy when it happened; otherwise it is deferred and re-measured later.
+    now_mb=$(awk '/^MemFree:/ {print int($2/1024)}' /proc/meminfo 2>/dev/null)
+    if [ -n "$now_mb" ] && [ "$now_mb" -lt "$MEM_FLOOR_MB" ] && [ "$reason" != "UNSTABLE output" ]; then
+      deferred=$((deferred+1))
+      echo "$f  deferred, ${reason} with only ${now_mb}MB free - not attributable" >> "$OUT/deferred.txt"
+      rm -f "$OUT/tmp/$n".*.hlsl "$OUT/tmp/$n".*.hlsl.layout
+      continue
+    fi
     case "$reason" in
       "UNSTABLE output") unstable=$((unstable+1)); echo "$f  $reason" >> "$OUT/unstable.txt";;
       *) tr_bad=$((tr_bad+1)); echo "$f  $reason" >> "$OUT/failed.txt";;
