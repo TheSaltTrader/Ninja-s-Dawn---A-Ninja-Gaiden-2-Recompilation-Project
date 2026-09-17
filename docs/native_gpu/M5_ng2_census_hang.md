@@ -360,6 +360,45 @@ would declare a freeze, which made failure (2) invisible: the counter sits at
 zero, the guard rejects it, and a real death reads as a timeout. It now watches
 the log file growing instead, since a live game always writes something.
 
+### The three-way discriminator
+
+If the churn probe suppresses the freeze, *what about it* does? Three knobs,
+each N=3, same plugin and same criterion:
+
+| probe | what it costs | freeze suppressed? |
+|---|---|---|
+| `upload_churn` (hashes every byte) | time **and** memory traffic | **yes** — 3/3 alive to 45 swaps |
+| `upload_touch` (one byte per page) | almost no time, same pages touched | **no** — froze at 17 and 13 |
+| `upload_spin_ns=5000` (busy-spin, touches nothing) | time only | **no** — froze at 19 and 20 |
+
+So neither half alone reproduces it. Page contact does not suppress the freeze,
+and neither does pure delay at 5 µs/range — a figure chosen to match churn's own
+estimated cost. Only the probe that does *both* suppresses it.
+
+That kills the clean "it is a timing race" reading. Latency alone, injected at
+the same place and in comparable quantity, leaves the freeze exactly where it
+was. Whatever churn is doing is not reducible to the time it takes.
+
+**The invalidation adjacency is also dead.** The `[diag] gpu-written pages
+invalidated by a CPU write` lines that precede one failure are at **fixed
+addresses and fixed sizes in every run** — `1F045000` and `1F3DD000`, 3,768,320
+bytes each (920 pages), exactly three lines — in runs that froze at 13 swaps and
+in runs that reached 45 alike. Something that happens identically in every run
+cannot be what distinguishes them, and its appearing just before an overflow is
+coincidence: it appears just before everything.
+
+**The spin probe has its own failure**, unrelated to the freeze: it triggers
+the ring-buffer desync at both doses tested, and MORE OFTEN AT THE LOWER ONE.
+
+    spin 5000 ns   1 of 3 desync,  2 of 3 froze normally (19 and 20 swaps)
+    spin  200 ns   2 of 3 desync,  1 of 3 froze normally (13 swaps)
+
+A 25x reduction in injected delay producing *more* corruption is the opposite
+of dose-dependence. That rules out the leading explanation for the desync -
+that a delayed reader falls behind a wrapping ring and reads bytes the guest
+has already overwritten. Whatever spin does to the ring is not proportional to
+the delay it injects.
+
 ### The dev workaround
 
 `--clear_memory_page_state=false` on the command line. Character models degrade,
