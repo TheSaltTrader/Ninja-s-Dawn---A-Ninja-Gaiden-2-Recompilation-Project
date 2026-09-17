@@ -68,12 +68,39 @@ echo "STABILITY        : $STABLE_RUNS runs must agree byte-for-byte"
 echo "CAPS             : ${TIME_CAP_S}s, ${MEM_CAP_MB}MB"
 
 mkdir -p "$OUT/hlsl" "$OUT/dxil" "$OUT/tmp"
-: > "$OUT/errors.txt"; : > "$OUT/failed.txt"; : > "$OUT/unstable.txt"; : > "$OUT/stable.txt"
 tr_ok=0; tr_bad=0; unstable=0; c_ok=0; c_bad=0
+# RESUMABLE, because this machine is shared and a long run is not safe from it.
+# Two multi-hour regenerations were killed by the OS low-memory killer - not for
+# anything this script did, but because another process on the machine was
+# allocating tens of gigabytes uncapped and the OS picks a victim rather than a
+# culprit. A run that loses everything to someone else's bug is a run that
+# cannot be completed on a shared machine at all.
+#
+# RESUME=1 keeps the ledgers and skips any container already recorded in one of
+# them. Default is a fresh run, because silently resuming into a ledger written
+# by a DIFFERENT configuration - other caps, other STABLE_RUNS - would mix two
+# populations under one heading, which is the error this whole file exists to
+# prevent.
+if [ "${RESUME:-0}" = "1" ] && [ -f "$OUT/stable.txt" ]; then
+  echo "RESUME: keeping $(wc -l < "$OUT/stable.txt") stable, $(wc -l < "$OUT/unstable.txt" 2>/dev/null) unstable,"        "$(wc -l < "$OUT/failed.txt" 2>/dev/null) failed - already-recorded containers will be skipped"
+  tr_ok=$(wc -l < "$OUT/stable.txt"); tr_ok=$((tr_ok))
+  c_ok=$(ls "$OUT/dxil"/*.dxil 2>/dev/null | wc -l)
+  unstable=$(wc -l < "$OUT/unstable.txt" 2>/dev/null); unstable=$((unstable))
+  tr_bad=$(wc -l < "$OUT/failed.txt" 2>/dev/null); tr_bad=$((tr_bad))
+else
+  : > "$OUT/errors.txt"; : > "$OUT/failed.txt"; : > "$OUT/unstable.txt"; : > "$OUT/stable.txt"
+fi
 cd "$IN" || exit 1
 for f in $GLOB; do
   [ -f "$f" ] || continue
   n=${f%.xvu}; n=${n%.var}
+  if [ "${RESUME:-0}" = "1" ]; then
+    if grep -qxF -- "$f  agreed $STABLE_RUNS/$STABLE_RUNS" "$OUT/stable.txt" 2>/dev/null ||
+       grep -q -- "^$f  " "$OUT/unstable.txt" 2>/dev/null ||
+       grep -q -- "^$f  " "$OUT/failed.txt" 2>/dev/null; then
+      continue
+    fi
+  fi
   case "$f" in *_p.xvu|*_p.var.xvu|*_p.cpu.xvu) t=ps_6_0;; *) t=vs_6_0;; esac
   # A STALE ARTEFACT IS WORSE THAN A MISSING ONE: the manifest keys on "a .dxil
   # with this stem exists", so a leftover from a previous run makes it claim an
