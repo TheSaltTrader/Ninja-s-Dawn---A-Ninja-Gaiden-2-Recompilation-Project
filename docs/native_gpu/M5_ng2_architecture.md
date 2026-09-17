@@ -437,10 +437,26 @@ size, which is what a synthetic container needs.
 Synthetic containers built with the Fable II generator (`synth_xvu.py`,
 `pad=0` — padding is a proven false fix there):
 
-| | HLSL produced |
-|---|---|
-| 16 samplers declared | 3 of 10 — **all 5 pixel shaders crashed** |
-| 32 samplers declared | **9 of 10**, all 5 pixel among them |
+**XenosRecomp crashes NON-DETERMINISTICALLY** on identical input — same file,
+same arguments, same binary, different outcome — found by the Fable II session.
+So a single run's count establishes nothing, and the first version of this
+section quoted "3 of 10 → 9 of 10" from one sample. Replaced by 10 runs per
+shader per configuration:
+
+| | 16 samplers | 32 samplers |
+|---|---|---|
+| **the 5 pixel shaders** | **0/10 each** | **10/10 each** |
+| the 5 vertex shaders | 5, 8, 9, 9, 10 of 10 | 6, 7, 8, 8, 8 of 10 |
+| total runs | 41/100 | 87/100 |
+
+**The pixel-shader effect is deterministic**: every one fails ten times out of
+ten at 16 samplers and succeeds ten times out of ten at 32. That is not a sample
+from a random process. **The non-determinism is real but lives entirely in the
+vertex shaders**, which fluctuate in both configurations.
+
+Both things are true and neither cancels the other. The instrument that
+separates them is per-shader repetition; an aggregate would not have, and the
+41-vs-87 totals are only meaningful here because they are 100 samples a side.
 
 5-of-5 by shader type is a far louder signal than a count, and a pixel shader is
 where a `tfetch` above sampler slot 15 would live. The Fable II side had tested
@@ -462,9 +478,15 @@ changes here.** The name moves because output semantics come from the definition
 table a synthetic container lacks, so they are unreliable in *both* builds rather
 than broken by the change.
 
-**Not settled:** `VS 0x1EFD7000` produced HLSL at 16 samplers and crashes at 32.
-One shader moving the wrong way against nine moving the right way is not grounds
-to reject the change, but it is not rounded off either.
+**The "regression" was noise.** `VS 0x1EFD7000` looked like it worked at 16 and
+crashed at 32; repeated, it is 9/10 and 7/10 — both inside the flaky band. It
+was recorded as unexplained rather than rounded off, which is the only reason
+re-measuring it was obvious.
+
+A non-deterministic segfault on identical input is uninitialised memory or an
+out-of-bounds read whose fault depends on heap layout: a XenosRecomp bug that no
+container-level change will fix, only move. A debug build is the next step for
+the vertex-shader faults.
 
 **Still open and ahead of the crashes**, from the Fable II side: a synthetic
 container loses the definition table's literal constants — a real translation
