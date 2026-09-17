@@ -53,4 +53,29 @@ void EndFrame();
 void NoteDrawHandedOff();
 void NoteDrawRendered();
 
+// STAGE 2b DESIGN CONSTRAINTS, written before the code so they are decisions
+// rather than repairs. Both come from defects found in the sibling project's
+// equivalent structures, in the same week, by reading rather than running.
+//
+// 1. NO RAW POINTERS INTO AN EVICTABLE CACHE. The shader lookups there hold raw
+//    pointers into a cache whose erase sites destroy the owner, and the dangling
+//    state is reachable through several early returns that skip re-registration.
+//    It compiles, and it works right up until the cache evicts - then it fails
+//    far from its cause. Key these maps by VALUE (the guest address) and look
+//    the object up through the cache each time, or hold ownership outright.
+//    Never both a cache that can evict and a pointer that outlives the check.
+//
+// 2. ONE MAP PER LOOKUP, AND end() FROM THE MAP THAT WAS SEARCHED. A lookup in
+//    one map tested against a different map's end() has the same type, compiles
+//    silently, and is wrong. With several same-typed maps side by side - by
+//    address, by code hash, by microcode - this is a live hazard rather than a
+//    theoretical one. It has already occurred once in the sibling codebase.
+//
+// And the reason both are stated here rather than discovered later: reading and
+// running catch DIFFERENT classes. These two are structural - visible to a
+// reader, invisible to a run that never evicts or never takes the branch. The
+// complement is stage 2a's lesson, where the code was built, linked and
+// symbol-verified and simply never called, which no amount of reading would have
+// shown and one run did.
+
 }  // namespace ng2::ngpu::render
