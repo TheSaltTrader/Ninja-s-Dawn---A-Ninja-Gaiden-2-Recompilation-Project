@@ -601,3 +601,47 @@ cause.
 
 NG2's 411 containers at `field18 = 1` with 68 MATCH also confirm the element
 table layout is shared, so nothing in the generator is Fable-specific.
+
+### Literal constants: validated, with a guard NG2's population required
+
+The Fable II session found the third defect: a shader's literal constants live in
+the physical region **immediately before** the program, pointed at by a
+definition table — and the same bytes sit before the block `IM_LOAD` names for a
+shader with no container, so they can be read across.
+
+**Validated here rather than taken on trust.** Of 53 used shaders matched to a
+container, **51 have the container's preamble byte-identical in GPU memory**
+immediately before the code, and **none differ**.
+
+**But the rule assumes `physicalOffset` is 64, and on NG2 it is not:**
+
+    vertex containers   physicalOffset  0: 31   64: 378   128: 2
+    pixel  containers   physicalOffset  0: 53   64: 161
+
+**84 of 625 have no preamble at all.** For those the preceding 64 bytes are
+whatever the allocator left there. Measured on the uncontained shaders, 2 of 10
+are plainly not constants:
+
+    VS 0x1F000000   900DED58 AF0D9BFC 000EA0E4 38E601CE
+    VS 0x1EFD7000   00000000 00002104 0000000F 0000210D   (microcode operands)
+
+Handing those over as literals produces a shader computing with garbage —
+**deterministic and wrong**, exactly the failure this fix exists to close, and it
+would have looked like success: translates, byte-identical across runs, renders
+nonsense.
+
+`tools/native_gpu/plausible_literals.py` rejects a preamble containing any
+non-zero dword that is not a sane IEEE float (no NaN or Inf, magnitude in
+1e-6..1e6). It accepts all 8 and rejects exactly the 2. **It is a heuristic and
+labelled as one**, and deliberately asymmetric: a rejected preamble costs a
+shader its literals — which is where it already was — while a wrongly accepted
+one silently corrupts every constant the shader uses.
+
+### Three defects, three directions
+
+    element table   from Fable II's vertex shaders
+    sampler count   from NG2's pixel shaders
+    literals        from reading a real container's definition table
+
+None was findable from where its fix eventually came, and each session's sample
+was structurally blind to at least one of them.
