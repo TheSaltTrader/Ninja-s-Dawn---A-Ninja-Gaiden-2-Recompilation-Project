@@ -140,11 +140,30 @@ last bound target (`EDRAM_AND_RESOLVES.md`).
   bins are per title and this does not transfer.)
 - **Constants arrive by DMA**, never `SET_CONSTANT`.
 
+## Watch the screen, not the log, for a freeze
+
+**User instruction, 2026-09-17: keep AI Vision on the game while it runs and
+catch a lock early rather than losing time.** It is also the faster signal: the
+log takes 30 s of watchdog before it admits anything, plus the polling interval
+on top, and this branch's plugin hangs the Chapter 1 intro reliably.
+
+A running game never goes static, so *stability is the freeze*:
+
+    eye_raise(target = "pid:<pid>")          # once, makes it the default target
+    eye_wait(stable_ms = 4000, timeout_s = 110)
+
+Returning on the stable condition means frozen; timing out means alive. For a
+long unattended stretch, `eye_watch(action="start")` before the run and
+`eye_changes` after gives the same answer with a timeline attached.
+
 ## Known hazards when running
 
 - The plugin built from this branch hangs NG2's Chapter 1 intro; it is a build
-  configuration difference, not the census (`M5_ng2_census_hang.md`). Reach
-  gameplay via a save, or expect a stall in the intro.
+  configuration difference, not the census (`M5_ng2_census_hang.md`) and not the
+  draw hand-off — re-confirmed 2026-09-17 with the same binary and
+  `NG2_NATIVE_GPU` unset, zero callback lines in the log, identical stall on
+  guest thread 17 / Event `F800003C`. **Do not drive into Chapter 1.** Reach
+  gameplay another way, and watch the screen for the lock (above).
 - `Start-Process`, never WMI — WMI drops the environment and every env-gated
   probe silently does nothing.
 - Build the plugin from a shell that has run `vcvars64.bat`, with
