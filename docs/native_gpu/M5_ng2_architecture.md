@@ -164,3 +164,51 @@ Three ways out, in the order they should be tried:
    design this decision was meant to avoid. It would be a narrow exception
    rather than a return to full guest-call interception: one object, not a
    draw path.
+
+## Addendum 2: every draw arrives inside an indirect buffer (2026-09-16)
+
+Measured on both titles, by counting draws at indirect-buffer nesting depth > 0:
+
+| | draws inside an indirect buffer |
+|---|---|
+| NG2, frame 1500 | **2,338 of 2,338 — 100%**, top level 0 |
+| NG2, frame 1200 | 298 of 298 — 100% |
+| Fable II, frame 6000 | 6,402 of 6,402 — 100% |
+
+Two titles, two engines, both submitting every draw through chained command
+segments. The ring never executes a draw at top level in either.
+
+**This makes the interception decision right for a better reason than the one it
+was made for.** The decision above chose the PM4 packet because NG2's Direct3D
+entry points could not be identified with this SDK. The stronger reason is that
+identifying them could never have been sufficient: a runtime that writes the
+whole command stream as chained segments means hooking API wrappers is a
+structurally partial view of the frame, and no amount of finding more wrappers
+closes it. **The ring is the only complete source.** That is a property of the
+Xbox 360 D3D9 runtime, not of either game, so it applies to the shared device
+design and not just to NG2.
+
+The Fable II side is moving its native path from drawing at hook exit to drawing
+from the ring's own `DRAW_INDX` packets for the same reason — which makes
+coverage 100% by construction rather than by enumeration.
+
+### What is NOT established: command-buffer replay
+
+The same run reports "204 of 210 buffers replayed unchanged, 0 rewritten"
+against the previous frame, hashing each buffer in full. It is **not** recorded
+as a finding, because the instrument's own self-check says the number cannot yet
+be interpreted:
+
+    hash check: 11 distinct hashes across 210 buffers, 0 untranslatable
+
+The hash is not blind — it discriminates, and every buffer translated — but 210
+buffers carrying only **eleven** distinct byte patterns is either a real
+property (eleven command-buffer bodies repeated) or a length-decode fault
+hashing a shared region of each. Until that is settled, "the command buffers are
+replayed unchanged" is uninterpretable rather than true or false.
+
+The self-check is the transferable part. An instrument that reports a null
+result must be able to demonstrate it could have reported a different one; a
+hash that returns a constant for every input reports "everything matched" and
+means "I am blind". Counting distinct hashes per frame separates those for one
+line of code.
