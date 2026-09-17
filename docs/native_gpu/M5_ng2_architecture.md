@@ -286,16 +286,42 @@ asked for at each `IM_LOAD` address and look for those exact bytes inside the
 extracted containers (`tools/native_gpu/check_shader_denominator.py`).
 
     distinct shaders the frame loaded (IM_LOAD)        76
-    microcode found inside an extracted container      69
-    NOT in any container                                7
+    microcode found inside an extracted container      73
+    NOT in any container                                3
 
-So the translated set covers **91% of the shaders a frame uses, not 100%**. The
-class Fable found exists in NG2 too — it is just 9% here rather than 66%. It is
-not negligible: the busiest of the seven is loaded **73 times in a single frame**.
+**The first version of this check said 7, and 3 of those 7 were wrong** — found
+by the Fable II session's follow-up warning that a container may point at an
+*original* while the ring executes a *copy*. Probing only the first 64 bytes
+missed three shaders whose bodies are in containers, including the busiest of
+them all:
 
-    VS 0x1D701000  x73     VS 0x1DACB000  x10    VS 0x1EFD7000  x6
-    VS 0x1EE30000   x4     PS 0x1D725000   x2    VS 0x1EFD8000  x2
-    VS 0x1F02F000   x1
+    VS 0x1D701000  x73   head missed, body found
+    VS 0x1EFD7000   x6   head missed, body found
+    VS 0x1EFD8000   x2   head missed, body found
+
+So the coverage is **96%, not 91%**, and genuinely absent are three:
+`VS 0x1DACB000` (x10), `VS 0x1EE30000` (x4), `VS 0x1F02F000` (x1).
+
+### The microcode the GPU runs is a PATCHED copy
+
+Diffing the executed copy against the container's for `VS 0x1D701000`:
+
+    body identical from +64 onward (that is how it was found)
+    9 of the first 64 bytes differ, at offsets 36,41,42,47,52,53,54,58,59
+    the first 32 bytes are byte-identical
+
+Not a patched prologue — scattered dwords *inside* instructions, in the region
+where a Xenos `vfetch` encodes its operands. So the engine patches the microcode
+at or before upload, and the copy the container holds is not the program the GPU
+executed.
+
+**This matters beyond the census.** A native path that translates container
+copies translates something the GPU did not run. Whether the patched fields
+change behaviour or only encode bindings the native path supplies itself from
+the fetch constants is the next question — but it must be answered before
+trusting a translated shader, not after a scene renders subtly wrong. Probing by
+content at several offsets, as `check_shader_denominator.py` now does, is also
+what makes the patching visible at all.
 
 **What this does NOT establish.** These seven have no container *in the region
 that was dumped* — guest virtual 0x80000000-0xA0000000. Whether they have none
@@ -309,5 +335,5 @@ translate from microcode alone, by synthesising the header XenosRecomp scans
 for. The packet supplies what the header needs — the dword count is `IM_LOAD`'s
 second word and the type is its low two bits.
 
-**The first milestone does not wait for it.** 69 of 76 covers the frame's hot
-set, and the seven can be added as they are needed.
+**The first milestone does not wait for it.** 73 of 76 covers the frame's hot
+set, and the three can be added as they are needed.
