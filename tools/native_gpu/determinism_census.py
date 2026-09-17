@@ -39,8 +39,16 @@ def translate_once(src, out_path):
     """Return the sha1 of the HLSL, or None if the recompiler produced nothing."""
     if os.path.exists(out_path):
         os.remove(out_path)
+    # THROUGH THE CAP, NOT A BARE TIMEOUT. This census ran 240 UNCAPPED
+    # invocations of a translator known to reach 41 GB on some inputs, while I
+    # was telling the sibling session to grep for exactly this. A time cap
+    # bounds how long a process runs, not how much it takes with it, and a
+    # control suite can only test the wrapper a call site actually reaches - so
+    # a bypass is invisible to every control and only a grep finds it.
+    capped = os.path.join(os.path.dirname(os.path.abspath(__file__)), "run_capped.py")
     try:
-        subprocess.run([RECOMP, src, out_path, HEADER], timeout=120,
+        subprocess.run([sys.executable, capped, "120", "4096", "--",
+                        RECOMP, src, out_path, HEADER], timeout=180,
                        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     except Exception:
         return None

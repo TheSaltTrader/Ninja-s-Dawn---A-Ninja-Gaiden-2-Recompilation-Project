@@ -71,6 +71,13 @@ def _kind(prefix):
 def bindings_of(path):
     """[(kind, register, space)] a DXIL actually declares, or None if unreadable."""
     try:
+        # A DELIBERATE, STATED EXCEPTION to routing every external call through
+        # run_capped.py. This is dxc parsing an already-built container, not
+        # XenosRecomp translating microcode, and it runs 634 times - a python
+        # wrapper per artefact would cost more than the risk it removes. The
+        # point of the rule is that an uncapped call site must never be an
+        # ACCIDENT; an exception that says so in the file is fine, one nobody
+        # noticed is how 41 GB happens.
         out = subprocess.run([DXC, "-dumpbin", path], capture_output=True, timeout=60)
     except Exception:
         return None

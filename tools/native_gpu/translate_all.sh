@@ -17,7 +17,15 @@ for f in $GLOB; do
   [ -f "$f" ] || continue
   n=${f%.xvu}; n=${n%.var}
   case "$f" in *_p.xvu|*_p.var.xvu) t=ps_6_0;; *) t=vs_6_0;; esac
-  if timeout 15 "$X" "$f" "$OUT/hlsl/$n.hlsl" "$H" >/dev/null 2>&1 && [ -s "$OUT/hlsl/$n.hlsl" ]; then
+  # CAPPED IN BOTH DIMENSIONS. This was a bare `timeout 15`, which bounds how
+  # long XenosRecomp runs and not how much memory it takes with it - and it
+  # reaches 41 GB on some containers, which is enough to have unrelated work on
+  # the machine killed by the OS. This script is the shared one and NG2's copy
+  # is capped deliberately even though it diverges: an uncapped call site is
+  # invisible to every control suite, because a control can only test the
+  # wrapper a call site actually reaches.
+  if python "$(cd "$(dirname "$0")" && pwd)/run_capped.py" 15 4096 -- \
+       "$X" "$f" "$OUT/hlsl/$n.hlsl" "$H" >/dev/null 2>&1 && [ -s "$OUT/hlsl/$n.hlsl" ]; then
     tr_ok=$((tr_ok+1))
     python "$FIX" "$OUT/hlsl/$n.hlsl" "$OUT/hlsl/$n.hlsl.layout"
     if "$D" -T $t -E main -HV 2021 -all-resources-bound -Wno-ignored-attributes -Fo "$OUT/dxil/$n.dxil" "$OUT/hlsl/$n.hlsl" >"$OUT/dxil/$n.err" 2>&1; then

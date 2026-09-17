@@ -37,7 +37,9 @@ for f in sorted(glob.glob(os.path.join(SRC, "*.xvu"))):
             if os.path.exists(out):
                 os.remove(out)
             try:
-                subprocess.run([RECOMP, xvu, out, HEADER], timeout=60,
+                # Through run_capped.py: a bare timeout bounds duration, not memory.
+                capped = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'run_capped.py')
+                subprocess.run([sys.executable, capped, '60', '4096', '--', RECOMP, xvu, out, HEADER], timeout=120,
                                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
             except Exception:
                 pass
