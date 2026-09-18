@@ -277,6 +277,10 @@ bool WantPipeline(uint32_t xenos_color_format);
 //    ABI change, and the record's struct_size is what makes it detectable
 //    rather than silent.
 //
+// 9. *** CORRECTED 2026-09-17 — SEE CONSTRAINT 14. The claim below, that ALL
+//     geometry reaches a translated shader through the bindless stream heap, is
+//     FALSE for the majority of NG2's vertex shaders. Read 14 first. ***
+//
 // 9. GEOMETRY REACHES A TRANSLATED SHADER THROUGH A BINDLESS STRUCTURED
 //    BUFFER, NOT THROUGH AN INPUT LAYOUT. Measured across the translated set,
 //    2026-09-17, by reading what XenosRecomp actually emits:
@@ -414,6 +418,52 @@ bool WantPipeline(uint32_t xenos_color_format);
 //     itself (the `if (!instr.isMiniFetch)` block at :203), so the TRANSLATION
 //     already handles minis. Only the runtime's own slot census had to learn
 //     this - see constraint 11's note and tools/native_gpu/vfetch_census.py.
+//
+// 14. CONSTRAINT 9 IS WRONG: MOST VERTEX SHADERS USE AN INPUT LAYOUT, NOT THE
+//     STREAM HEAP. XenosRecomp emits TWO translation modes, and I built a
+//     stream cache on the assumption that it emits one.
+//
+//     Counted over the 406 translated vertex shaders, by what their HLSL
+//     actually declares:
+//
+//         INPUT-LAYOUT semantics only   215      `in float4 iPosition0 : POSITION0`
+//         BOTH stream and semantics     105
+//         bindless NGPU_STREAM only      55
+//         neither                        31      (no vfetch, or a refusal)
+//
+//     So 320 of 406 declare input semantics and 160 reference the stream heap.
+//     A native path that binds only the stream heap serves 55 shaders outright
+//     and half-serves 105; a path that binds only an input layout serves 215.
+//     NEITHER ALONE IS ENOUGH - both have to exist.
+//
+//     Which mode a fetch takes is decided in the recompiler by whether the
+//     fetch index is COMPUTED (shader_recompiler.cpp:213-223 carries a
+//     `computed` flag alongside the stream number). A fetch whose index is the
+//     vertex id is an ordinary attribute and becomes a declared input; one the
+//     shader computes cannot be expressed as an input layout and becomes a
+//     stream read.
+//
+//     HOW THE ERROR SURVIVED: constraint 9 was written from the sibling
+//     project's renderer, where it is true, and never checked against NG2's own
+//     translated output. It is the same mistake as every other cross-population
+//     assertion this project has made - a property measured on one corpus
+//     asserted about another - and it sat in a file whose header exists to stop
+//     exactly that.
+//
+//     WHAT CAUGHT IT: a check for vertex shaders whose container HAS vfetch
+//     instructions but whose HLSL references NO stream. 234 of them. 206 were
+//     the known refusals; the remaining 28 were not, and reading one - the
+//     audit's own canary, ng2_8200AC88 - showed `in float4 iPosition0 :
+//     POSITION0` in its main() signature. The translated output was the
+//     authority again, and again it disagreed with something I had written down
+//     as settled.
+//
+//     CONSEQUENCE FOR THE STREAM CACHE, which is built and unbound: it is not
+//     wrong, it is INCOMPLETE. It remains the right structure for the 160
+//     shaders that read streams. The input-layout path is separate work, and
+//     the draw path will have to decide per shader which applies - so the
+//     manifest needs to record the mode, because asking the DXIL at draw time
+//     is not affordable.
 //
 // And the reason all of these are stated here rather than discovered later:
 // reading and running catch DIFFERENT classes. These two are structural - visible to a
