@@ -103,20 +103,35 @@ def main():
             # than overwrite.
             if h in by_hash and by_hash[h][0] != code:
                 print("COLLISION: %016X shared by %s and %s" % (h, by_hash[h][1], stem))
-            # THE FIRST SOURCE WINS, and the sources are given real-containers
-            # first. Three programs synthesised from runtime dumps turned out to
+            # THE FIRST SOURCE WINS - AND FOR FETCHLESS CONTAINERS THE REBUILT
+            # ONE MUST COME FIRST. This preference was originally the other way
+            # round, and the audit refuted it: run against a patched XenosRecomp
+            # that REFUSES a fetch-element miss instead of dereferencing end(),
+            #
+            #     originals : 625 containers, REFUSED 279
+            #     rebuilt   : 330 containers, REFUSED   0
+            #
+            # and every one of the 279 is a container synth_fetchless rebuilds.
+            # A refusal means the unpatched binary emitted a shader assembled
+            # from whatever byte followed the end iterator, so those 279 entries
+            # in the manifest are WRONG TRANSLATIONS THAT LOOK FINE. Preferring
+            # the original for them is preferring the corrupt artefact.
+            #
+            # Pass synth_fetchless BEFORE the xvu directory for that reason.
+            # Everything outside those 279 is unaffected and the real container
+            # still wins, because the rebuild only covers fetchless-with-vfetch.
+            #
+            # Three other programs synthesised from runtime dumps turned out to
             # HAVE containers all along - they had merely failed to translate
             # under the wrong shader_common header.
             #
-            # NOT because the real container carries a truer vertex element
-            # table. It was checked, and it does not: all three declare
+            # That an EMPTY table is not a truer table was already noted here
+            # and I still drew the wrong conclusion from it: all three declare
             # vertexElementCount == 0 while their microcode contains 3 to 6
-            # vfetch instructions, so the real container's table is EMPTY and
-            # the recompiler relies on fix_hlsl_ng2.py to declare the inputs
-            # afterwards, while the synthetic one derives them by scanning. Both
-            # compile. The real one is preferred because it is the game's own
-            # data and the fix pass is validated across the whole population,
-            # not because it is more informative here.
+            # vfetch instructions. I recorded that the real container's table is
+            # empty and then preferred it anyway, on the grounds that it is "the
+            # game's own data". An empty table is precisely what makes the
+            # lookup miss, so that was preferring the input that causes the bug.
             #
             # The runtime loader assigns g_manifest[hash] per row, so a
             # duplicate row would silently overwrite whichever came first;
