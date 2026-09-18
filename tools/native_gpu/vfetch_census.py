@@ -23,6 +23,8 @@ fields, not its existence.
 import os
 import sys
 import struct
+sys_path_hack = None
+from vfetch_scan import scan
 
 
 def be32(b, i):
@@ -55,32 +57,22 @@ def code_region(path):
 
 
 def walk(code):
-    """Yield (address, is_mini) for every FETCH instruction the CF reaches."""
-    n = len(code) // 4
-    if n < 3:
-        return
-    limit = n
-    i = 0
-    while i + 3 <= n and i < limit:
-        d0, d1, d2 = be32(code, i), be32(code, i + 1), be32(code, i + 2)
-        cf = [d0 | ((d1 & 0xFFFF) << 32), (d1 >> 16) | (d2 << 16)]
-        for k in range(2):
-            op = (cf[k] >> 44) & 0xF
-            if op not in (1, 2, 3, 4, 5, 6, 13, 14):
-                continue
-            addr = cf[k] & 0xFFF
-            count = (cf[k] >> 12) & 0x7
-            seq = (cf[k] >> 16) & 0xFFFFFF
-            if addr:
-                limit = min(limit, addr * 3)
-            for j in range(count):
-                if seq & 1:                       # bit 0 of each pair: FETCH
-                    at = (addr + j) * 3
-                    if at + 3 <= n:
-                        w1 = be32(code, at + 1)
-                        yield at, bool((w1 >> 30) & 1)
-                seq >>= 2
-        i += 3
+    """Yield (instruction address, is_mini) for every vertex fetch.
+
+    DELEGATES TO vfetch_scan.scan, which is the scanner the synthesis path has
+    used all along. My own first version omitted the END_OPS break that scan
+    has, so it walked past the end of the control flow and decoded instruction
+    data as further CF pairs. That invented fetches in slots 0-9 and 48-53 and
+    inflated the mini count.
+
+    The tell was ground truth, not review: the generated HLSL contains only
+    NGPU_STREAM(0) and NGPU_STREAM(1), so the only fetch slots in play are 94
+    and 95. A census claiming eighteen distinct slots was describing its own
+    walker.
+    """
+    for at in scan(code):
+        w1 = be32(code, at * 3 + 1)
+        yield at * 3, bool((w1 >> 30) & 1)
 
 
 def main():
