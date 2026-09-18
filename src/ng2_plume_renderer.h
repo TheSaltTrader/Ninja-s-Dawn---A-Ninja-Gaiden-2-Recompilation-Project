@@ -458,6 +458,24 @@ bool WantPipeline(uint32_t xenos_color_format);
 //     authority again, and again it disagreed with something I had written down
 //     as settled.
 //
+//     AND "WHICH MODE DOES THIS SHADER NEED" IS THE WRONG QUESTION FOR THE 105.
+//     The sibling project ran this same split on their corpus and found 71 of 76
+//     in the BOTH column - so a shader in BOTH needs an input layout AND stream
+//     descriptors bound correctly ON THE SAME DRAW. The modes are not
+//     alternatives selected per shader; they are two channels a single shader
+//     may use at once. The manifest records what each shader NEEDS (layout,
+//     streams, or both), not which of two paths to take.
+//
+//     Their distribution is close to the inverse of NG2's:
+//
+//         NG2      215 semantics-only | 105 both |  55 stream-only   of 406
+//         Fable      0 semantics-only |  71 both |   5 stream-only   of  76
+//
+//     Same translator, same `computed` flag deciding per fetch, opposite
+//     distributions - so what drives it is how each ENGINE indexes its
+//     vertices, not anything about the recompiler. NG2's 215 semantics-only is
+//     a population their renderer has never had to serve.
+//
 //     CONSEQUENCE FOR THE STREAM CACHE, which is built and unbound: it is not
 //     wrong, it is INCOMPLETE. It remains the right structure for the 160
 //     shaders that read streams. The input-layout path is separate work, and
