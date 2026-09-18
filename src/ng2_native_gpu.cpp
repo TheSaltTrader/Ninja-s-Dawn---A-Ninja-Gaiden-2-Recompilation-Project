@@ -256,6 +256,111 @@ std::string BinReport() {
 // SEH at all.
 bool ReadGuestBytes(const uint8_t* p, uint32_t bytes, uint8_t* out);
 
+// THE FETCH SLOTS A PROGRAM USES, decoded from its microcode once and cached.
+//
+// A vfetch names its constant in dword 0 (const_index bits 20..24,
+// const_index_sel bits 25..26), and the slot is const_index * 3 + select. The
+// control flow says which 3-dword groups are fetches rather than ALU
+// instructions - the same walk const_scan.py does offline, and for the same
+// reason: the two share an array and only the exec blocks tell them apart.
+struct FetchSlots {
+  uint8_t count = 0;
+  uint8_t slot[24] = {};
+};
+
+// KEYED BY WHAT THE CONSUMER HAS, not by a content hash it would have to
+// compute: a by-pointer program is identified by its address, and an immediate
+// one only by the load serial the plugin carries. The renderer owns hashing;
+// duplicating it here would be a second key that can disagree with the first,
+// which is what constraint 2 is about.
+std::mutex g_fetch_mutex;
+std::map<uint32_t, FetchSlots> g_fetch_by_address;   // by-pointer vertex shaders
+std::atomic<uint64_t> g_fetch_programs{0};
+std::atomic<uint64_t> g_fetch_slots_total{0};
+
+// The slots the CURRENT vertex shader fetches from. Touched only on the GPU
+// worker thread, so no atomics - the same reasoning as g_last_serial.
+FetchSlots g_cur_slots;
+uint32_t g_cur_slots_address = 0xFFFFFFFFu;
+uint64_t g_cur_slots_serial = 0;
+
+uint32_t BeDword(const uint8_t* p) {
+  return (uint32_t(p[0]) << 24) | (uint32_t(p[1]) << 16) | (uint32_t(p[2]) << 8) | p[3];
+}
+
+void DecodeFetchSlots(const uint8_t* ucode, uint32_t bytes, FetchSlots* out) {
+  out->count = 0;
+  const uint32_t n = bytes / 4;
+  if (n < 3) return;
+  uint32_t limit = n;
+  for (uint32_t i = 0; i + 3 <= n && i < limit; i += 3) {
+    const uint64_t d0 = BeDword(ucode + i * 4);
+    const uint64_t d1 = BeDword(ucode + (i + 1) * 4);
+    const uint64_t d2 = BeDword(ucode + (i + 2) * 4);
+    const uint64_t cf[2] = {d0 | ((d1 & 0xFFFF) << 32), (d1 >> 16) | (d2 << 16)};
+    for (int k = 0; k < 2; ++k) {
+      const uint32_t op = uint32_t((cf[k] >> 44) & 0xF);
+      // exec-like opcodes, the only ones that carry an instruction block
+      if (op != 1 && op != 2 && op != 3 && op != 4 && op != 5 && op != 6 &&
+          op != 13 && op != 14) {
+        continue;
+      }
+      const uint32_t addr = uint32_t(cf[k] & 0xFFF);
+      const uint32_t count = uint32_t((cf[k] >> 12) & 0x7);
+      uint32_t seq = uint32_t((cf[k] >> 16) & 0xFFFFFF);
+      if (addr) limit = addr * 3 < limit ? addr * 3 : limit;
+      for (uint32_t j = 0; j < count; ++j, seq >>= 2) {
+        if (!(seq & 1)) continue;                 // bit 0 of each pair: FETCH
+        const uint32_t at = (addr + j) * 3;
+        if (at + 3 > n) continue;
+        const uint32_t w0 = BeDword(ucode + at * 4);
+        const uint32_t const_index = (w0 >> 20) & 0x1F;
+        const uint32_t select = (w0 >> 25) & 0x3;
+        if (select > 2) continue;                 // a group holds three fetches
+        const uint8_t slot = uint8_t(const_index * 3 + select);
+        bool dup = false;
+        for (uint8_t q = 0; q < out->count; ++q) {
+          if (out->slot[q] == slot) { dup = true; break; }
+        }
+        if (!dup && out->count < 24) out->slot[out->count++] = slot;
+      }
+    }
+  }
+}
+
+// Called from the registration path, where the microcode is already in hand.
+void RememberFetchSlots(uint32_t address, const uint8_t* ucode, uint32_t bytes) {
+  FetchSlots fs;
+  DecodeFetchSlots(ucode, bytes, &fs);
+  std::lock_guard<std::mutex> lock(g_fetch_mutex);
+  if (g_fetch_by_address.emplace(address, fs).second) {
+    g_fetch_programs.fetch_add(1, std::memory_order_relaxed);
+    g_fetch_slots_total.fetch_add(fs.count, std::memory_order_relaxed);
+  }
+}
+
+// Make the current program's slot list current, decoding only when the program
+// actually changes rather than once per draw.
+void SelectFetchSlots(const GpuDrawRecord* rec) {
+  if (rec->vs_immediate) {
+    if (rec->vs_ucode && rec->vs_ucode_dwords &&
+        rec->vs_ucode_serial != g_cur_slots_serial) {
+      g_cur_slots_serial = rec->vs_ucode_serial;
+      g_cur_slots_address = 0xFFFFFFFFu;
+      DecodeFetchSlots(rec->vs_ucode, rec->vs_ucode_dwords * 4, &g_cur_slots);
+    }
+    return;
+  }
+  if (rec->vs_address == g_cur_slots_address) return;
+  g_cur_slots_address = rec->vs_address;
+  std::lock_guard<std::mutex> lock(g_fetch_mutex);
+  auto it = g_fetch_by_address.find(rec->vs_address);
+  // A program whose microcode was never readable has no slot list, and an EMPTY
+  // list is the honest answer - it means this draw contributes no streams, not
+  // that it contributes all 96.
+  g_cur_slots = (it != g_fetch_by_address.end()) ? it->second : FetchSlots{};
+}
+
 // THE VERTEX STREAM CENSUS.
 //
 // 32 fetch slots, 2 dwords each, from SHADER_CONSTANT_FETCH_00_0. A slot whose
@@ -280,7 +385,7 @@ struct StreamKey {
   }
 };
 
-constexpr int kMaxStreams = 64;
+constexpr int kMaxStreams = 512;  // raised: 64 exactly matched the old cap
 std::mutex g_stream_mutex;
 StreamKey g_stream_keys[kMaxStreams];
 uint64_t g_stream_uses[kMaxStreams] = {};
@@ -295,14 +400,23 @@ std::atomic<uint64_t> g_stream_bytes{0};
 std::atomic<uint64_t> g_stream_rejected{0};
 
 void NoteVertexStreams(const GpuDrawRecord* rec) {
-  if (!rec->registers ||
-      rec->register_count <= kRegShaderConstantFetch00 + kFetchSlots * 2) {
-    return;
-  }
+  if (!rec->registers || rec->register_count <= kRegShaderConstantFetch00) return;
+  if (!g_cur_slots.count) return;
   const uint32_t* r = rec->registers;
-  for (uint32_t i = 0; i < kFetchSlots; ++i) {
-    const uint32_t d0 = r[kRegShaderConstantFetch00 + i * 2];
-    const uint32_t d1 = r[kRegShaderConstantFetch00 + i * 2 + 1];
+  // ONLY THE SLOTS THIS SHADER NAMES. Scanning all 96 cannot work: a group
+  // holds either a vertex fetch or part of a texture constant, nothing in the
+  // file distinguishes them, and the census said so - 120,530,303 overflowed
+  // and 79,822,914 were rejected while "64 distinct" was whichever decodes
+  // looked plausible first. The shader's own vfetch instructions are the only
+  // thing that knows.
+  for (uint8_t si = 0; si < g_cur_slots.count; ++si) {
+    const uint32_t slot = g_cur_slots.slot[si];
+    // const_index * 6 + select * 2, because the file is 32 groups of 6 dwords
+    // holding three 2-dword vertex fetches each.
+    const uint32_t base = kRegShaderConstantFetch00 + (slot / 3) * 6 + (slot % 3) * 2;
+    if (base + 1 >= rec->register_count) continue;
+    const uint32_t d0 = r[base];
+    const uint32_t d1 = r[base + 1];
     const uint32_t addr_dwords = d0 >> 2;                 // type:2 then address:30
     // MASK THE SIZE TO ITS 24 BITS. Without the mask the 6 pad bits above it
     // ride along and every stream reads as 268,435,540 bytes - 256 MB apiece,
@@ -368,9 +482,10 @@ std::string StreamReport() {
   std::lock_guard<std::mutex> lock(g_stream_mutex);
   if (!g_stream_n) return out;
   out = fmt::format(" | VERTEX STREAMS {} distinct, {} KB, readable {} unreadable {},"
-                    " rejected {}",
+                    " rejected {} | {} programs decoded, {} fetch slots",
                     g_stream_n, g_stream_bytes.load() / 1024, g_stream_readable.load(),
-                    g_stream_unreadable.load(), g_stream_rejected.load());
+                    g_stream_unreadable.load(), g_stream_rejected.load(),
+                    g_fetch_programs.load(), g_fetch_slots_total.load());
   if (const uint64_t o = g_stream_overflow.load()) out += fmt::format(" (+{} OVERFLOW)", o);
   for (int i = 0; i < g_stream_n && i < 6; ++i) {
     out += fmt::format("\n    [{}] {:08X} {} bytes, used {}",
@@ -818,6 +933,13 @@ void ProbeShaderMicrocode(render::ShaderStage stage, uint32_t addr, uint32_t dwo
     return;
   }
   g_ucode_read_ok.fetch_add(1, std::memory_order_relaxed);
+  // DECODE THIS PROGRAM'S FETCH SLOTS while its microcode is in hand. Once per
+  // address, never per draw - ProbeShaderMicrocode already runs once per
+  // address by its own seen-set, so this inherits that and costs nothing on the
+  // draw path.
+  if (stage == render::ShaderStage::kVertex) {
+    RememberFetchSlots(addr, buf.data(), bytes);
+  }
   uint32_t expected = 0;
   if (g_ucode_first_addr.compare_exchange_strong(expected, addr, std::memory_order_relaxed)) {
     g_ucode_first_word.store((uint32_t(buf[0]) << 24) | (uint32_t(buf[1]) << 16) |
@@ -943,7 +1065,7 @@ void OnDraw(const GpuDrawRecord* rec) {
   if (g_check_surface) NoteSurface(rec);
   if (g_check_surface) NoteBin(rec);
   if (g_check_surface) NotePipeline(rec);
-  if (g_check_surface) NoteVertexStreams(rec);
+  if (g_check_surface) { SelectFetchSlots(rec); NoteVertexStreams(rec); }
   if (((di >> 6) & 0x3) == kSourceDMA) {
     g_indexed.fetch_add(1, std::memory_order_relaxed);
     // Only indexed draws have an index buffer to resolve; the auto-index ones
