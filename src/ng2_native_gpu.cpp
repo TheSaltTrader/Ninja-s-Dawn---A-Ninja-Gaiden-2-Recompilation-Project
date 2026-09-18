@@ -266,6 +266,11 @@ bool ReadGuestBytes(const uint8_t* p, uint32_t bytes, uint8_t* out);
 struct FetchSlots {
   uint8_t count = 0;
   uint8_t slot[24] = {};
+  // The STRIDE each fetch reads with, dword 2 bits 0..7, in dwords. Needed
+  // because a fetch constant's declared size is the buffer, not what a draw
+  // reads from it, and copying the declared size copies whole buffers where a
+  // few elements were wanted.
+  uint8_t stride[24] = {};
 };
 
 // KEYED BY WHAT THE CONSUMER HAS, not by a content hash it would have to
@@ -318,11 +323,16 @@ void DecodeFetchSlots(const uint8_t* ucode, uint32_t bytes, FetchSlots* out) {
         const uint32_t select = (w0 >> 25) & 0x3;
         if (select > 2) continue;                 // a group holds three fetches
         const uint8_t slot = uint8_t(const_index * 3 + select);
+        const uint32_t w2 = BeDword(ucode + (at + 2) * 4);
+        const uint8_t stride = uint8_t(w2 & 0xFF);     // dword 2 bits 0..7, dwords
         bool dup = false;
         for (uint8_t q = 0; q < out->count; ++q) {
           if (out->slot[q] == slot) { dup = true; break; }
         }
-        if (!dup && out->count < 24) out->slot[out->count++] = slot;
+        if (!dup && out->count < 24) {
+          out->stride[out->count] = stride;
+          out->slot[out->count++] = slot;
+        }
       }
     }
   }
@@ -408,6 +418,12 @@ std::atomic<uint64_t> g_stream_bytes{0};
 // vertex fetch. Counted, because "we ignored some" and "there were none"
 // must not print the same number.
 std::atomic<uint64_t> g_stream_rejected{0};
+// WHERE THE BYTES COME FROM. The per-frame total read 957 MB against the
+// plugin's own ~17 MB/frame, and keying by address alone brought it to 66 MB -
+// still high. A histogram attributes the remainder instead of inviting another
+// guess at the plausibility bound.
+std::atomic<uint64_t> g_size_bucket[8] = {};   // <64B, <256, <1K, <4K, <16K, <64K, <1M, >=1M
+std::atomic<uint64_t> g_stream_clamped{0};
 
 // PER FRAME, which is the number that sizes a cache. The run total is
 // unbounded - 512 distinct with 3,252,245 overflow - but a cache only has to
@@ -482,6 +498,23 @@ void NoteVertexStreams(const GpuDrawRecord* rec) {
       g_stream_rejected.fetch_add(1, std::memory_order_relaxed);
       continue;
     }
+    // CLAMP TO WHOLE ELEMENTS. `len = total - total % stride` is the sibling
+    // project's rule: a declared size that is not a whole number of elements
+    // cannot all be read, and copying it whole is how a stream cache turns into
+    // a buffer copier.
+    if (g_cur_slots.stride[si] && k.bytes) {
+      const uint32_t stride_bytes = uint32_t(g_cur_slots.stride[si]) * 4u;
+      const uint32_t rem = k.bytes % stride_bytes;
+      if (rem) {
+        k.bytes -= rem;
+        g_stream_clamped.fetch_add(1, std::memory_order_relaxed);
+      }
+    }
+    {
+      uint32_t b = k.bytes, bucket = 0;
+      while (b >= 64 && bucket < 7) { b >>= 2; ++bucket; }
+      g_size_bucket[bucket].fetch_add(1, std::memory_order_relaxed);
+    }
     {
       // Counted BEFORE the cumulative table, so the per-frame figure is not
       // limited by which streams happened to arrive first in the whole run.
@@ -546,11 +579,17 @@ std::string StreamReport() {
   if (!g_stream_n) return out;
   out = fmt::format(" | VERTEX STREAMS {} distinct, {} KB, readable {} unreadable {},"
                     " rejected {} | {} programs decoded, {} fetch slots"
-                    " | PER FRAME peak {} streams, {} KB",
+                    " | PER FRAME peak {} streams, {} KB | clamped {} | sizes"
+                    " <64:{} <256:{} <1K:{} <4K:{} <16K:{} <64K:{} <1M:{} >=1M:{}",
                     g_stream_n, g_stream_bytes.load() / 1024, g_stream_readable.load(),
                     g_stream_unreadable.load(), g_stream_rejected.load(),
                     g_fetch_programs.load(), g_fetch_slots_total.load(),
-                    g_stream_frame_max.load(), g_stream_frame_bytes_max.load() / 1024);
+                    g_stream_frame_max.load(), g_stream_frame_bytes_max.load() / 1024,
+                    g_stream_clamped.load(),
+                    g_size_bucket[0].load(), g_size_bucket[1].load(),
+                    g_size_bucket[2].load(), g_size_bucket[3].load(),
+                    g_size_bucket[4].load(), g_size_bucket[5].load(),
+                    g_size_bucket[6].load(), g_size_bucket[7].load());
   if (const uint64_t o = g_stream_overflow.load()) out += fmt::format(" (+{} OVERFLOW)", o);
   for (int i = 0; i < g_stream_n && i < 6; ++i) {
     out += fmt::format("\n    [{}] {:08X} {} bytes, used {}",
