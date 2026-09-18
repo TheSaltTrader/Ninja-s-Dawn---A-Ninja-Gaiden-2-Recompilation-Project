@@ -399,6 +399,49 @@ std::atomic<uint64_t> g_stream_bytes{0};
 // must not print the same number.
 std::atomic<uint64_t> g_stream_rejected{0};
 
+// PER FRAME, which is the number that sizes a cache. The run total is
+// unbounded - 512 distinct with 3,252,245 overflow - but a cache only has to
+// hold what ONE frame references, and whether that is 40 or 4,000 decides
+// whether eviction is needed at all. Reset at the frame boundary; the high
+// water mark is what the cache must be built for.
+// A PER-FRAME SET THAT IS INDEPENDENT OF THE CUMULATIVE TABLE.
+//
+// Stamping entries of the cumulative table reported "PER FRAME peak 6 streams"
+// across millions of draws, and that number is an artefact: the table is
+// first-come-first-served and 512 entries deep, so it FILLED DURING BOOT and
+// every address gameplay uses overflows before it can be stamped. The per-frame
+// figure was measuring which boot-time streams were still being referenced, not
+// what a frame needs.
+//
+// So the per-frame count gets its own structure, cleared every frame and large
+// enough not to be the thing being measured: open addressing, power-of-two,
+// with a miss counted rather than silently dropped.
+constexpr int kFrameSetBits = 13;                 // 8192 slots
+constexpr uint32_t kFrameSetMask = (1u << kFrameSetBits) - 1;
+uint32_t g_frame_set_addr[1u << kFrameSetBits] = {};
+uint32_t g_frame_set_size[1u << kFrameSetBits] = {};
+int g_stream_frame_n = 0;
+std::atomic<uint64_t> g_frame_set_full{0};
+
+// Returns true if this (address,size) is new THIS FRAME.
+bool FrameSetInsert(uint32_t address, uint32_t bytes) {
+  uint32_t h = (address * 2654435761u) ^ (bytes * 40503u);
+  for (int probe = 0; probe < 64; ++probe) {
+    const uint32_t i = (h + uint32_t(probe)) & kFrameSetMask;
+    if (!g_frame_set_addr[i]) {
+      g_frame_set_addr[i] = address;
+      g_frame_set_size[i] = bytes;
+      return true;
+    }
+    if (g_frame_set_addr[i] == address && g_frame_set_size[i] == bytes) return false;
+  }
+  g_frame_set_full.fetch_add(1, std::memory_order_relaxed);
+  return false;
+}
+std::atomic<uint64_t> g_stream_frame_max{0};
+std::atomic<uint64_t> g_stream_frame_bytes_max{0};
+uint64_t g_stream_frame_bytes = 0;
+
 void NoteVertexStreams(const GpuDrawRecord* rec) {
   if (!rec->registers || rec->register_count <= kRegShaderConstantFetch00) return;
   if (!g_cur_slots.count) return;
@@ -428,6 +471,15 @@ void NoteVertexStreams(const GpuDrawRecord* rec) {
     if (k.bytes > kMaxStreamBytes) {
       g_stream_rejected.fetch_add(1, std::memory_order_relaxed);
       continue;
+    }
+    {
+      // Counted BEFORE the cumulative table, so the per-frame figure is not
+      // limited by which streams happened to arrive first in the whole run.
+      std::lock_guard<std::mutex> lock(g_stream_mutex);
+      if (FrameSetInsert(k.address, k.bytes)) {
+        ++g_stream_frame_n;
+        g_stream_frame_bytes += k.bytes;
+      }
     }
 
     bool is_new = false;
@@ -482,10 +534,12 @@ std::string StreamReport() {
   std::lock_guard<std::mutex> lock(g_stream_mutex);
   if (!g_stream_n) return out;
   out = fmt::format(" | VERTEX STREAMS {} distinct, {} KB, readable {} unreadable {},"
-                    " rejected {} | {} programs decoded, {} fetch slots",
+                    " rejected {} | {} programs decoded, {} fetch slots"
+                    " | PER FRAME peak {} streams, {} KB",
                     g_stream_n, g_stream_bytes.load() / 1024, g_stream_readable.load(),
                     g_stream_unreadable.load(), g_stream_rejected.load(),
-                    g_fetch_programs.load(), g_fetch_slots_total.load());
+                    g_fetch_programs.load(), g_fetch_slots_total.load(),
+                    g_stream_frame_max.load(), g_stream_frame_bytes_max.load() / 1024);
   if (const uint64_t o = g_stream_overflow.load()) out += fmt::format(" (+{} OVERFLOW)", o);
   for (int i = 0; i < g_stream_n && i < 6; ++i) {
     out += fmt::format("\n    [{}] {:08X} {} bytes, used {}",
@@ -878,7 +932,21 @@ void CheckIndexBuffer(const GpuDrawRecord* rec) {
 
 // Fired once per guest frame at the swap packet. Closes the coverage oracle's
 // frame: draws handed over against draws the renderer actually issued.
-void OnSwap(uint32_t, uint32_t, uint32_t) { render::EndFrame(); }
+void OnSwap(uint32_t, uint32_t, uint32_t) {
+  {
+    std::lock_guard<std::mutex> lock(g_stream_mutex);
+    if (uint64_t(g_stream_frame_n) > g_stream_frame_max.load(std::memory_order_relaxed)) {
+      g_stream_frame_max.store(uint64_t(g_stream_frame_n), std::memory_order_relaxed);
+    }
+    if (g_stream_frame_bytes > g_stream_frame_bytes_max.load(std::memory_order_relaxed)) {
+      g_stream_frame_bytes_max.store(g_stream_frame_bytes, std::memory_order_relaxed);
+    }
+    g_stream_frame_n = 0;
+    g_stream_frame_bytes = 0;
+    std::memset(g_frame_set_addr, 0, sizeof(g_frame_set_addr));
+  }
+  render::EndFrame();
+}
 
 // STAGE 2b STEP 2: is shader microcode READABLE at its IM_LOAD address?
 //
