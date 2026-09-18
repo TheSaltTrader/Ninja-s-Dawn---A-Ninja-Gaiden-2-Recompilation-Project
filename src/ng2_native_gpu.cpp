@@ -581,6 +581,9 @@ uint16_t GuestSwap16(uint16_t v, uint32_t endian) {
 std::mutex g_maxidx_mutex;
 std::map<IndexKey, uint32_t> g_maxidx;
 std::atomic<uint64_t> g_maxidx_scans{0};
+// kNone / k8in16 / k8in32 / k16in32, counted per SCAN (so per distinct buffer,
+// not per draw). Turns "the endian field is probably always 1" into a number.
+std::atomic<uint64_t> g_idx_endian[4] = {};
 std::atomic<uint64_t> g_maxidx_faults{0};
 std::atomic<uint64_t> g_maxidx_capped{0};
 
@@ -680,6 +683,7 @@ bool ScanMaxIndex(const GpuDrawRecord* rec, bool fmt32, uint32_t* out) {
     if (restart_on && v == reset_indx) continue;
     if (v > hi) hi = v;
   }
+  g_idx_endian[endian & 3u].fetch_add(1, std::memory_order_relaxed);
   if (capped) g_maxidx_capped.fetch_add(1, std::memory_order_relaxed);
   g_maxidx_scans.fetch_add(1, std::memory_order_relaxed);
   {
@@ -885,12 +889,15 @@ std::string StreamReport() {
       " | (maxidx+1)*stride {} KB"
       "\n    draws: auto {} indexed {} unscannable {} | maxidx+1 > count: {}"
       " | count > declared: {} | safe > declared: {}"
-      "\n    index scans {} (cached), faults {}, CAPPED {}",
+      "\n    index scans {} (cached), faults {}, CAPPED {}"
+      " | endian none:{} 8in16:{} 8in32:{} 16in32:{}",
       g_stream_n, tot_declared / 1024, tot_count / 1024, tot_safe / 1024,
       g_ext_auto.load(), g_ext_indexed.load(), g_ext_unscannable.load(),
       g_ext_safe_gt_count.load(), g_ext_count_gt_declared.load(),
       g_ext_safe_gt_declared.load(), g_maxidx_scans.load(),
-      g_maxidx_faults.load(), g_maxidx_capped.load());
+      g_maxidx_faults.load(), g_maxidx_capped.load(),
+      g_idx_endian[0].load(), g_idx_endian[1].load(),
+      g_idx_endian[2].load(), g_idx_endian[3].load());
   for (int i = 0; i < g_stream_n && i < 6; ++i) {
     out += fmt::format("\n    [{}] {:08X} {} bytes, used {}",
                        i, g_stream_keys[i].address, g_stream_keys[i].bytes, g_stream_uses[i]);
