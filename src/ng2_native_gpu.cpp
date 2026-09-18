@@ -589,6 +589,12 @@ std::atomic<uint64_t> g_maxidx_scans{0};
 // kNone / k8in16 / k8in32 / k16in32, counted per SCAN (so per distinct buffer,
 // not per draw). Turns "the endian field is probably always 1" into a number.
 std::atomic<uint64_t> g_idx_endian[4] = {};
+// u16 vs u32, per scan. The 24-bit mask cannot matter unless u32 appears.
+std::atomic<uint64_t> g_idx_fmt16{0}, g_idx_fmt32{0};
+// How far PAST the declared size a rule wanted, when it wanted more:
+// <=1x (shouldn't occur), <2x, <4x, <=4x exactly, <8x, >=8x. A units error
+// spikes at a power of two; a mapping error scatters.
+std::atomic<uint64_t> g_over_ratio[6] = {};
 std::atomic<uint64_t> g_maxidx_faults{0};
 std::atomic<uint64_t> g_maxidx_capped{0};
 
@@ -689,6 +695,7 @@ bool ScanMaxIndex(const GpuDrawRecord* rec, bool fmt32, uint32_t* out) {
     if (v > hi) hi = v;
   }
   g_idx_endian[endian & 3u].fetch_add(1, std::memory_order_relaxed);
+  (fmt32 ? g_idx_fmt32 : g_idx_fmt16).fetch_add(1, std::memory_order_relaxed);
   if (capped) g_maxidx_capped.fetch_add(1, std::memory_order_relaxed);
   g_maxidx_scans.fetch_add(1, std::memory_order_relaxed);
   {
@@ -782,7 +789,14 @@ void NoteVertexStreams(const GpuDrawRecord* rec) {
       const uint64_t sb = uint64_t(g_cur_slots.stride[si]) * 4ull;
       const uint64_t want_count = uint64_t(verts_count) * sb;
       const uint64_t want_safe = uint64_t(verts_safe) * sb;
-      if (want_count > k.bytes) g_ext_count_gt_declared.fetch_add(1, std::memory_order_relaxed);
+      if (want_count > k.bytes) {
+        g_ext_count_gt_declared.fetch_add(1, std::memory_order_relaxed);
+        // Bucket the overshoot. k.bytes is never 0 here - a zero-size stream is
+        // skipped before this point - so the division is safe.
+        const uint64_t r = want_count / (k.bytes ? k.bytes : 1);
+        const int b = r < 2 ? 1 : (r < 4 ? 2 : (r == 4 ? 3 : (r < 8 ? 4 : 5)));
+        g_over_ratio[b].fetch_add(1, std::memory_order_relaxed);
+      }
       if (want_safe > k.bytes) g_ext_safe_gt_declared.fetch_add(1, std::memory_order_relaxed);
       k.count_bytes = uint32_t(want_count < k.bytes ? want_count : k.bytes);
       k.safe_bytes = uint32_t(want_safe < k.bytes ? want_safe : k.bytes);
@@ -905,13 +919,18 @@ std::string StreamReport() {
       "\n    draws: auto {} indexed {} unscannable {} | maxidx+1 > count: {}"
       " | count > declared: {} | safe > declared: {}"
       "\n    index scans {} (cached), faults {}, CAPPED {}"
-      " | endian none:{} 8in16:{} 8in32:{} 16in32:{}",
+      " | endian none:{} 8in16:{} 8in32:{} 16in32:{}"
+      " | format u16:{} u32:{}"
+      "\n    count>declared overshoot x: <2:{} <4:{} ==4:{} <8:{} >=8:{}",
       g_ext_auto.load(), g_ext_indexed.load(), g_ext_unscannable.load(),
       g_ext_safe_gt_count.load(), g_ext_count_gt_declared.load(),
       g_ext_safe_gt_declared.load(), g_maxidx_scans.load(),
       g_maxidx_faults.load(), g_maxidx_capped.load(),
       g_idx_endian[0].load(), g_idx_endian[1].load(),
-      g_idx_endian[2].load(), g_idx_endian[3].load());
+      g_idx_endian[2].load(), g_idx_endian[3].load(),
+      g_idx_fmt16.load(), g_idx_fmt32.load(),
+      g_over_ratio[1].load(), g_over_ratio[2].load(), g_over_ratio[3].load(),
+      g_over_ratio[4].load(), g_over_ratio[5].load());
   for (int i = 0; i < g_stream_n && i < 6; ++i) {
     out += fmt::format("\n    [{}] {:08X} {} bytes, used {}",
                        i, g_stream_keys[i].address, g_stream_keys[i].bytes, g_stream_uses[i]);
