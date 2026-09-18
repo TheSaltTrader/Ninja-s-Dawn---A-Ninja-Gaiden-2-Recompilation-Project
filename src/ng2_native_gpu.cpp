@@ -377,12 +377,22 @@ constexpr uint32_t kFetchSlots = 96;
 // larger than this is not geometry, it is a texture constant being read as one.
 constexpr uint32_t kMaxStreamBytes = 16u << 20;
 
+// THE SIZE IS NOT PART OF THE KEY.
+//
+// Keying on (address, size) counts DRAW SHAPES, not buffers: one vertex buffer
+// read with different lengths by different draws becomes an entry per draw, and
+// the working set becomes the number of distinct draws. That is precisely the
+// symptom here - 349 "distinct streams" per frame and 3.3 million overflow over
+// a run. The sibling project hit it and keys on
+// (base << 32) | (stride << 16) | (endian << 8) | kind, handling length with
+// `entry->bytes >= len` and rebuilding in place when a request is longer.
+//
+// This census keys on the ADDRESS and tracks the LARGEST size seen for it,
+// which is the buffer the cache would have to hold.
 struct StreamKey {
   uint32_t address;   // guest byte address
-  uint32_t bytes;
-  bool operator==(const StreamKey& o) const {
-    return address == o.address && bytes == o.bytes;
-  }
+  uint32_t bytes;     // the largest length any draw has read from it
+  bool operator==(const StreamKey& o) const { return address == o.address; }
 };
 
 constexpr int kMaxStreams = 512;  // raised: 64 exactly matched the old cap
@@ -476,7 +486,7 @@ void NoteVertexStreams(const GpuDrawRecord* rec) {
       // Counted BEFORE the cumulative table, so the per-frame figure is not
       // limited by which streams happened to arrive first in the whole run.
       std::lock_guard<std::mutex> lock(g_stream_mutex);
-      if (FrameSetInsert(k.address, k.bytes)) {
+      if (FrameSetInsert(k.address, 0)) {
         ++g_stream_frame_n;
         g_stream_frame_bytes += k.bytes;
       }
@@ -491,6 +501,7 @@ void NoteVertexStreams(const GpuDrawRecord* rec) {
       }
       if (found >= 0) {
         ++g_stream_uses[found];
+        if (k.bytes > g_stream_keys[found].bytes) g_stream_keys[found].bytes = k.bytes;
         continue;
       }
       if (g_stream_n >= kMaxStreams) {

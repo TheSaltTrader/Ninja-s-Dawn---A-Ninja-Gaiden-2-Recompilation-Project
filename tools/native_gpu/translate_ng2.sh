@@ -175,28 +175,52 @@ for f in $GLOB; do
   # artefact for a shader that has since failed. Absence must mean failure.
   rm -f "$OUT/dxil/$n.dxil" "$OUT/hlsl/$n.hlsl"
 
-  first=""; agreed=1; reason=""
+  # REQUIRE N SUCCESSES THAT AGREE, NOT N CONSECUTIVE SUCCESSES.
+  #
+  # Crashes and output-instability are DIFFERENT defects - a dense element table
+  # that makes the lookup impossible to miss still crashes 5/8 - so a gate that
+  # demands an unbroken run of successes multiplies the crash rate into the
+  # coverage figure. Measured per run on a quiet machine, paired and interleaved:
+  # originals succeed 17/30 and rebuilds 12/30, so about 43% of attempts crash.
+  # Demanding five in a row yields 0.57^5, about 6% - which is exactly the 4
+  # stable out of 54 this gate was producing. The artefacts were not scarce
+  # because the shaders were bad; they were scarce because the gate was
+  # compounding an unrelated failure.
+  #
+  # So a crash is RETRIED within a budget and only the SUCCESSES have to agree.
+  # That keeps the property worth having - no artefact whose translation is
+  # non-deterministic - without inheriting a defect it was never about.
+  attempts_left=$((STABLE_RUNS * 4))
+  first=""; agreed=1; reason=""; crashes=0
   i=1
-  while [ "$i" -le "$STABLE_RUNS" ]; do
+  while [ "$i" -le "$STABLE_RUNS" ] && [ "$attempts_left" -gt 0 ]; do
+    attempts_left=$((attempts_left - 1))
     out="$OUT/tmp/$n.$i.hlsl"
     rm -f "$out"
     $CAP "$X" "$f" "$out" "$H" >/dev/null 2>&1
     rc=$?
     if [ "$rc" -ne 0 ] || [ ! -s "$out" ]; then
-      agreed=0
+      # A crash does not end the container - it costs an attempt and is retried.
+      # A TIME or MEMORY cap does end it, because those say the machine could not
+      # carry this work and retrying would measure the machine again.
       case "$rc" in
-        124) reason="time cap";;
-        125) reason="MEMORY CAP";;
-        126) reason="crashed";;
-        *)   reason="no output (rc $rc)";;
+        124) agreed=0; reason="time cap"; break;;
+        125) agreed=0; reason="MEMORY CAP"; break;;
+        *)   crashes=$((crashes + 1)); continue;;
       esac
-      break
     fi
     h=$(md5sum "$out" | cut -d' ' -f1)
     if [ -z "$first" ]; then first="$h"
     elif [ "$h" != "$first" ]; then agreed=0; reason="UNSTABLE output"; break; fi
     i=$((i+1))
   done
+
+  # Out of attempts without N agreeing successes: that IS a property of the
+  # shader, and it is recorded as its own outcome rather than as a crash.
+  if [ "$agreed" -eq 1 ] && [ "$i" -le "$STABLE_RUNS" ]; then
+    agreed=0
+    reason="only $((i - 1))/$STABLE_RUNS successes in $((STABLE_RUNS * 4)) attempts ($crashes crashed)"
+  fi
 
   if [ "$agreed" -eq 0 ]; then
     # RE-CHECK MEMORY AFTER A FAILURE, not only before the attempts. The floor
@@ -226,7 +250,7 @@ for f in $GLOB; do
   # Agreement is unanimous by construction today, so this is always N/N - but if
   # it ever loosens to a majority rule, "agreed 5/5" and "agreed 3/5, kept the
   # majority" must not both read as "translated".
-  echo "$f  agreed $STABLE_RUNS/$STABLE_RUNS" >> "$OUT/stable.txt"
+  echo "$f  agreed $STABLE_RUNS/$STABLE_RUNS, $crashes crashed attempts" >> "$OUT/stable.txt"
   cp "$OUT/tmp/$n.1.hlsl" "$OUT/hlsl/$n.hlsl"
   rm -f "$OUT/tmp/$n".*.hlsl "$OUT/tmp/$n".*.hlsl.layout
   tr_ok=$((tr_ok+1))
