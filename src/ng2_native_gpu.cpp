@@ -432,6 +432,11 @@ constexpr uint32_t kMaxStreamBytes = 16u << 20;
 struct StreamKey {
   uint32_t address;   // guest byte address
   uint32_t bytes;     // the largest length any draw has read from it
+  // The two rival extents, tracked ALONGSIDE the declared size rather than
+  // instead of it, so the three can be compared on one run instead of each
+  // needing its own.
+  uint32_t count_bytes = 0;   // max over draws of draw_count * stride
+  uint32_t safe_bytes = 0;    // max over draws of (max_index + 1) * stride
   bool operator==(const StreamKey& o) const { return address == o.address; }
 };
 
@@ -498,10 +503,136 @@ std::atomic<uint64_t> g_stream_frame_max{0};
 std::atomic<uint64_t> g_stream_frame_bytes_max{0};
 uint64_t g_stream_frame_bytes = 0;
 
+// THE LARGEST INDEX A DRAW REFERENCES, cached per index buffer.
+//
+// Needed because `index_count * stride` is only an upper bound on the bytes a
+// draw touches when the indices happen to be dense and ordered. They need not
+// be. The only way to know is to look, and looking is affordable exactly once
+// per (buffer, length, format) - the same caching argument as the fetch-slot
+// decode, which would otherwise have run eight million times.
+//
+// Returns false if the buffer could not be read at all; the caller must then
+// fall back rather than treat 0 as "no indices".
+struct IndexKey {
+  uint32_t base, words;
+  uint8_t fmt32, endian;
+  bool operator<(const IndexKey& o) const {
+    if (base != o.base) return base < o.base;
+    if (words != o.words) return words < o.words;
+    if (fmt32 != o.fmt32) return fmt32 < o.fmt32;
+    return endian < o.endian;
+  }
+};
+
+std::mutex g_maxidx_mutex;
+std::map<IndexKey, uint32_t> g_maxidx;
+std::atomic<uint64_t> g_maxidx_scans{0};
+std::atomic<uint64_t> g_maxidx_faults{0};
+std::atomic<uint64_t> g_maxidx_capped{0};
+
+// A BOUND ON THE SCAN, so one absurd index_size_words cannot stall the worker
+// thread. Counted when it bites: a capped scan yields a LOW max index, which
+// would silently look like "count is safe" - the conclusion this census exists
+// to test. Capped draws must not be able to vote for that answer.
+constexpr uint32_t kMaxIndexScan = 65536;
+
+bool ScanMaxIndex(const GpuDrawRecord* rec, bool fmt32, uint32_t* out) {
+  auto* memory = REX_KERNEL_MEMORY();
+  if (!memory || !rec->index_base || !rec->index_size_words) return false;
+  const IndexKey key{rec->index_base, rec->index_size_words, uint8_t(fmt32 ? 1 : 0),
+                     uint8_t(rec->index_endian & 0xFF)};
+  {
+    std::lock_guard<std::mutex> lock(g_maxidx_mutex);
+    auto it = g_maxidx.find(key);
+    if (it != g_maxidx.end()) { *out = it->second; return true; }
+  }
+
+  uint32_t n = rec->index_size_words;
+  bool capped = false;
+  if (n > kMaxIndexScan) { n = kMaxIndexScan; capped = true; }
+  const uint32_t stride = fmt32 ? 4u : 2u;
+  std::vector<uint8_t> buf(size_t(n) * stride);
+  bool ok = false;
+#if defined(_WIN32)
+  __try {
+    ok = ReadGuestBytes(memory->TranslatePhysical<const uint8_t*>(rec->index_base),
+                        uint32_t(buf.size()), buf.data());
+  } __except (EXCEPTION_EXECUTE_HANDLER) {
+    ok = false;
+  }
+#else
+  ok = ReadGuestBytes(memory->TranslatePhysical<const uint8_t*>(rec->index_base),
+                      uint32_t(buf.size()), buf.data());
+#endif
+  if (!ok) {
+    g_maxidx_faults.fetch_add(1, std::memory_order_relaxed);
+    return false;
+  }
+
+  uint32_t hi = 0;
+  for (uint32_t i = 0; i < n; ++i) {
+    uint32_t v;
+    if (fmt32) {
+      const uint8_t* q = buf.data() + size_t(i) * 4;
+      v = (uint32_t(q[0]) << 24) | (uint32_t(q[1]) << 16) | (uint32_t(q[2]) << 8) | q[3];
+    } else {
+      const uint8_t* q = buf.data() + size_t(i) * 2;
+      v = (uint32_t(q[0]) << 8) | q[1];
+    }
+    // 0xFFFF / 0xFFFFFFFF is the primitive RESTART sentinel, not a vertex.
+    // Counting it would make every stripped draw claim it reaches vertex 65535
+    // and the whole census would report "count under-reads, always".
+    if (v == (fmt32 ? 0xFFFFFFFFu : 0xFFFFu)) continue;
+    if (v > hi) hi = v;
+  }
+  if (capped) g_maxidx_capped.fetch_add(1, std::memory_order_relaxed);
+  g_maxidx_scans.fetch_add(1, std::memory_order_relaxed);
+  {
+    std::lock_guard<std::mutex> lock(g_maxidx_mutex);
+    g_maxidx[key] = hi;
+  }
+  *out = hi;
+  return true;
+}
+
+// THE VERDICT COUNTERS. Each draw votes once.
+std::atomic<uint64_t> g_ext_auto{0};        // auto-index: count is exact
+std::atomic<uint64_t> g_ext_indexed{0};     // indexed and scanned
+std::atomic<uint64_t> g_ext_unscannable{0}; // indexed, index buffer unreadable
+std::atomic<uint64_t> g_ext_safe_gt_count{0};   // THE QUESTION: max_index+1 > count
+std::atomic<uint64_t> g_ext_count_gt_declared{0};
+std::atomic<uint64_t> g_ext_safe_gt_declared{0};
+
 void NoteVertexStreams(const GpuDrawRecord* rec) {
   if (!rec->registers || rec->register_count <= kRegShaderConstantFetch00) return;
   if (!g_cur_slots.count) return;
   const uint32_t* r = rec->registers;
+
+  // The draw's own shape, decoded once for all of this draw's slots.
+  //   num_indices   bits 16..31
+  //   source_select bits 6..7   (0 = kDMA / indexed, 2 = auto-index)
+  //   index format  bit 11      (0 = 16-bit, 1 = 32-bit)
+  const uint32_t draw_count = rec->vgt_draw_initiator >> 16;
+  const uint32_t source_select = (rec->vgt_draw_initiator >> 6) & 3u;
+  const bool fmt32 = ((rec->vgt_draw_initiator >> 11) & 1u) != 0;
+  const bool indexed = (source_select == 0) && rec->index_base != 0;
+  uint32_t max_index = 0;
+  bool have_max = false;
+  if (indexed) {
+    have_max = ScanMaxIndex(rec, fmt32, &max_index);
+    (have_max ? g_ext_indexed : g_ext_unscannable).fetch_add(1, std::memory_order_relaxed);
+  } else {
+    g_ext_auto.fetch_add(1, std::memory_order_relaxed);
+  }
+  // vertices touched, under each rule. For an auto-index draw the two agree by
+  // construction - which is the control: if they ever disagree there, the
+  // decode of the initiator is wrong, not the rule.
+  const uint32_t verts_count = draw_count;
+  const uint32_t verts_safe = have_max ? (max_index + 1u) : draw_count;
+  if (indexed && have_max && verts_safe > verts_count) {
+    g_ext_safe_gt_count.fetch_add(1, std::memory_order_relaxed);
+  }
+
   // ONLY THE SLOTS THIS SHADER NAMES. Scanning all 96 cannot work: a group
   // holds either a vertex fetch or part of a texture constant, nothing in the
   // file distinguishes them, and the census said so - 120,530,303 overflowed
@@ -540,6 +671,22 @@ void NoteVertexStreams(const GpuDrawRecord* rec) {
         g_stream_clamped.fetch_add(1, std::memory_order_relaxed);
       }
     }
+    // The rival extents for THIS slot, capped by the declared size: a rule may
+    // read less than the engine declared, never more. A rule that wants more
+    // is a rule that is wrong, and the counters below say how often.
+    if (g_cur_slots.stride[si]) {
+      const uint64_t sb = uint64_t(g_cur_slots.stride[si]) * 4ull;
+      const uint64_t want_count = uint64_t(verts_count) * sb;
+      const uint64_t want_safe = uint64_t(verts_safe) * sb;
+      if (want_count > k.bytes) g_ext_count_gt_declared.fetch_add(1, std::memory_order_relaxed);
+      if (want_safe > k.bytes) g_ext_safe_gt_declared.fetch_add(1, std::memory_order_relaxed);
+      k.count_bytes = uint32_t(want_count < k.bytes ? want_count : k.bytes);
+      k.safe_bytes = uint32_t(want_safe < k.bytes ? want_safe : k.bytes);
+    } else {
+      k.count_bytes = k.bytes;
+      k.safe_bytes = k.bytes;
+    }
+
     {
       uint32_t b = k.bytes, bucket = 0;
       while (b >= 64 && bucket < 7) { b >>= 2; ++bucket; }
@@ -565,6 +712,10 @@ void NoteVertexStreams(const GpuDrawRecord* rec) {
       if (found >= 0) {
         ++g_stream_uses[found];
         if (k.bytes > g_stream_keys[found].bytes) g_stream_keys[found].bytes = k.bytes;
+        if (k.count_bytes > g_stream_keys[found].count_bytes)
+          g_stream_keys[found].count_bytes = k.count_bytes;
+        if (k.safe_bytes > g_stream_keys[found].safe_bytes)
+          g_stream_keys[found].safe_bytes = k.safe_bytes;
         continue;
       }
       if (g_stream_n >= kMaxStreams) {
@@ -621,6 +772,25 @@ std::string StreamReport() {
                     g_size_bucket[4].load(), g_size_bucket[5].load(),
                     g_size_bucket[6].load(), g_size_bucket[7].load());
   if (const uint64_t o = g_stream_overflow.load()) out += fmt::format(" (+{} OVERFLOW)", o);
+
+  // THE EXTENT COMPARISON, which is what decides the cache's upload rule.
+  uint64_t tot_declared = 0, tot_count = 0, tot_safe = 0;
+  for (int i = 0; i < g_stream_n; ++i) {
+    tot_declared += g_stream_keys[i].bytes;
+    tot_count += g_stream_keys[i].count_bytes;
+    tot_safe += g_stream_keys[i].safe_bytes;
+  }
+  out += fmt::format(
+      "\n    READ EXTENT over {} streams: declared {} KB | count*stride {} KB"
+      " | (maxidx+1)*stride {} KB"
+      "\n    draws: auto {} indexed {} unscannable {} | maxidx+1 > count: {}"
+      " | count > declared: {} | safe > declared: {}"
+      "\n    index scans {} (cached), faults {}, CAPPED {}",
+      g_stream_n, tot_declared / 1024, tot_count / 1024, tot_safe / 1024,
+      g_ext_auto.load(), g_ext_indexed.load(), g_ext_unscannable.load(),
+      g_ext_safe_gt_count.load(), g_ext_count_gt_declared.load(),
+      g_ext_safe_gt_declared.load(), g_maxidx_scans.load(),
+      g_maxidx_faults.load(), g_maxidx_capped.load());
   for (int i = 0; i < g_stream_n && i < 6; ++i) {
     out += fmt::format("\n    [{}] {:08X} {} bytes, used {}",
                        i, g_stream_keys[i].address, g_stream_keys[i].bytes, g_stream_uses[i]);
