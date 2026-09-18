@@ -204,11 +204,30 @@ std::atomic<uint64_t> g_surf_no_regs{0};
 
 // THE BIN CENSUS. Same shape as the surface one: a fixed table, an overflow
 // counter, and every distinct tuple as its own row rather than a summary.
+// THE WINDOW OFFSET AND THE COLOUR SURFACE BELONG IN THIS KEY.
+//
+// I reported "NG2 does not bin-partition" from mask == select == 0xFFFFFFFF on
+// every draw. The sibling project's bins ARE vertical screen tiles - window
+// offset Y -512 with scissor Y +512, the second tile of a 1280x720 target - and
+// crucially their FOUR zero-offset bins differ in the colour surface they write.
+// So the bin field carries at least two orthogonal things, and a uniform MASK
+// is consistent with two different worlds:
+//
+//   one bin covering the frame        -> NG2 genuinely does not tile
+//   tiling expressed somewhere else   -> NG2 tiles and I could not see it
+//
+// A non-zero PA_SC_WINDOW_OFFSET anywhere in a frame settles it whatever the
+// masks say, so it goes in the key rather than being assumed constant.
+constexpr uint32_t kRegPaScWindowOffset = 0x2080;
+
 struct BinKey {
   uint64_t mask, select;
   uint32_t predicated;
+  uint32_t window_offset;   // X bits 14:0, Y bits 30:16, both signed 15-bit
+  uint32_t color_base;      // which surface this bin writes
   bool operator==(const BinKey& o) const {
-    return mask == o.mask && select == o.select && predicated == o.predicated;
+    return mask == o.mask && select == o.select && predicated == o.predicated &&
+           window_offset == o.window_offset && color_base == o.color_base;
   }
 };
 constexpr int kMaxBins = 16;
@@ -219,7 +238,12 @@ int g_bin_n = 0;
 std::atomic<uint64_t> g_bin_overflow{0};
 
 void NoteBin(const GpuDrawRecord* rec) {
-  BinKey k{rec->bin_mask, rec->bin_select, rec->predicated};
+  uint32_t wo = 0, cb = 0;
+  if (rec->registers && rec->register_count > kRegRbColorInfo) {
+    wo = rec->registers[kRegPaScWindowOffset];
+    cb = rec->registers[kRegRbColorInfo] & 0xFFF;
+  }
+  BinKey k{rec->bin_mask, rec->bin_select, rec->predicated, wo, cb};
   std::lock_guard<std::mutex> lock(g_bin_mutex);
   for (int i = 0; i < g_bin_n; ++i) {
     if (g_bin_keys[i] == k) {
@@ -243,8 +267,14 @@ std::string BinReport() {
   out = fmt::format(" | BINS {} distinct", g_bin_n);
   if (const uint64_t o = g_bin_overflow.load()) out += fmt::format(" (+{} OVERFLOW)", o);
   for (int i = 0; i < g_bin_n; ++i) {
-    out += fmt::format("\n    bin mask {:016X} select {:016X} predicated {} draws {}",
+    // The offset DECODED, because 7E000000 is not readable as "Y -512" and
+    // whether any of them is non-zero is the entire question.
+    const int32_t ox = int32_t(g_bin_keys[i].window_offset << 17) >> 17;
+    const int32_t oy = int32_t(g_bin_keys[i].window_offset & 0x7FFF0000) >> 16;
+    out += fmt::format("\n    bin mask {:016X} select {:016X} pred {} | offset {:08X}"
+                       " (x {} y {}) colour base {} | draws {}",
                        g_bin_keys[i].mask, g_bin_keys[i].select, g_bin_keys[i].predicated,
+                       g_bin_keys[i].window_offset, ox, oy, g_bin_keys[i].color_base,
                        g_bin_draws[i]);
   }
   return out;
