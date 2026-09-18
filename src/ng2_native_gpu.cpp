@@ -609,7 +609,15 @@ bool ScanMaxIndex(const GpuDrawRecord* rec, bool fmt32, uint32_t* out) {
     if (restart_on && !fmt32 && reset_indx > 0xFFFFu) restart_on = false;
   }
 
-  const IndexKey key{rec->index_base, rec->index_size_words, uint8_t(fmt32 ? 1 : 0),
+  // KEYED ON THE ISSUED COUNT, not the buffer size: draws sharing one index
+  // buffer differ precisely in how much of it they read, and keying on the
+  // buffer would serve the longest draw's maximum to the shortest.
+  const uint32_t issued_key = rec->vgt_draw_initiator >> 16;
+  const IndexKey key{rec->index_base,
+                     issued_key && issued_key < rec->index_size_words
+                         ? issued_key
+                         : rec->index_size_words,
+                     uint8_t(fmt32 ? 1 : 0),
                      uint8_t(rec->index_endian & 0xFF), reset_indx,
                      uint8_t(restart_on ? 1 : 0)};
   {
@@ -618,9 +626,16 @@ bool ScanMaxIndex(const GpuDrawRecord* rec, bool fmt32, uint32_t* out) {
     if (it != g_maxidx.end()) { *out = it->second; return true; }
   }
 
+  // THE DRAW'S OWN INDEX COUNT, not the bound buffer's size. VGT_DMA_SIZE
+  // describes the buffer; VGT_DRAW_INITIATOR.num_indices describes this draw.
+  // Several draws share one index buffer, so scanning it whole returns a
+  // maximum belonging to some other draw.
+  const uint32_t issued = rec->vgt_draw_initiator >> 16;
   uint32_t n = rec->index_size_words;
+  if (issued && issued < n) n = issued;
   bool capped = false;
   if (n > kMaxIndexScan) { n = kMaxIndexScan; capped = true; }
+  if (!n) return false;
   const uint32_t stride = fmt32 ? 4u : 2u;
   std::vector<uint8_t> buf(size_t(n) * stride);
   bool ok = false;
