@@ -507,6 +507,11 @@ std::atomic<uint64_t> g_stream_frame_bytes_max{0};
 std::atomic<uint64_t> g_stream_frame_bytes_sum{0};
 std::atomic<uint64_t> g_stream_frames_counted{0};
 uint64_t g_stream_frame_bytes = 0;
+// THE THREE CANDIDATES, per frame. Same lifetime as g_stream_frame_bytes and
+// reset in the same place, so they cannot drift apart from it.
+uint64_t g_frame_declared = 0, g_frame_count = 0, g_frame_safe = 0;
+std::atomic<uint64_t> g_fd_peak{0}, g_fc_peak{0}, g_fs_peak{0};
+std::atomic<uint64_t> g_fd_sum{0}, g_fc_sum{0}, g_fs_sum{0};
 
 // THE LARGEST INDEX A DRAW REFERENCES, cached per index buffer.
 //
@@ -798,6 +803,12 @@ void NoteVertexStreams(const GpuDrawRecord* rec) {
       if (FrameSetInsert(k.address, 0)) {
         ++g_stream_frame_n;
         g_stream_frame_bytes += k.bytes;
+        // Counted per DISTINCT STREAM PER FRAME, which is what a cache would
+        // upload - not per draw, which would count a stream once for every
+        // draw that reads it and answer a different question entirely.
+        g_frame_declared += k.bytes;
+        g_frame_count += k.count_bytes;
+        g_frame_safe += k.safe_bytes;
       }
     }
 
@@ -878,20 +889,23 @@ std::string StreamReport() {
   if (const uint64_t o = g_stream_overflow.load()) out += fmt::format(" (+{} OVERFLOW)", o);
 
   // THE EXTENT COMPARISON, which is what decides the cache's upload rule.
-  uint64_t tot_declared = 0, tot_count = 0, tot_safe = 0;
-  for (int i = 0; i < g_stream_n; ++i) {
-    tot_declared += g_stream_keys[i].bytes;
-    tot_count += g_stream_keys[i].count_bytes;
-    tot_safe += g_stream_keys[i].safe_bytes;
-  }
+  // PER FRAME, not cumulative. The cumulative table saturates at kMaxStreams
+  // and its totals are an artefact - the first run printed three identical
+  // numbers and they were the first 512 addresses of a run that overflowed six
+  // million times, not agreement between the rules.
+  const uint64_t frames = g_stream_frames_counted.load();
+  const auto mean = [frames](uint64_t sum) { return frames ? sum / frames / 1024 : 0; };
   out += fmt::format(
-      "\n    READ EXTENT over {} streams: declared {} KB | count*stride {} KB"
-      " | (maxidx+1)*stride {} KB"
+      "\n    READ EXTENT per frame, KB (peak / mean over {} frames):"
+      " declared {} / {} | count*stride {} / {} | (maxidx+1)*stride {} / {}",
+      frames, g_fd_peak.load() / 1024, mean(g_fd_sum.load()),
+      g_fc_peak.load() / 1024, mean(g_fc_sum.load()),
+      g_fs_peak.load() / 1024, mean(g_fs_sum.load()));
+  out += fmt::format(
       "\n    draws: auto {} indexed {} unscannable {} | maxidx+1 > count: {}"
       " | count > declared: {} | safe > declared: {}"
       "\n    index scans {} (cached), faults {}, CAPPED {}"
       " | endian none:{} 8in16:{} 8in32:{} 16in32:{}",
-      g_stream_n, tot_declared / 1024, tot_count / 1024, tot_safe / 1024,
       g_ext_auto.load(), g_ext_indexed.load(), g_ext_unscannable.load(),
       g_ext_safe_gt_count.load(), g_ext_count_gt_declared.load(),
       g_ext_safe_gt_declared.load(), g_maxidx_scans.load(),
@@ -1300,6 +1314,16 @@ void OnSwap(uint32_t, uint32_t, uint32_t) {
     }
     g_stream_frame_bytes_sum.fetch_add(g_stream_frame_bytes, std::memory_order_relaxed);
     g_stream_frames_counted.fetch_add(1, std::memory_order_relaxed);
+    if (g_frame_declared > g_fd_peak.load(std::memory_order_relaxed))
+      g_fd_peak.store(g_frame_declared, std::memory_order_relaxed);
+    if (g_frame_count > g_fc_peak.load(std::memory_order_relaxed))
+      g_fc_peak.store(g_frame_count, std::memory_order_relaxed);
+    if (g_frame_safe > g_fs_peak.load(std::memory_order_relaxed))
+      g_fs_peak.store(g_frame_safe, std::memory_order_relaxed);
+    g_fd_sum.fetch_add(g_frame_declared, std::memory_order_relaxed);
+    g_fc_sum.fetch_add(g_frame_count, std::memory_order_relaxed);
+    g_fs_sum.fetch_add(g_frame_safe, std::memory_order_relaxed);
+    g_frame_declared = g_frame_count = g_frame_safe = 0;
     g_stream_frame_n = 0;
     g_stream_frame_bytes = 0;
     std::memset(g_frame_set_addr, 0, sizeof(g_frame_set_addr));
