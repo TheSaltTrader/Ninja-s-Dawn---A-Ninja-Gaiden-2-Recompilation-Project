@@ -501,6 +501,11 @@ bool FrameSetInsert(uint32_t address, uint32_t bytes) {
 }
 std::atomic<uint64_t> g_stream_frame_max{0};
 std::atomic<uint64_t> g_stream_frame_bytes_max{0};
+// THE MEAN, beside the peak. A peak compared against another project's
+// per-frame rate is not a comparison, and the 66 MB vs 17 MB gap may be
+// entirely that.
+std::atomic<uint64_t> g_stream_frame_bytes_sum{0};
+std::atomic<uint64_t> g_stream_frames_counted{0};
 uint64_t g_stream_frame_bytes = 0;
 
 // THE LARGEST INDEX A DRAW REFERENCES, cached per index buffer.
@@ -760,12 +765,17 @@ std::string StreamReport() {
   if (!g_stream_n) return out;
   out = fmt::format(" | VERTEX STREAMS {} distinct, {} KB, readable {} unreadable {},"
                     " rejected {} | {} programs decoded, {} fetch slots"
-                    " | PER FRAME peak {} streams, {} KB | clamped {} | sizes"
+                    " | PER FRAME peak {} streams, {} KB; MEAN {} KB over {} frames"
+                    " | clamped {} | sizes"
                     " <64:{} <256:{} <1K:{} <4K:{} <16K:{} <64K:{} <1M:{} >=1M:{}",
                     g_stream_n, g_stream_bytes.load() / 1024, g_stream_readable.load(),
                     g_stream_unreadable.load(), g_stream_rejected.load(),
                     g_fetch_programs.load(), g_fetch_slots_total.load(),
                     g_stream_frame_max.load(), g_stream_frame_bytes_max.load() / 1024,
+                    g_stream_frames_counted.load()
+                        ? g_stream_frame_bytes_sum.load() / g_stream_frames_counted.load() / 1024
+                        : 0,
+                    g_stream_frames_counted.load(),
                     g_stream_clamped.load(),
                     g_size_bucket[0].load(), g_size_bucket[1].load(),
                     g_size_bucket[2].load(), g_size_bucket[3].load(),
@@ -1191,6 +1201,8 @@ void OnSwap(uint32_t, uint32_t, uint32_t) {
     if (g_stream_frame_bytes > g_stream_frame_bytes_max.load(std::memory_order_relaxed)) {
       g_stream_frame_bytes_max.store(g_stream_frame_bytes, std::memory_order_relaxed);
     }
+    g_stream_frame_bytes_sum.fetch_add(g_stream_frame_bytes, std::memory_order_relaxed);
+    g_stream_frames_counted.fetch_add(1, std::memory_order_relaxed);
     g_stream_frame_n = 0;
     g_stream_frame_bytes = 0;
     std::memset(g_frame_set_addr, 0, sizeof(g_frame_set_addr));
