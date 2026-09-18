@@ -521,13 +521,62 @@ uint64_t g_stream_frame_bytes = 0;
 struct IndexKey {
   uint32_t base, words;
   uint8_t fmt32, endian;
+  // THE RESTART STATE IS PART OF THE KEY. The reset index and its enable are
+  // registers, so two draws over the SAME index buffer can disagree about which
+  // values are vertices. Keyed without them, the first draw's answer is served
+  // to the second and the cache quietly reports the wrong maximum.
+  uint32_t reset_indx;
+  uint8_t restart_on;
   bool operator<(const IndexKey& o) const {
     if (base != o.base) return base < o.base;
     if (words != o.words) return words < o.words;
     if (fmt32 != o.fmt32) return fmt32 < o.fmt32;
-    return endian < o.endian;
+    if (endian != o.endian) return endian < o.endian;
+    if (reset_indx != o.reset_indx) return reset_indx < o.reset_indx;
+    return restart_on < o.restart_on;
   }
 };
+
+// Register indices, from the engine's own table rather than from memory.
+constexpr uint32_t kRegVgtMultiPrimIbResetIndx = 0x2103;
+constexpr uint32_t kRegPaSuScModeCntl = 0x2205;
+
+// Only these primitive types can carry a restart index; the engine filters the
+// list topologies out explicitly because Vulkan disallows restart on them.
+bool PrimitiveTakesRestart(uint32_t prim_type) {
+  switch (prim_type) {
+    case 0x03:  // kLineStrip
+    case 0x05:  // kTriangleFan
+    case 0x06:  // kTriangleStrip
+    case 0x0C:  // kLineLoop
+    case 0x0E:  // kQuadStrip
+    case 0x0F:  // kPolygon
+    case 0x15:  // k2DLineStrip
+    case 0x16:  // k2DTriStrip
+      return true;
+    default:
+      return false;
+  }
+}
+
+// The guest's endian swap, applied to a value loaded host-native from the
+// index buffer. kNone is a real case and must not be treated as "big-endian
+// anyway" - that was the bug.
+uint32_t GuestSwap32(uint32_t v, uint32_t endian) {
+  switch (endian & 3u) {
+    case 1:  // k8in16
+      return ((v & 0x00FF00FFu) << 8) | ((v & 0xFF00FF00u) >> 8);
+    case 2:  // k8in32
+      return (v << 24) | ((v & 0xFF00u) << 8) | ((v >> 8) & 0xFF00u) | (v >> 24);
+    case 3:  // k16in32
+      return (v << 16) | (v >> 16);
+    default:
+      return v;
+  }
+}
+uint16_t GuestSwap16(uint16_t v, uint32_t endian) {
+  return (endian & 3u) == 1u ? uint16_t((v << 8) | (v >> 8)) : v;
+}
 
 std::mutex g_maxidx_mutex;
 std::map<IndexKey, uint32_t> g_maxidx;
@@ -544,8 +593,25 @@ constexpr uint32_t kMaxIndexScan = 65536;
 bool ScanMaxIndex(const GpuDrawRecord* rec, bool fmt32, uint32_t* out) {
   auto* memory = REX_KERNEL_MEMORY();
   if (!memory || !rec->index_base || !rec->index_size_words) return false;
+
+  // Restart state, from the registers this draw actually carries.
+  uint32_t reset_indx = 0;
+  bool restart_on = false;
+  if (rec->registers && rec->register_count > kRegPaSuScModeCntl) {
+    const uint32_t prim_type = rec->vgt_draw_initiator & 0x3Fu;
+    restart_on = ((rec->registers[kRegPaSuScModeCntl] >> 21) & 1u) != 0 &&
+                 PrimitiveTakesRestart(prim_type);
+    if (rec->register_count > kRegVgtMultiPrimIbResetIndx) {
+      reset_indx = rec->registers[kRegVgtMultiPrimIbResetIndx] & 0xFFFFFFu;
+    }
+    // A 16-bit index buffer cannot hold a reset index above 0xFFFF, so the
+    // engine treats restart as OFF in that case rather than never matching.
+    if (restart_on && !fmt32 && reset_indx > 0xFFFFu) restart_on = false;
+  }
+
   const IndexKey key{rec->index_base, rec->index_size_words, uint8_t(fmt32 ? 1 : 0),
-                     uint8_t(rec->index_endian & 0xFF)};
+                     uint8_t(rec->index_endian & 0xFF), reset_indx,
+                     uint8_t(restart_on ? 1 : 0)};
   {
     std::lock_guard<std::mutex> lock(g_maxidx_mutex);
     auto it = g_maxidx.find(key);
@@ -575,19 +641,28 @@ bool ScanMaxIndex(const GpuDrawRecord* rec, bool fmt32, uint32_t* out) {
   }
 
   uint32_t hi = 0;
+  const uint32_t endian = rec->index_endian;
   for (uint32_t i = 0; i < n; ++i) {
     uint32_t v;
     if (fmt32) {
-      const uint8_t* q = buf.data() + size_t(i) * 4;
-      v = (uint32_t(q[0]) << 24) | (uint32_t(q[1]) << 16) | (uint32_t(q[2]) << 8) | q[3];
+      uint32_t raw;
+      std::memcpy(&raw, buf.data() + size_t(i) * 4, 4);
+      v = GuestSwap32(raw, endian);
     } else {
-      const uint8_t* q = buf.data() + size_t(i) * 2;
-      v = (uint32_t(q[0]) << 8) | q[1];
+      uint16_t raw;
+      std::memcpy(&raw, buf.data() + size_t(i) * 2, 2);
+      v = GuestSwap16(raw, endian);
     }
-    // 0xFFFF / 0xFFFFFFFF is the primitive RESTART sentinel, not a vertex.
-    // Counting it would make every stripped draw claim it reaches vertex 65535
-    // and the whole census would report "count under-reads, always".
-    if (v == (fmt32 ? 0xFFFFFFFFu : 0xFFFFu)) continue;
+    // ONLY THE LOW 24 BITS ARE AN INDEX. The hardware ignores the top byte of a
+    // 32-bit index - verified on real silicon per the engine's register notes -
+    // so junk up there would otherwise yield maxima in the millions and a
+    // `safe` extent larger than any buffer the game owns.
+    v &= 0xFFFFFFu;
+    // The restart sentinel is a REGISTER value under a REGISTER enable, not a
+    // constant. Counted as a vertex it inflates the maximum; skipped when
+    // restart is off it deflates it. Both directions are wrong and both are
+    // silent, so this follows the registers.
+    if (restart_on && v == reset_indx) continue;
     if (v > hi) hi = v;
   }
   if (capped) g_maxidx_capped.fetch_add(1, std::memory_order_relaxed);
