@@ -383,6 +383,38 @@ bool WantPipeline(uint32_t xenos_color_format);
 //     does not report low, it reports CONSISTENT - and agreement is the answer
 //     nobody checks twice.
 //
+// 13. THE SHADER'S STREAM INDEX IS INVERTED RELATIVE TO THE FETCH SLOT.
+//
+//         shader_recompiler.cpp:213
+//           const uint32_t stream = 95 - (lastFetchConstIndex * 3 + lastFetchConstSelect);
+//
+//         fable2_shader_common.h:93
+//           #define NGPU_STREAM(s) g_VertexStreamHeap[g_StreamSlots[(s) >> 2][(s) & 3]]
+//           uint4 g_StreamSlots[4] : packoffset(c44);     // sixteen entries
+//
+//     So the cache publishes a stream's descriptor at g_StreamSlots index
+//     95 - slot, NOT at slot. Getting that backwards binds every shader to some
+//     other stream's data, which draws plausible geometry rather than failing -
+//     the most expensive shape there is.
+//
+//     Measured, from the containers and the generated HLSL rather than assumed:
+//     NG2 uses SIX fetch slots, 90..95, giving stream indices 0..5. All sixteen
+//     entries are therefore sufficient and no remap is needed. The generated
+//     HLSL for all 324 rebuilt shaders contains exactly two stream indices,
+//     NGPU_STREAM(0) and NGPU_STREAM(1).
+//
+//     That last fact is also what caught a broken census: an earlier count
+//     claimed eighteen distinct slots spanning 0..95, which would have produced
+//     stream indices beyond the sixteen the array holds - impossible, since the
+//     index is a compile-time constant and dxc compiled every one of the 324.
+//     The shader output is the authority on what the shaders do; a scanner that
+//     disagrees with it is wrong, however carefully it was written.
+//
+//     XenosRecomp carries lastFetchConstIndex/lastFetchStride across vfetch_mini
+//     itself (the `if (!instr.isMiniFetch)` block at :203), so the TRANSLATION
+//     already handles minis. Only the runtime's own slot census had to learn
+//     this - see constraint 11's note and tools/native_gpu/vfetch_census.py.
+//
 // And the reason all of these are stated here rather than discovered later:
 // reading and running catch DIFFERENT classes. These two are structural - visible to a
 // reader, invisible to a run that never evicts or never takes the branch. The
