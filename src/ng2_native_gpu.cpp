@@ -311,6 +311,10 @@ struct FetchSlots {
 std::mutex g_fetch_mutex;
 std::map<uint32_t, FetchSlots> g_fetch_by_address;   // by-pointer vertex shaders
 std::atomic<uint64_t> g_fetch_programs{0};
+// vfetch_mini instructions skipped: their const_index and stride belong to the
+// preceding vfetch_full, so reading them names a slot at random.
+std::atomic<uint64_t> g_vfetch_mini_skipped{0};
+std::atomic<uint64_t> g_vfetch_full_seen{0};
 std::atomic<uint64_t> g_fetch_slots_total{0};
 
 // The slots the CURRENT vertex shader fetches from. Touched only on the GPU
@@ -349,6 +353,15 @@ void DecodeFetchSlots(const uint8_t* ucode, uint32_t bytes, FetchSlots* out) {
         const uint32_t at = (addr + j) * 3;
         if (at + 3 > n) continue;
         const uint32_t w0 = BeDword(ucode + at * 4);
+        // IS THIS A MINI? dword 1 bit 30. A mini reuses the preceding full's
+        // constant and stride; its own fields name a slot at random, and that
+        // slot is then read as though it held this draw's geometry.
+        const uint32_t w1 = BeDword(ucode + (at + 1) * 4);
+        if ((w1 >> 30) & 1u) {
+          g_vfetch_mini_skipped.fetch_add(1, std::memory_order_relaxed);
+          continue;
+        }
+        g_vfetch_full_seen.fetch_add(1, std::memory_order_relaxed);
         const uint32_t const_index = (w0 >> 20) & 0x1F;
         const uint32_t select = (w0 >> 25) & 0x3;
         if (select > 2) continue;                 // a group holds three fetches
@@ -944,6 +957,7 @@ std::string StreamReport() {
       " | endian none:{} 8in16:{} 8in32:{} 16in32:{}"
       " | format u16:{} u32:{}"
       " | fetch slot type invTex:{} invVtx:{} TEXTURE:{} vertex:{}"
+      " | vfetch full:{} MINI-SKIPPED:{}"
       "\n    count>declared overshoot x: <2:{} <4:{} ==4:{} <8:{} >=8:{}",
       g_ext_auto.load(), g_ext_indexed.load(), g_ext_unscannable.load(),
       g_ext_safe_gt_count.load(), g_ext_count_gt_declared.load(),
@@ -954,6 +968,7 @@ std::string StreamReport() {
       g_idx_fmt16.load(), g_idx_fmt32.load(),
       g_fetch_type[0].load(), g_fetch_type[1].load(),
       g_fetch_type[2].load(), g_fetch_type[3].load(),
+      g_vfetch_full_seen.load(), g_vfetch_mini_skipped.load(),
       g_over_ratio[1].load(), g_over_ratio[2].load(), g_over_ratio[3].load(),
       g_over_ratio[4].load(), g_over_ratio[5].load());
   for (int i = 0; i < g_stream_n && i < 6; ++i) {
