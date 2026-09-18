@@ -805,6 +805,14 @@ void NoteVertexStreams(const GpuDrawRecord* rec) {
       k.safe_bytes = k.bytes;
     }
 
+    // ASK THE CACHE FOR IT. The declared extent, already clamped to whole
+    // vertices above - see constraint 11 for why not the draw's index count.
+    // Endian is bits 0..1 of dword 1, below the 24-bit size the census reads.
+    if (g_cur_slots.stride[si]) {
+      render::WantStream(k.address, uint16_t(uint32_t(g_cur_slots.stride[si]) * 4u),
+                         uint8_t(d1 & 3u), k.bytes);
+    }
+
     {
       uint32_t b = k.bytes, bucket = 0;
       while (b >= 64 && bucket < 7) { b >>= 2; ++bucket; }

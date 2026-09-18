@@ -117,6 +117,11 @@ struct SurfaceDesc {
 };
 bool WantRenderTarget(const SurfaceDesc& desc);
 
+// Ask for a guest vertex stream to be resident. Cheap, callable from the draw
+// thread; the work happens on the render thread. See constraint 11 for why the
+// length passed here is the DECLARED extent and not the draw's index count.
+void WantStream(uint32_t base, uint16_t stride, uint8_t endian, uint32_t bytes);
+
 // THE PIPELINE A DRAW WOULD NEED, from the current shader pair and the target's
 // colour format. Returns true if a host pipeline already exists.
 //

@@ -15,6 +15,8 @@
 #include <vector>
 
 #include <rex/logging.h>
+#include <rex/system/kernel_state.h>
+#include <rex/system/xmemory.h>
 
 #if defined(_WIN32) && defined(NG2_HAVE_PLUME)
 #define NG2_PLUME_ON 1
@@ -61,6 +63,318 @@ std::thread g_thread;
 std::atomic<bool> g_running{false};
 std::atomic<uint64_t> g_presented{0};
 std::atomic<uint64_t> g_guest_frames{0};
+
+// THE GUEST VERTEX STREAM CACHE.
+//
+// Constraint 9: a translated vertex shader reads geometry through ngpu_vload
+// against a bindless StructuredBuffer, not through an input layout. So the
+// draw path's job is to publish guest vertex data as structured buffers, and
+// this is the structure that holds them.
+//
+// See this file's header, constraint 11, for why the extent is the DECLARED
+// size clamped to whole vertices rather than the draw's index count.
+
+struct StreamKeyGpu {
+  uint32_t base = 0;     // guest byte address
+  uint16_t stride = 0;   // bytes per vertex
+  uint8_t endian = 0;
+  uint8_t pad = 0;
+  bool operator<(const StreamKeyGpu& o) const {
+    if (base != o.base) return base < o.base;
+    if (stride != o.stride) return stride < o.stride;
+    return endian < o.endian;
+  }
+};
+
+struct StreamEntry {
+  uint64_t offset = 0;     // byte offset into the persistent buffer
+  uint32_t bytes = 0;      // how much is resident
+  uint32_t descriptor = 0; // slot in the bindless array
+  uint64_t built_frame = 0;
+  // ANTI-THRASH. A stream the guest rewrites every frame would otherwise
+  // rebuild every frame and cost more than it saves. Counted, and a stream that
+  // invalidates repeatedly is left alone for a while rather than fought.
+  uint32_t invalidations = 0;
+  uint64_t bypass_until_frame = 0;
+};
+
+std::mutex g_stream_mutex;
+std::map<StreamKeyGpu, StreamEntry> g_streams;
+
+// ONE persistent buffer with a bump allocator. Many small buffers would mean
+// many descriptors and many barriers; the guest's own streams are already
+// contiguous ranges of one address space and this mirrors that.
+std::unique_ptr<RenderBuffer> g_stream_heap;
+std::unique_ptr<RenderBuffer> g_stream_upload;
+uint64_t g_stream_heap_size = 0;
+uint64_t g_stream_bump = 0;
+uint32_t g_stream_next_descriptor = 0;
+
+// Sized from the measurement, not from a round number: peak 77 MB of distinct
+// streams referenced in one frame, so 256 MB holds several frames' worth of
+// working set before the bump allocator has to wrap.
+constexpr uint64_t kStreamHeapBytes = 256ull * 1024 * 1024;
+constexpr uint64_t kStreamUploadBytes = 16ull * 1024 * 1024;
+constexpr uint32_t kMaxStreamDescriptors = 8192;
+
+std::atomic<uint64_t> g_sc_hits{0};
+std::atomic<uint64_t> g_sc_misses{0};
+std::atomic<uint64_t> g_sc_rebuilt_longer{0};
+std::atomic<uint64_t> g_sc_invalidated{0};
+std::atomic<uint64_t> g_sc_bypassed{0};
+std::atomic<uint64_t> g_sc_uploaded_bytes{0};
+std::atomic<uint64_t> g_sc_heap_full{0};
+std::atomic<uint64_t> g_sc_desc_full{0};
+std::atomic<uint64_t> g_sc_unreadable{0};
+// What the index-range rule WOULD have saved, so the question is answered with
+// a number when it is settled rather than re-argued.
+std::atomic<uint64_t> g_sc_declared_bytes{0};
+std::atomic<uint64_t> g_sc_range_bytes{0};
+
+bool g_streams_enabled = false;
+
+// THE GUEST'S ENDIAN SWAP, applied per element as the bytes are copied.
+//
+// Vertex data is fetched with the same Endian enum as an index buffer:
+// kNone / k8in16 / k8in32 / k16in32. A stream copied without it renders as
+// garbage coordinates rather than failing, so this is counted per stream and
+// reported - "we swapped nothing" and "there was nothing to swap" must not
+// print the same thing.
+void SwapGuestBytes(uint8_t* dst, const uint8_t* src, uint32_t bytes, uint32_t endian) {
+  switch (endian & 3u) {
+    case 1: {  // k8in16
+      for (uint32_t i = 0; i + 1 < bytes; i += 2) {
+        dst[i] = src[i + 1];
+        dst[i + 1] = src[i];
+      }
+      break;
+    }
+    case 2: {  // k8in32
+      for (uint32_t i = 0; i + 3 < bytes; i += 4) {
+        dst[i] = src[i + 3];
+        dst[i + 1] = src[i + 2];
+        dst[i + 2] = src[i + 1];
+        dst[i + 3] = src[i];
+      }
+      break;
+    }
+    case 3: {  // k16in32
+      for (uint32_t i = 0; i + 3 < bytes; i += 4) {
+        dst[i] = src[i + 2];
+        dst[i + 1] = src[i + 3];
+        dst[i + 2] = src[i];
+        dst[i + 3] = src[i + 1];
+      }
+      break;
+    }
+    default:
+      std::memcpy(dst, src, bytes);
+      break;
+  }
+}
+
+// RE-ARM THE WRITE-WATCH. Must be called on EVERY build and rebuild.
+//
+// ResetWriteWatch both reports and CLEARS; an entry rebuilt without re-arming
+// never reports another write, so the cache serves stale geometry for the rest
+// of the run while its hit rate looks excellent. That is the failure mode this
+// function exists to make hard to forget, which is why it is not inlined into
+// the one call site it currently has.
+void ArmWriteWatch(void* host_addr, uint32_t bytes) {
+#if defined(_WIN32)
+  if (!host_addr || !bytes) return;
+  ::ResetWriteWatch(host_addr, bytes);
+#else
+  (void)host_addr;
+  (void)bytes;
+#endif
+}
+
+// Has the guest written to this stream since it was built?
+bool StreamDirty(void* host_addr, uint32_t bytes) {
+#if defined(_WIN32)
+  if (!host_addr || !bytes) return false;
+  void* pages[64];
+  ULONG_PTR count = 64;
+  ULONG granularity = 0;
+  const UINT r = ::GetWriteWatch(0, host_addr, bytes, pages, &count, &granularity);
+  // A FAILED QUERY IS NOT A CLEAN STREAM. Returning false here would silently
+  // pin every entry as fresh forever, which is the same defect as a write-watch
+  // that is never re-armed. Treat a failure as dirty: wasteful, not wrong.
+  if (r != 0) return true;
+  return count > 0;
+#else
+  (void)host_addr;
+  (void)bytes;
+  return true;
+#endif
+}
+
+// Requests raised by the draw thread, drained by the render thread.
+struct StreamRequest {
+  StreamKeyGpu key;
+  uint32_t bytes = 0;
+};
+std::vector<StreamRequest> g_stream_pending;
+
+// DRAW THREAD. Cheap by construction: a map probe and a push. Anything that
+// could block the guest's command processor belongs in the other phase.
+void WantStreamImpl(uint32_t base, uint16_t stride, uint8_t endian, uint32_t bytes) {
+  if (!g_streams_enabled || !base || !stride || !bytes) return;
+  const StreamKeyGpu key{base, stride, endian, 0};
+  std::lock_guard<std::mutex> lock(g_stream_mutex);
+  auto it = g_streams.find(key);
+  if (it != g_streams.end() && it->second.bytes >= bytes) {
+    g_sc_hits.fetch_add(1, std::memory_order_relaxed);
+    // A HIT IS NOT PROOF THE BYTES ARE CURRENT. Dirtiness is checked on the
+    // render thread, where reading the write-watch is safe to pair with the
+    // rebuild that follows it. Checking here and rebuilding there would leave a
+    // window in which the watch is consumed and nothing acts on it.
+    return;
+  }
+  g_sc_misses.fetch_add(1, std::memory_order_relaxed);
+  if (g_stream_pending.size() < 4096) g_stream_pending.push_back({key, bytes});
+}
+
+// RENDER THREAD. Owns the device, so everything expensive lives here.
+void BuildPendingStreams(uint64_t frame) {
+  if (!g_streams_enabled || !g_gpu.ready) return;
+
+  std::vector<StreamRequest> todo;
+  {
+    std::lock_guard<std::mutex> lock(g_stream_mutex);
+    todo.swap(g_stream_pending);
+  }
+  if (todo.empty()) return;
+
+  auto* memory = REX_KERNEL_MEMORY();
+  if (!memory) return;
+
+  if (!g_stream_heap) {
+    g_stream_heap = g_gpu.device->createBuffer(
+        RenderBufferDesc::DefaultBuffer(kStreamHeapBytes, RenderBufferFlag::STORAGE));
+    g_stream_upload = g_gpu.device->createBuffer(
+        RenderBufferDesc::UploadBuffer(kStreamUploadBytes));
+    g_stream_heap_size = kStreamHeapBytes;
+    if (!g_stream_heap || !g_stream_upload) {
+      // Refuse rather than limp: a null heap would make every later build look
+      // like a miss forever and the hit rate would read as a cache problem.
+      g_streams_enabled = false;
+      REXLOG_ERROR("[ng2-plume] stream cache: buffer creation failed, disabled");
+      return;
+    }
+  }
+
+  for (const auto& req : todo) {
+    StreamEntry entry;
+    bool have = false;
+    {
+      std::lock_guard<std::mutex> lock(g_stream_mutex);
+      auto it = g_streams.find(req.key);
+      if (it != g_streams.end()) { entry = it->second; have = true; }
+      if (have && frame < entry.bypass_until_frame) {
+        g_sc_bypassed.fetch_add(1, std::memory_order_relaxed);
+        continue;
+      }
+    }
+
+    auto* host = memory->TranslatePhysical<uint8_t*>(req.key.base);
+    if (!host) { g_sc_unreadable.fetch_add(1, std::memory_order_relaxed); continue; }
+
+    const bool longer = have && req.bytes > entry.bytes;
+    const bool dirty = have && StreamDirty(host, entry.bytes);
+    if (have && !longer && !dirty) continue;
+    if (longer) g_sc_rebuilt_longer.fetch_add(1, std::memory_order_relaxed);
+    if (dirty) {
+      g_sc_invalidated.fetch_add(1, std::memory_order_relaxed);
+      // ANTI-THRASH: a stream the guest rewrites constantly costs more to cache
+      // than to ignore. Backing off is cheaper than fighting it, and the count
+      // says how much is being given up.
+      if (++entry.invalidations >= 4) {
+        entry.bypass_until_frame = frame + 600;
+        entry.invalidations = 0;
+      }
+    }
+
+    // Whole vertices only. A partial trailing vertex cannot be drawn and
+    // copying it is how a stream cache turns into a buffer copier.
+    uint32_t want = req.bytes;
+    if (req.key.stride) want -= want % req.key.stride;
+    if (!want || want > kStreamUploadBytes) continue;
+
+    uint64_t offset = entry.offset;
+    if (!have || longer) {
+      if (g_stream_bump + want > g_stream_heap_size) {
+        g_sc_heap_full.fetch_add(1, std::memory_order_relaxed);
+        continue;
+      }
+      offset = g_stream_bump;
+      g_stream_bump += (want + 255) & ~255ull;   // keep allocations aligned
+      if (!have) {
+        if (g_stream_next_descriptor >= kMaxStreamDescriptors) {
+          g_sc_desc_full.fetch_add(1, std::memory_order_relaxed);
+          continue;
+        }
+        entry.descriptor = g_stream_next_descriptor++;
+      }
+    }
+
+    // Read guest memory under SEH: the address comes from a fetch constant this
+    // code cannot vouch for, which is exactly the case constraint 4 was
+    // corrected over.
+    bool ok = false;
+    if (void* mapped = g_stream_upload->map()) {
+#if defined(_WIN32)
+      __try {
+        SwapGuestBytes(static_cast<uint8_t*>(mapped), host, want, req.key.endian);
+        ok = true;
+      } __except (EXCEPTION_EXECUTE_HANDLER) {
+        ok = false;
+      }
+#else
+      SwapGuestBytes(static_cast<uint8_t*>(mapped), host, want, req.key.endian);
+      ok = true;
+#endif
+      g_stream_upload->unmap();
+    }
+    if (!ok) { g_sc_unreadable.fetch_add(1, std::memory_order_relaxed); continue; }
+
+    g_gpu.cmd->copyBufferRegion(RenderBufferReference(g_stream_heap.get(), offset),
+                                RenderBufferReference(g_stream_upload.get(), 0), want);
+    g_sc_uploaded_bytes.fetch_add(want, std::memory_order_relaxed);
+
+    // RE-ARM THE WATCH, every build and every rebuild. An entry rebuilt without
+    // this never reports another write and serves stale geometry for the rest
+    // of the run, with a hit rate that looks better for it.
+    ArmWriteWatch(host, want);
+
+    entry.offset = offset;
+    entry.bytes = want;
+    entry.built_frame = frame;
+    {
+      std::lock_guard<std::mutex> lock(g_stream_mutex);
+      g_streams[req.key] = entry;
+    }
+  }
+}
+
+std::string StreamCacheReport() {
+  if (!g_streams_enabled) return {};
+  size_t resident = 0;
+  {
+    std::lock_guard<std::mutex> lock(g_stream_mutex);
+    resident = g_streams.size();
+  }
+  return fmt::format(
+      " | STREAM CACHE {} resident, {} KB of {} MB used, {} descriptors"
+      " | hits {} misses {} | rebuilt-longer {} invalidated {} bypassed {}"
+      " | uploaded {} KB | heap-full {} desc-full {} unreadable {}",
+      resident, g_stream_bump / 1024, kStreamHeapBytes / (1024 * 1024),
+      g_stream_next_descriptor, g_sc_hits.load(), g_sc_misses.load(),
+      g_sc_rebuilt_longer.load(), g_sc_invalidated.load(), g_sc_bypassed.load(),
+      g_sc_uploaded_bytes.load() / 1024, g_sc_heap_full.load(),
+      g_sc_desc_full.load(), g_sc_unreadable.load());
+}
 
 // THE SHADER REGISTRY, keyed by guest address BY VALUE.
 //
@@ -608,6 +922,10 @@ void RenderOneFrame() {
   if (!g_gpu.swap->acquireTexture(g_gpu.acquire.get(), &index)) return;
 
   g_gpu.cmd->begin();
+  // INSIDE the command list: these record copyBufferRegion. Before begin() the
+  // copies would go nowhere without reporting an error, and every cache counter
+  // would still read healthy.
+  BuildPendingStreams(g_presented.load(std::memory_order_relaxed));
   RenderTexture* tex = g_gpu.swap->getTexture(index);
   g_gpu.cmd->barriers(RenderBarrierStage::GRAPHICS,
                       RenderTextureBarrier(tex, RenderTextureLayout::COLOR_WRITE));
@@ -680,6 +998,11 @@ void Thread() {
 void Start() {
 #if defined(NG2_PLUME_ON)
   if (!std::getenv("NG2_NATIVE_GPU_WINDOW")) return;
+  // Constraint 6: gated, default off, from the first line. The cache is built
+  // and measured before anything binds it, so it can be proven correct before
+  // it can render anything wrong.
+  g_streams_enabled = std::getenv("NG2_NATIVE_GPU_STREAMS") != nullptr;
+  REXLOG_INFO("[ng2-plume] stream cache: {}", g_streams_enabled ? "ON" : "off");
   if (g_running.exchange(true)) return;
   g_thread = std::thread(Thread);
   // Forward slashes deliberately: written with backslashes, "D:\ng2_..." makes
@@ -750,7 +1073,7 @@ void EndFrame() {
                 frame, drawn, handed, 100.0 * double(drawn) / double(handed), handed - drawn,
                 vs_n, ps_n, g_vs_miss.load(), g_ps_miss.load(),
                 g_vs_immediate.load(), g_ps_immediate.load());
-    REXLOG_INFO("[ng2-plume] manifest: {} programs | matched VS {} PS {} | unknown VS {} PS {}"
+    REXLOG_INFO("{}", fmt::format("[ng2-plume] manifest: {} programs | matched VS {} PS {} | unknown VS {} PS {}"
                 " | stage-mismatch {} | DXIL loaded {} ({} KB), UNLOADABLE {}"
                 " | RT wanted {} created {} failed {} UNMAPPED-FORMAT {} approximated {}"
                 " | immediate matched {} | unknown DISTINCT programs {}"
@@ -762,7 +1085,7 @@ void EndFrame() {
                 g_rt_unmapped.load(), g_rt_approx.load(),
                 g_immediate_matched.load(), UnknownDistinct(),
                 PsoWanted(), g_pso_created.load(), g_pso_failed.load(),
-                g_pso_no_dxil.load());
+                g_pso_no_dxil.load()) + StreamCacheReport());
   }
 #endif
 }
@@ -996,6 +1319,10 @@ bool WantPipeline(uint32_t xenos_color_format) {
   (void)xenos_color_format;
   return false;
 #endif
+}
+
+void WantStream(uint32_t base, uint16_t stride, uint8_t endian, uint32_t bytes) {
+  WantStreamImpl(base, stride, endian, bytes);
 }
 
 bool WantRenderTarget(const SurfaceDesc& desc) {
