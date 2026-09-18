@@ -261,7 +261,16 @@ bool ReadGuestBytes(const uint8_t* p, uint32_t bytes, uint8_t* out);
 // 32 fetch slots, 2 dwords each, from SHADER_CONSTANT_FETCH_00_0. A slot whose
 // address is zero is unused; the rest name guest memory holding vertex data.
 constexpr uint32_t kRegShaderConstantFetch00 = 0x4800;
-constexpr uint32_t kFetchSlots = 32;
+// NINETY-SIX, NOT THIRTY-TWO. The fetch constant file is 32 groups of 6 dwords,
+// and a group holds EITHER one texture fetch (6 dwords) OR three vertex fetches
+// of 2 dwords each - which is why the recompiler's stream index is
+// 95 - (constIndex * 3 + select). Scanning 32 slots covered a sixth of the file.
+constexpr uint32_t kFetchSlots = 96;
+// A slot that is not currently a vertex fetch decodes to nonsense, and there is
+// nothing in the constants alone that says which is which. So implausible
+// results are REJECTED AND COUNTED rather than filtered away silently: a stream
+// larger than this is not geometry, it is a texture constant being read as one.
+constexpr uint32_t kMaxStreamBytes = 16u << 20;
 
 struct StreamKey {
   uint32_t address;   // guest byte address
@@ -280,6 +289,10 @@ std::atomic<uint64_t> g_stream_overflow{0};
 std::atomic<uint64_t> g_stream_readable{0};
 std::atomic<uint64_t> g_stream_unreadable{0};
 std::atomic<uint64_t> g_stream_bytes{0};
+// Slots whose decode is not plausibly geometry - a texture constant read as a
+// vertex fetch. Counted, because "we ignored some" and "there were none"
+// must not print the same number.
+std::atomic<uint64_t> g_stream_rejected{0};
 
 void NoteVertexStreams(const GpuDrawRecord* rec) {
   if (!rec->registers ||
@@ -290,10 +303,18 @@ void NoteVertexStreams(const GpuDrawRecord* rec) {
   for (uint32_t i = 0; i < kFetchSlots; ++i) {
     const uint32_t d0 = r[kRegShaderConstantFetch00 + i * 2];
     const uint32_t d1 = r[kRegShaderConstantFetch00 + i * 2 + 1];
-    const uint32_t addr_dwords = d0 >> 2;      // type:2 then address:30
-    const uint32_t size_dwords = d1 >> 2;      // endian:2 then size:24
+    const uint32_t addr_dwords = d0 >> 2;                 // type:2 then address:30
+    // MASK THE SIZE TO ITS 24 BITS. Without the mask the 6 pad bits above it
+    // ride along and every stream reads as 268,435,540 bytes - 256 MB apiece,
+    // 16 GB of "geometry" in one frame. The absurdity is what exposed it; a
+    // plausible wrong number would not have.
+    const uint32_t size_dwords = (d1 >> 2) & 0xFFFFFFu;   // endian:2 then size:24
     if (!addr_dwords || !size_dwords) continue;
     StreamKey k{addr_dwords << 2, size_dwords << 2};
+    if (k.bytes > kMaxStreamBytes) {
+      g_stream_rejected.fetch_add(1, std::memory_order_relaxed);
+      continue;
+    }
 
     bool is_new = false;
     {
@@ -346,9 +367,10 @@ std::string StreamReport() {
   std::string out;
   std::lock_guard<std::mutex> lock(g_stream_mutex);
   if (!g_stream_n) return out;
-  out = fmt::format(" | VERTEX STREAMS {} distinct, {} KB, readable {} unreadable {}",
+  out = fmt::format(" | VERTEX STREAMS {} distinct, {} KB, readable {} unreadable {},"
+                    " rejected {}",
                     g_stream_n, g_stream_bytes.load() / 1024, g_stream_readable.load(),
-                    g_stream_unreadable.load());
+                    g_stream_unreadable.load(), g_stream_rejected.load());
   if (const uint64_t o = g_stream_overflow.load()) out += fmt::format(" (+{} OVERFLOW)", o);
   for (int i = 0; i < g_stream_n && i < 6; ++i) {
     out += fmt::format("\n    [{}] {:08X} {} bytes, used {}",
