@@ -453,6 +453,13 @@ std::atomic<uint64_t> g_stream_bytes{0};
 // vertex fetch. Counted, because "we ignored some" and "there were none"
 // must not print the same number.
 std::atomic<uint64_t> g_stream_rejected{0};
+// THE FETCH CONSTANT'S TYPE, bits 0..1 of dword 0, which this census read past
+// for its entire life. kInvalidTexture=0, kInvalidVertex=1, kTexture=2,
+// kVertex=3 - and only kVertex is a vertex buffer. Counted per type so a
+// rejection says WHAT was in the slot: mostly kTexture would mean the vfetch
+// decode is naming the wrong slots, which is a larger problem than a stale
+// constant.
+std::atomic<uint64_t> g_fetch_type[4] = {};
 // WHERE THE BYTES COME FROM. The per-frame total read 957 MB against the
 // plugin's own ~17 MB/frame, and keying by address alone brought it to 66 MB -
 // still high. A histogram attributes the remainder instead of inviting another
@@ -764,6 +771,13 @@ void NoteVertexStreams(const GpuDrawRecord* rec) {
     // 16 GB of "geometry" in one frame. The absurdity is what exposed it; a
     // plausible wrong number would not have.
     const uint32_t size_dwords = (d1 >> 2) & 0xFFFFFFu;   // endian:2 then size:24
+    // THE TYPE DECIDES WHETHER THIS IS A VERTEX BUFFER AT ALL. The engine
+    // refuses any slot that is not kVertex before reading its address; this
+    // census never looked, so a texture constant or a stale slot was decoded as
+    // geometry with whatever address and size its bytes spelled.
+    const uint32_t fetch_type = d0 & 3u;
+    g_fetch_type[fetch_type].fetch_add(1, std::memory_order_relaxed);
+    if (fetch_type != 3u) continue;               // 3 == kVertex
     if (!addr_dwords || !size_dwords) continue;
     StreamKey k{addr_dwords << 2, size_dwords << 2};
     if (k.bytes > kMaxStreamBytes) {
@@ -929,6 +943,7 @@ std::string StreamReport() {
       "\n    index scans {} (cached), faults {}, CAPPED {}"
       " | endian none:{} 8in16:{} 8in32:{} 16in32:{}"
       " | format u16:{} u32:{}"
+      " | fetch slot type invTex:{} invVtx:{} TEXTURE:{} vertex:{}"
       "\n    count>declared overshoot x: <2:{} <4:{} ==4:{} <8:{} >=8:{}",
       g_ext_auto.load(), g_ext_indexed.load(), g_ext_unscannable.load(),
       g_ext_safe_gt_count.load(), g_ext_count_gt_declared.load(),
@@ -937,6 +952,8 @@ std::string StreamReport() {
       g_idx_endian[0].load(), g_idx_endian[1].load(),
       g_idx_endian[2].load(), g_idx_endian[3].load(),
       g_idx_fmt16.load(), g_idx_fmt32.load(),
+      g_fetch_type[0].load(), g_fetch_type[1].load(),
+      g_fetch_type[2].load(), g_fetch_type[3].load(),
       g_over_ratio[1].load(), g_over_ratio[2].load(), g_over_ratio[3].load(),
       g_over_ratio[4].load(), g_over_ratio[5].load());
   for (int i = 0; i < g_stream_n && i < 6; ++i) {
