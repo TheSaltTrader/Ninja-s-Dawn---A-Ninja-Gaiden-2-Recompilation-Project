@@ -336,6 +336,48 @@ bool WantPipeline(uint32_t xenos_color_format);
 //     probe refuses and a pipeline exists, so the size of the trap is a number
 //     in the log rather than a paragraph here.
 //
+// 11. THE DRAW'S INDEX COUNT IS NOT AN UPPER BOUND ON THE BYTES IT READS.
+//     Measured, on real Chapter 1 gameplay:
+//
+//         indexed draws     4,207,622
+//         maxidx+1 > count  2,427,176      57.7%
+//
+//     Indices are arbitrary: nothing stops 30 indices reaching vertex 900. So a
+//     stream cache sized by `index_count * stride` would upload a TRUNCATED
+//     buffer for the majority of NG2's indexed geometry, and truncated geometry
+//     renders subtly wrong rather than missing - the failure mode that costs
+//     the most to find.
+//
+//     The cache must use the index RANGE - (max_index + 1) * stride, scanned
+//     once per (base, issued count, format, endian, restart state) and cached -
+//     or the declared extent clamped to whole vertices, which is looser and
+//     safe. It must NOT use the count.
+//
+//     Related and unresolved: 21% of indexed draws want more bytes under
+//     `count * stride` than the fetch constant declares the buffer to hold, and
+//     24% do under the index range. A draw cannot read past its own buffer, so
+//     for a fifth of draws the stride, the declared size, or the pairing of the
+//     two is being misread. Until that is explained, treat the declared size as
+//     the safe bound and the index range as the measurement under test - not
+//     the other way round.
+//
+// 12. AN EXTENT OR RESIDENCY CENSUS MUST BE ACCUMULATED PER FRAME. The first
+//     version of this one was cumulative over a run and printed:
+//
+//         READ EXTENT over 512 streams: declared 31 KB | count 31 KB | safe 31 KB
+//
+//     Three identical totals, which reads as the three rules agreeing. It was
+//     the first 512 addresses of a run that OVERFLOWED 6,383,623 TIMES - about
+//     62 bytes each - while the frame itself referenced 246 streams and 77 MB.
+//
+//     A bigger table does not fix it: guest vertex addresses churn into the
+//     millions over a run. But a cache only ever holds ONE FRAME, which is the
+//     quantity that decides the design, so that is the quantity to measure.
+//
+//     The general form, worth more than the instance: a saturated instrument
+//     does not report low, it reports CONSISTENT - and agreement is the answer
+//     nobody checks twice.
+//
 // And the reason all of these are stated here rather than discovered later:
 // reading and running catch DIFFERENT classes. These two are structural - visible to a
 // reader, invisible to a run that never evicts or never takes the branch. The
