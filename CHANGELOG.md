@@ -3,6 +3,41 @@
 Versions are cut with `tools/make_release.py`, which refuses to package a
 version that has no section here.
 
+## v1.0.23 - 2026-09-22
+
+### Fixed - Ultrawide and the scene fades are back (regression in v1.0.22)
+
+v1.0.22 shipped a GPU runtime that did not contain the ultrawide support. On a
+wider-than-16:9 screen the 3D stopped filling the width and sat between black
+bars, and the full-screen scene fades - the start menu fade and the 2D chapter
+background fading into the 3D - were pillarboxed with it. Turning "Keep aspect
+ratio" off did not recover it; it stretched the picture instead, because the
+field of view was no longer being widened to compensate.
+
+Ninja Gaiden II's ultrawide is not one piece of code. The GPU plugin widens the
+3D projection, and the runtime decides whether the finished frame fills the
+screen or is pillarboxed - gameplay fills, menus and videos stay 16:9. The two
+halves talk through a shared setting. v1.0.22 carried a plugin that could widen
+and a runtime that could not fill, so the widen had nowhere to go.
+
+The release now ships a runtime that carries it, and the packaging step refuses
+to build a release whose runtime or plugin has lost an NG2 feature - the check
+that existed before compared where each file came from, not what was inside it,
+which is how this got out.
+
+### Fixed - An interrupted update no longer leaves a half-updated install
+
+The updater waited up to two minutes for the game to exit and then copied the
+new files whether it had exited or not. If a file was still locked the copy
+stopped part way through and the game was relaunched with some files new and
+some old. The executable, the runtime and the GPU plugin are one matched set;
+a mismatched one exits during startup with no error and an empty log.
+
+It now refuses to start if the old process is still running, and stages every
+file beside its destination before moving any of them into place, so an update
+either applies completely or leaves the working install exactly as it was.
+Either way the reason is written to update\last_error.txt.
+
 ## v1.0.22 - 2026-09-22
 
 ### Fixed - A rare hang or texture corruption during heavy streaming
