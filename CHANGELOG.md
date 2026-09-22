@@ -3,6 +3,33 @@
 Versions are cut with `tools/make_release.py`, which refuses to package a
 version that has no section here.
 
+## v1.0.24 - 2026-09-22
+
+### Changed - Installing from a disc image now leaves the setup screen ready
+
+After an install finished, the setup screen re-checked the game folder but not
+the downloadable content or the saves, so both still showed whatever they had
+found before - and the next step was pressing Rescan twice rather than Play.
+All three are now re-checked once when an install completes.
+
+The save folder is only re-scanned when one has been chosen, which is the same
+condition that enables its own Rescan button: that scan also queues the saves it
+finds for import, so running it against nothing would clear a queue nobody asked
+to clear.
+
+### Fixed - The Resolution setting described ultrawide as impossible
+
+The help text on Resolution said that on a wider-than-16:9 screen the picture is
+pillarboxed with Keep aspect ratio on and stretched with it off. That is true
+only with Ultrawide (3D) turned off, and it was the whole description - so
+choosing an ultrawide resolution read as a choice between black bars and a
+distorted picture, while the setting that fixes it sat four rows below with a
+description that never mentioned resolution.
+
+Both settings now refer to each other. Nothing about how they work has changed:
+Ultrawide (3D) has been selectable on the first-run setup screen, and not greyed
+out, since it was added.
+
 ## v1.0.23 - 2026-09-22
 
 ### Fixed - Ultrawide and the scene fades are back (regression in v1.0.22)
