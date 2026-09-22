@@ -414,8 +414,10 @@ bool DrawSettings(Ng2Settings& s, const PageOptions& opts) {
              "The size of the window, or of the surface the picture is scaled "
              "to in fullscreen. The game itself always renders 16:9, at the "
              "internal render size and scale below, and is told a 16:9 display "
-             "whatever this is set to - so on an ultrawide the picture is "
-             "pillarboxed with Keep aspect ratio on, and stretched with it off.");
+             "whatever this is set to. On a wider-than-16:9 resolution, turn on "
+             "Ultrawide (3D) below: gameplay then fills the width with correct "
+             "proportions, and menus and videos stay 16:9. With it off you get "
+             "pillarboxing (Keep aspect ratio on) or a stretched picture (off).");
     int res_index = ResolutionIndex(s);
     if (ImGui::Combo("##resolution", &res_index, kResolutionNames,
                      IM_ARRAYSIZE(kResolutionNames))) {
@@ -483,7 +485,9 @@ bool DrawSettings(Ng2Settings& s, const PageOptions& opts) {
              "wider screen with correct proportions - the world, characters and "
              "enemies all show more across the width, no stretching. Vertical view "
              "and depth are unchanged. Full-screen menus and videos stay 16:9 with "
-             "black bars, and the in-game HUD stays 16:9. Takes effect immediately.");
+             "black bars, and the in-game HUD stays 16:9. Takes effect immediately. "
+             "Turn this on whenever Resolution above is wider than 16:9 - without "
+             "it a wide resolution only gets you black bars or a stretched image.");
     changed |= ImGui::Checkbox("##ultrawide", &s.ultrawide);
 
     RowStart("Hide the pointer after",
@@ -1015,6 +1019,17 @@ void SetupScreen::PollInstall() {
       settings_->Save();
     }
     RefreshGame();
+    // ...and the other two sections, so the screen is ready without the player
+    // pressing Rescan twice. An install is exactly the moment all three are
+    // stale: the game folder has just appeared, and the DLC and saves are
+    // usually read from the same disc or folder the player has just pointed at.
+    RefreshDlc();
+    // RefreshSaves() is NOT a pure read - it calls QueueSaveImports(), which
+    // replaces the queue - and the Rescan button beside it is disabled when no
+    // save folder has been chosen. Same guard here: without it an install would
+    // scan an empty path and clear a queue nobody asked to clear.
+    if (!save_path_.empty())
+      RefreshSaves();
   }
 }
 
