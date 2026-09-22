@@ -3,6 +3,38 @@
 Versions are cut with `tools/make_release.py`, which refuses to package a
 version that has no section here.
 
+## v1.0.22 - 2026-09-22
+
+### Fixed - A rare hang or texture corruption during heavy streaming
+
+The GPU plugin uploads texture and buffer data through a pool of copy workers.
+Those workers are handed a batch of jobs at a time, and a worker draining one
+batch could claim a job belonging to the NEXT batch - one queued while it was
+still working. It then decremented a counter that had been sized for the batch
+it started on.
+
+Both outcomes were bad. The counter could wrap past zero, and the frame waits
+forever on a count that never reaches it - the game hangs. Or the batch is
+declared finished early, and the GPU reads an upload buffer while a worker is
+still writing into it - which is not a hang but corrupt data, drawn.
+
+Ninja Gaiden II's own streaming is what exposed it: an assertion added to catch
+the case fired once in 41,400 frames, in a chapter load. That is rare enough to
+have been dismissed as a one-off crash for a long time, and frequent enough to
+reach players.
+
+The earlier attempt at this fix pinned each worker to the batch's generation
+number, which made it rarer rather than impossible - the generation only changes
+when a batch starts, while the jobs for the next one are queued before that, so
+a worker could still be pinned to the right generation and reach the wrong work.
+Workers are now pinned to the batch's END, so a worker cannot claim past the
+batch it woke for however much the queue grows behind it.
+
+This is a change to the shared GPU plugin, not to the game code, so no settings
+or saves are affected. The plugin in this release is the v1.0.20 engine base
+with only the two copy-pool fixes applied, rather than a newer engine - the
+smallest change that carries the fix.
+
 ## v1.0.21 - 2026-09-16
 
 ### Changed - The frame-rate setting no longer offers anything above 60
