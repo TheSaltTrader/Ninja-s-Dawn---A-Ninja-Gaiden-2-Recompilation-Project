@@ -57,6 +57,7 @@ LEDGER = [
     ("fades: solid-2d gate",                "plugin",  b"solid2d",             "v1.0.20"),
     # 1.4 / 1.5 SDK fixes
     ("sdk: stuck-wait watchdog",            "runtime", b"watchdog",            "xboxkrnl_threading.cpp"),
+    ("sdk: ring re-init fix (both pointers)", "plugin", b"pointers reset",       "InitializeRingBuffer; the v1.0.0 attract-freeze fix"),
     ("sdk: ring dump on bad packet",        "plugin",  b"RINGDUMP",            "command_processor.cpp"),
     ("sdk: clear_memory_page_state path",   "plugin",  b"clear_memory_page_state", "NG2 is the only title on it"),
     ("sdk: upload copy pool present",       "plugin",  b"shared_memory_upload_threads", "the POOL, not the fix"),
