@@ -80,6 +80,24 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
 }
 
 struct MonitorPick { int index = 0, found = 0; RECT rect = {}; };
+
+// The game's own top-level window (this process, title "Ninja Gaiden II  -  v..."): the native window takes its
+// client size and its monitor, so a picture comparison resamples both from identical pixels (Fable II measured a
+// client-size mismatch alone at ~0.002 of difference) and both windows live under one DPI scale.
+struct GameWindowPick { HWND hwnd = nullptr; };
+BOOL CALLBACK PickGameWindow(HWND h, LPARAM lp) {
+  auto* pick = reinterpret_cast<GameWindowPick*>(lp);
+  DWORD pid = 0;
+  GetWindowThreadProcessId(h, &pid);
+  if (pid != GetCurrentProcessId() || !IsWindowVisible(h)) return TRUE;
+  char title[128] = {};
+  GetWindowTextA(h, title, sizeof(title));
+  if (std::strstr(title, "Ninja Gaiden II") && !std::strstr(title, "native")) {
+    pick->hwnd = h;
+    return FALSE;
+  }
+  return TRUE;
+}
 BOOL CALLBACK PickMonitor(HMONITOR mon, HDC, LPRECT rect, LPARAM lp) {
   auto* pick = reinterpret_cast<MonitorPick*>(lp);
   if (pick->found == pick->index) { pick->rect = *rect; }
@@ -105,7 +123,26 @@ bool CreateNativeWindow() {
   }
   int x, y, w, h;
   DWORD style;
-  if (g_spec.fullscreen) {
+  GameWindowPick game;
+  EnumWindows(PickGameWindow, reinterpret_cast<LPARAM>(&game));
+  RECT game_client = {};
+  POINT game_origin = {};
+  bool mirror = false;
+  if (game.hwnd && GetClientRect(game.hwnd, &game_client) && ClientToScreen(game.hwnd, &game_origin) &&
+      game_client.right > 0 && game_client.bottom > 0) {
+    mirror = true;
+  }
+  if (mirror && !g_spec.fullscreen) {
+    // The same client size, beside the game's window on its monitor (offset so both stay visible to a person;
+    // captures do not need visibility).
+    style = WS_OVERLAPPEDWINDOW;
+    RECT r = {0, 0, game_client.right, game_client.bottom};
+    AdjustWindowRect(&r, style, FALSE);
+    w = r.right - r.left; h = r.bottom - r.top;
+    x = game_origin.x + 40; y = game_origin.y + 40;
+    REXLOG_INFO("[ngpu-window] mirroring the game window's client {}x{} at {},{}", game_client.right,
+                game_client.bottom, game_origin.x, game_origin.y);
+  } else if (g_spec.fullscreen) {
     // Borderless on the whole monitor - the same shape the game's own fullscreen takes.
     style = WS_POPUP;
     x = pick.rect.left; y = pick.rect.top;

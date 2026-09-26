@@ -419,6 +419,10 @@ NGPU_API int NgpuBackendStart(const NgpuBackendOptions* o, ID3D12Device* device,
     if (FAILED(device->CreateCommandQueue(&qd, IID_PPV_ARGS(&queue)))) return 0;
   }
   if (!device || !queue) { REXLOG_ERROR("[ngpu_backend.dll] manual mode needs a device and a queue"); return 0; }
+  if (!rex::system::kernel_state() || !rex::system::kernel_state()->memory()) {
+    REXLOG_ERROR("[ngpu_backend.dll] started before the runtime's kernel state exists - call NgpuBackendStart from OnPostSetup");
+    return 0;
+  }
   if (!backend::Init(device, queue)) return 0;
   if (g_opt.own_window) {
     g_presenter = new Presenter();

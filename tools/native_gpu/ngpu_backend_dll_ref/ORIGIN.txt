@@ -3,3 +3,5 @@ From the Fable II kit, 2026-09-26 17:22: built from Fable II commit 012fcf3 on e
 clang-cl Release, CMake target ngpu_backend. sha256 (first 16) d522daf7a62f134d. ABI 1.
 src/ngpu_backend_api.h is the verbatim header; ngpu_backend_dll.cpp and ngpu_setting_table.inc are its source,
 kept for reading. The DLL itself is staged beside ng2.exe in the run folder by hand / by the launcher.
+
+UPDATED 2026-09-26 ~17:50: ngpu_backend.dll sha256 cc620728... from Fable commit a610c56 (engine 8b4a025) - adds a guard: NgpuBackendStart / Driver::Init before the kernel state exists return 0 with a log line instead of faulting. ABI 1 unchanged.

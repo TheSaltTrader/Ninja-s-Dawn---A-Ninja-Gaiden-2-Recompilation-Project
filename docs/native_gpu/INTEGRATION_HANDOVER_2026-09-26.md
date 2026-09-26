@@ -148,3 +148,29 @@ Next, in the Fable order: the static-scene picture check with the floor first
 same scene (title + attract demo, no input) for the timing pair.
 
 | menu1 17:44 | lockstep, pad script START at 22 s and 34 s (main menu), windiff2 at +60 s, 2 pairs | native vs game mean abs diff 0.0209 / 0.0208 (pixels over 0.1: 4.6% / 4.5%); FLOOR from the same window 2.3 s apart: native vs native 0.0163, game vs game 0.0163 (over 0.1: 0.6%). The menu's fog moves, so the floor is high; the excess over it is 0.0045 and 4 points of over-0.1 pixels - close, NOT parity-proven. Client sizes differed (native 1276x728 on the 1.0-scale monitor, game 1273x720 on the 1.25-scale primary), a resampling term to remove by placing the native window on the game's monitor. A truly static subject (a paused gameplay scene from a save, or the options screen) decides it. Captures in D:/ng2_frameinterp/captures/menu1_* |
+
+### The first timing pair (17:47-17:58): baseline / offload / baseline / offload
+
+Same fork pair, same exe, one variable (`NG2_NATIVE_GPU` + `gpu_offload_to_native`), 150 s each from
+boot with no input (logos, intro cutscene, title, attract), interleaved. `tools/native_gpu/abfps2.py`
+over the [swap] windows from +40 s (21 windows each):
+
+| leg | fps mean | median | p50 ms | p99 ms | worst ms | hitches | native GPU ms/frame | native CPU on the plugin GPU thread |
+|---|---|---|---|---|---|---|---|---|
+| base1 (no native) | 42.00 | 30.0 | 33.20 | 35.40 | 36.6 | 1 | - | - |
+| off1 (offload) | 42.02 | 30.0 | 33.20 | 35.30 | 36.5 | 3 | 0.07 median, 0.35 max | 2.29 median (submit thread 0.21) |
+| base2 (no native) | 42.01 | 30.0 | 33.30 | 35.50 | 37.1 | 0 | - | - |
+| off2 (offload) | 42.00 | 30.0 | 33.20 | 35.10 | 36.6 | 0 | 0.07 median, 0.35 max | 2.55 median (submit thread 0.31) |
+
+Both offload legs: ~607,000 draws fed, 0 failed, 0 self-check mismatches (every 1024th draw), every
+present served; the game's own window black, the native window carrying the game (screens 17:52:01).
+
+READ IT AS: the sequence is CAPPED by the game (cutscene segments at 30, title at 60) and light, so the
+rates cannot show headroom - Fable's rule about the cap. What it does show: under offload the native
+backend is the only GPU at a per-frame cost of 0.07-0.35 ms GPU and ~2.4 ms CPU, and the pair is
+indistinguishable from the plugin-alone baseline at every percentile. It is NOT the "speed bump"
+measurement: that needs a heavy gameplay scene (a save, a fixed route) where the plugin path shows its
+cost, measured as GPU TIME / CPU COST / p99 / worst beside a plugin-alone baseline.
+
+Also learned: the eye tool's "stable for 4 s" fired on the intro's slow fog shot while the swap counter
+kept advancing - on this title a stability capture is not a freeze without the counter beside it.
