@@ -146,16 +146,20 @@ accepted and quietly ignored.
 
 | Setting | Default | Notes |
 |---|---|---|
-| Window size | 1280 × 720 | (restart) |
-| Fullscreen | off | |
+| Resolution | 1280 × 720 | The size of the window, or of the surface the picture is scaled to in fullscreen. Presets run from 720p to 4K and include 21:9, 24:10 and 32:9 ultrawides, plus Custom. The game always renders 16:9 internally, so on a wider preset turn on **Ultrawide (3D)** below. (restart) |
+| Fullscreen | off | Borderless fullscreen on the chosen monitor. |
 | Monitor | 0 | Which display to open on. (restart) |
-| Frame rate | 60 | 30–144. |
-| V-Sync | on | |
+| Frame rate | 60 | 30 or 60. Nothing higher is offered: Ninja Gaiden II paces its own logic off the refresh rate it is told the display has, so above 60 it does not render more smoothly, it runs **faster** - combat, physics and timers all speed up. A settings file holding `fps=120` still loads and is brought down to 60. |
 | Internal render size | 1120 × 584 (as shipped) | The game renders at 1120 × 584 and scales up. 1280 × 720 removes that upscale - the same change as the Xenia community patch for this title. (restart) |
 | Internal supersampling | 1× | 1–8×. Renders above output size and downsamples. Also scales shadow maps, because the SDK's resolution scale applies to resolve targets. 4× and 8× are there for hardware that does not exist yet; 2× is the useful setting today. (restart) |
 | Letterbox | on | Keeps the original aspect instead of stretching. |
 | Ultrawide (3D) | off | Widens the 3D field of view to fill a wider-than-16:9 screen with correct proportions - you see more of the world across the width, with no stretching. Full-screen menus, videos and the in-game HUD stay 16:9. Takes effect immediately. |
 | Dither the output | off | Hides colour banding on 8-bit displays. |
+
+**V-Sync is not offered and is always on.** On this title it is not a tearing
+control: the game advances its logic on vblank, so turning it off raises that
+from 60 Hz to about 1000 Hz and the game runs fast. An `ng2_settings.cfg` that
+says otherwise still loads, and the value is forced back on.
 
 An **Autodetect** button re-runs the first-launch hardware detection and picks settings for your card again.
 
@@ -291,7 +295,8 @@ are written up in `docs/`:
 
 | Document | What it answers |
 |---|---|
-| [ISSUES_AND_FIXES.md](docs/ISSUES_AND_FIXES.md) | Every issue met while porting, its cause and its fix, by area, from v0.1.0 to v1.0.6. |
+| [ARCHITECTURE.md](docs/ARCHITECTURE.md) | How the pieces fit: what is in each of the three binaries, how a setting reaches the engine, and the changes that live outside any source file. |
+| [ISSUES_AND_FIXES.md](docs/ISSUES_AND_FIXES.md) | Every issue met while porting, its cause and its fix, by area, from v0.1.0 to v1.0.24. |
 | [XENIA_ISSUES.md](docs/XENIA_ISSUES.md) | Every label on Xenia's compatibility issue for this title, and what this port does about each. Includes what the census does *not* cover. |
 | [VECTOR_COVERAGE.txt](docs/VECTOR_COVERAGE.txt) | How the garbled videos were traced to VMX128 registers v64–v127 reading as zero — including the two dead ends that ruled out the video files and the SDK's decoder first. |
 | [VIDEO_DECODE.md](docs/VIDEO_DECODE.md) | The game decodes its own WMVs in recompiled guest code; it imports no media APIs at all. |

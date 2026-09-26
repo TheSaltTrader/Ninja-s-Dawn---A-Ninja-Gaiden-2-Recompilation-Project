@@ -54,6 +54,14 @@ $ErrorActionPreference = 'Stop'
 try {
   if ($WaitPid -gt 0) {
     try { Wait-Process -Id $WaitPid -Timeout 120 -ErrorAction SilentlyContinue } catch {}
+    # Wait-Process returns whether or not it actually exited. Copying over a
+    # RUNNING install is what produces a half-updated one, so if it is still
+    # alive we touch nothing: ng2.exe, rexruntime.dll and rexgpu-xenos.dll are
+    # one ABI, and a new exe against an old runtime exits at startup with no
+    # error and an empty log.
+    $alive = $null
+    try { $alive = Get-Process -Id $WaitPid -ErrorAction SilentlyContinue } catch {}
+    if ($alive) { throw "the running game did not exit within 120s; update not applied" }
   }
   Start-Sleep -Milliseconds 800
   Add-Type -AssemblyName System.IO.Compression.FileSystem
@@ -65,17 +73,57 @@ try {
   $base = $root.FullName
   # Never overwrite the player's own data or settings.
   $protect = @('ng2_settings.cfg', 'ng2.toml', 'game', 'dlc', 'user')
-  Get-ChildItem -LiteralPath $base -Recurse -File | ForEach-Object {
-    $rel = $_.FullName.Substring($base.Length).TrimStart('\', '/')
-    $top = ($rel -split '[\\/]', 2)[0]
-    if ($protect -contains $top) { return }
-    $dest = Join-Path $Install $rel
-    $ddir = Split-Path -Parent $dest
-    if (-not (Test-Path -LiteralPath $ddir)) {
-      New-Item -ItemType Directory -Path $ddir -Force | Out-Null
+
+  # STAGE EVERYTHING FIRST, COMMIT ONLY IF ALL OF IT LANDED. A copy that throws
+  # part way through used to leave some files new and some old, and the script
+  # then relaunched that. All-or-nothing is what the comment below has always
+  # promised.
+  $staged = New-Object System.Collections.ArrayList
+  try {
+    Get-ChildItem -LiteralPath $base -Recurse -File | ForEach-Object {
+      $rel = $_.FullName.Substring($base.Length).TrimStart('\', '/')
+      $top = ($rel -split '[\\/]', 2)[0]
+      if ($protect -contains $top) { return }
+      $dest = Join-Path $Install $rel
+      $ddir = Split-Path -Parent $dest
+      if (-not (Test-Path -LiteralPath $ddir)) {
+        New-Item -ItemType Directory -Path $ddir -Force | Out-Null
+      }
+      Copy-Item -LiteralPath $_.FullName -Destination ($dest + '.ng2new') -Force
+      [void]$staged.Add($dest)
     }
-    Copy-Item -LiteralPath $_.FullName -Destination $dest -Force
+  } catch {
+    foreach ($d in $staged) {
+      Remove-Item -LiteralPath ($d + '.ng2new') -Force -ErrorAction SilentlyContinue
+    }
+    throw
   }
+
+  # Commit. Record what has moved so a failure here can be rolled back too.
+  $moved = New-Object System.Collections.ArrayList
+  try {
+    foreach ($d in $staged) {
+      if (Test-Path -LiteralPath $d) {
+        Move-Item -LiteralPath $d -Destination ($d + '.ng2old') -Force
+      }
+      Move-Item -LiteralPath ($d + '.ng2new') -Destination $d -Force
+      [void]$moved.Add($d)
+    }
+  } catch {
+    foreach ($d in $moved) {
+      if (Test-Path -LiteralPath ($d + '.ng2old')) {
+        Move-Item -LiteralPath ($d + '.ng2old') -Destination $d -Force -ErrorAction SilentlyContinue
+      }
+    }
+    foreach ($d in $staged) {
+      Remove-Item -LiteralPath ($d + '.ng2new') -Force -ErrorAction SilentlyContinue
+    }
+    throw
+  }
+  foreach ($d in $moved) {
+    Remove-Item -LiteralPath ($d + '.ng2old') -Force -ErrorAction SilentlyContinue
+  }
+
   Remove-Item -LiteralPath $extract -Recurse -Force -ErrorAction SilentlyContinue
   Remove-Item -LiteralPath $Zip -Force -ErrorAction SilentlyContinue
 } catch {

@@ -105,8 +105,11 @@ struct Ng2Tuning {
                      "the point at which it must evict"});
     }
     // [compat] vsync-off-speedup: this title's logic runs off the display
-    // rate, so vsync off does not just tear, it changes game speed.
-    out.push_back({"vsync", s.vsync ? "true" : "false", "[compat] vsync-off-speedup"});
+    // rate, so vsync off does not just tear, it changes game speed. Sent as
+    // "true" UNCONDITIONALLY rather than from the setting - the setting is no
+    // longer offered in the menu, and a stale or hand-edited file must not be
+    // able to reintroduce the speed-up through this path.
+    out.push_back({"vsync", "true", "[compat] vsync-off-speedup - forced on"});
 
     // Post-process antialiasing. The GPU plugin applies this to the swap
     // image; `swap_post_effect` declares none / fxaa / fxaa_extreme, which is

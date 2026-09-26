@@ -97,10 +97,21 @@ Two candidate explanations were checked and rejected:
   event, and `SetEvent` on an auto-reset event with no waiter leaves it
   signalled, so a worker arriving late would still be released.
 
-What remains open is why the worker never consumes B. The likeliest remaining
-shapes are that its thread never started or has exited, or that it is blocked
-somewhere else entirely. That is the next thing to establish, and the watchdog
-will name it if it is blocked in anything the kernel owns.
+**ANSWERED, and not by any of the shapes guessed here (v1.0.2).** The worker had
+not exited and was not blocked in anything the kernel owns: both audio worker
+threads were spinning inside the GAME'S OWN rendezvous barrier, and the audio
+callback was waiting on a completion they would never signal. Each worker marks
+its arrival in one byte of a word and spins until the word matches the expected
+set; two words alternate per round so a slow reader is not confused by the next
+round's arrivals - but a job with an even number of rounds ends on the same word
+the next job starts on, and the stale match let a worker leave a round it had
+never joined. So the kernel-object analysis above is sound and was looking in
+the wrong place: the event mapping really was intact, because the events were
+never the problem.
+
+Kept because the method - reading a live deadlocked process rather than
+reasoning from the logs - is what found it, and because "the likeliest remaining
+shapes" being all wrong is worth leaving visible.
 
 ### The chapter 12 → 13 handshake, and where it stalls
 

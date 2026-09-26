@@ -209,6 +209,59 @@ def check_sdk_pair(dest):
             "from the same build before cutting."
             % ", ".join("%s=%s" % kv for kv in sorted(origins.items())))
     print("  SDK pair: both %s" % kinds.pop())
+    # Origin agreement is not feature presence - see check_ng2_features.
+    check_ng2_features(dest)
+
+
+# The NG2-specific features that live in the SDK DLLs rather than in ng2.exe,
+# and a control string that must be present in any build of that DLL.
+#
+# ng2_uw_mode is the cvar the plugin writes and the presenter reads - the plugin
+# widens the 3D projection, the runtime decides whether the frame fills the
+# screen or pillarboxes. BOTH sides are required: a plugin-only build widens the
+# field of view into a frame that is then letterboxed anyway, which is the
+# regression v1.0.22 shipped.
+SDK_FEATURES = {
+    "rexruntime.dll": {
+        "control": b"rex_gpu_create",
+        "require": {b"ng2_uw_mode": "ultrawide presenter (gameplay fills the screen)"},
+    },
+    "rexgpu-xenos.dll": {
+        "control": b"rex_gpu_create",
+        "require": {
+            b"ng2_uw_mode": "ultrawide projection widen",
+            b"solid2d": "ultrawide scene-fade fix (v1.0.20)",
+        },
+    },
+}
+
+
+def check_ng2_features(folder):
+    """Refuse to ship an SDK DLL that has lost an NG2 feature.
+
+    Reads the STAGED file, not the source it was copied from: the question is
+    what the player receives.
+    """
+    for name, spec in SDK_FEATURES.items():
+        path = os.path.join(folder, name)
+        if not os.path.isfile(path):
+            die("%s is missing from the staged release" % name)
+        blob = open(path, "rb").read()
+        # The control first. A reader that finds nothing must not be allowed to
+        # report "every feature is missing" as though that were a measurement.
+        if spec["control"] not in blob:
+            die("cannot read %s (control string %r absent) - refusing to report "
+                "on its features rather than guessing"
+                % (name, spec["control"].decode()))
+        missing = [why for needle, why in spec["require"].items() if needle not in blob]
+        if missing:
+            die("%s has lost NG2 feature(s): %s\n"
+                "       This is how v1.0.22 shipped without ultrawide: the DLL was "
+                "the right ORIGIN and the wrong BUILD.\n"
+                "       Stage a runtime/plugin that carries them "
+                "(v1.0.20's runtime md5 86d407efda2d is known good)."
+                % (name, "; ".join(missing)))
+        print("  %-20s carries %d NG2 feature(s)" % (name, len(spec["require"])))
 
 
 def find_tool(name):

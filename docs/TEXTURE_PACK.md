@@ -92,9 +92,16 @@ on the command line silently does nothing.
   after the stride fix below
 * the upscaler enlarges: 1280x720 -> 5120x2880 at `--scale 4`
 
-**Not yet verified: that any of it sees real art.** Both capture runs so far
-reached the title screen and idled into the attract demo, and 82 seconds of that
-produces no art at all. See below.
+**Not yet verified at the time of writing: that any of it sees real art.** Both
+capture runs then reached the title screen and idled into the attract demo, and
+82 seconds of that produces no art at all - which is the point the section below
+makes, and it remains the reason a menu capture is not a test.
+
+**Since verified.** Packs built from gameplay dumps are in normal use, and the
+pipeline has been through several releases on real art: streamed textures upscale
+(v1.0.13), the Real-ESRGAN engine ships in the zip and is the default method
+(v1.0.14), and the pack tool decides before it decodes rather than holding every
+decoded image in memory (v1.0.15). Dump from gameplay, not from the menus.
 
 ## What a menu capture actually contains, and why it matters
 

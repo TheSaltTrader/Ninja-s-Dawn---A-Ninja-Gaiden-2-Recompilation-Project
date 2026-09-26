@@ -3,6 +3,151 @@
 Versions are cut with `tools/make_release.py`, which refuses to package a
 version that has no section here.
 
+## v1.0.24 - 2026-09-22
+
+### Changed - Installing from a disc image now leaves the setup screen ready
+
+After an install finished, the setup screen re-checked the game folder but not
+the downloadable content or the saves, so both still showed whatever they had
+found before - and the next step was pressing Rescan twice rather than Play.
+All three are now re-checked once when an install completes.
+
+The save folder is only re-scanned when one has been chosen, which is the same
+condition that enables its own Rescan button: that scan also queues the saves it
+finds for import, so running it against nothing would clear a queue nobody asked
+to clear.
+
+### Fixed - The Resolution setting described ultrawide as impossible
+
+The help text on Resolution said that on a wider-than-16:9 screen the picture is
+pillarboxed with Keep aspect ratio on and stretched with it off. That is true
+only with Ultrawide (3D) turned off, and it was the whole description - so
+choosing an ultrawide resolution read as a choice between black bars and a
+distorted picture, while the setting that fixes it sat four rows below with a
+description that never mentioned resolution.
+
+Both settings now refer to each other. Nothing about how they work has changed:
+Ultrawide (3D) has been selectable on the first-run setup screen, and not greyed
+out, since it was added.
+
+## v1.0.23 - 2026-09-22
+
+### Fixed - Ultrawide and the scene fades are back (regression in v1.0.22)
+
+v1.0.22 shipped a GPU runtime that did not contain the ultrawide support. On a
+wider-than-16:9 screen the 3D stopped filling the width and sat between black
+bars, and the full-screen scene fades - the start menu fade and the 2D chapter
+background fading into the 3D - were pillarboxed with it. Turning "Keep aspect
+ratio" off did not recover it; it stretched the picture instead, because the
+field of view was no longer being widened to compensate.
+
+Ninja Gaiden II's ultrawide is not one piece of code. The GPU plugin widens the
+3D projection, and the runtime decides whether the finished frame fills the
+screen or is pillarboxed - gameplay fills, menus and videos stay 16:9. The two
+halves talk through a shared setting. v1.0.22 carried a plugin that could widen
+and a runtime that could not fill, so the widen had nowhere to go.
+
+The release now ships a runtime that carries it, and the packaging step refuses
+to build a release whose runtime or plugin has lost an NG2 feature - the check
+that existed before compared where each file came from, not what was inside it,
+which is how this got out.
+
+### Fixed - An interrupted update no longer leaves a half-updated install
+
+The updater waited up to two minutes for the game to exit and then copied the
+new files whether it had exited or not. If a file was still locked the copy
+stopped part way through and the game was relaunched with some files new and
+some old. The executable, the runtime and the GPU plugin are one matched set;
+a mismatched one exits during startup with no error and an empty log.
+
+It now refuses to start if the old process is still running, and stages every
+file beside its destination before moving any of them into place, so an update
+either applies completely or leaves the working install exactly as it was.
+Either way the reason is written to update\last_error.txt.
+
+## v1.0.22 - 2026-09-22
+
+### Fixed - A rare hang or texture corruption during heavy streaming
+
+The GPU plugin uploads texture and buffer data through a pool of copy workers.
+Those workers are handed a batch of jobs at a time, and a worker draining one
+batch could claim a job belonging to the NEXT batch - one queued while it was
+still working. It then decremented a counter that had been sized for the batch
+it started on.
+
+Both outcomes were bad. The counter could wrap past zero, and the frame waits
+forever on a count that never reaches it - the game hangs. Or the batch is
+declared finished early, and the GPU reads an upload buffer while a worker is
+still writing into it - which is not a hang but corrupt data, drawn.
+
+Ninja Gaiden II's own streaming is what exposed it: an assertion added to catch
+the case fired once in 41,400 frames, in a chapter load. That is rare enough to
+have been dismissed as a one-off crash for a long time, and frequent enough to
+reach players.
+
+The earlier attempt at this fix pinned each worker to the batch's generation
+number, which made it rarer rather than impossible - the generation only changes
+when a batch starts, while the jobs for the next one are queued before that, so
+a worker could still be pinned to the right generation and reach the wrong work.
+Workers are now pinned to the batch's END, so a worker cannot claim past the
+batch it woke for however much the queue grows behind it.
+
+This is a change to the shared GPU plugin, not to the game code, so no settings
+or saves are affected. The plugin in this release is the v1.0.20 engine base
+with only the two copy-pool fixes applied, rather than a newer engine - the
+smallest change that carries the fix.
+
+## v1.0.21 - 2026-09-16
+
+### Changed - The frame-rate setting no longer offers anything above 60
+
+The Frame rate row now offers 30 Hz and 60 Hz. The 120 Hz and 144 Hz options are
+gone.
+
+Ninja Gaiden II paces its own logic off the refresh rate it is told the display
+has. Above 60 it does not render more smoothly, it runs FASTER - combat, physics
+and timers all speed up - and a player who selected 144 hit a crash. The row
+previously carried a line saying "Above 60 the game runs faster, not smoother",
+which was not enough: a menu is a promise that every option is a valid choice,
+and a warning under a broken one does not make it a choice.
+
+An existing settings file that holds `fps=120` or `fps=144` still loads - the
+field is parsed as before - but it is brought down to 60. The bound is enforced
+in `Ng2Settings::Clamp()` rather than only in the menu, so a hand-edited file or
+the `NG2_FPS` environment override cannot reintroduce the speed-up either.
+
+### Changed - V-Sync is no longer offered either
+
+Same hazard, same treatment. The V-Sync checkbox carried a line reading "Off makes
+the game run faster than it should, not just tear" - turning it off raises the
+guest vblank from 60 Hz to 1000 Hz, and this title advances its logic on vblank.
+It was a speed control wearing the name of a tearing control.
+
+The row is gone,  forces it on, and the tuning now sends 
+unconditionally rather than from the setting, so neither a stale settings file nor
+a hand-edited one can reintroduce the speed-up. The field still parses so old
+files load.
+
+### Removed - Frame interpolation, after it was built and measured
+
+An attempt to give the smoothness those options implied WITHOUT the speed-up:
+synthesize an in-between frame by re-executing the frame's GPU command segment
+with each object's motion extrapolated forward, so the display could run at 120
+while the simulation stayed at 60.
+
+It worked, and was measured working in real gameplay: evenly-paced 120 fps at a
+median 8.6 ms frame interval, with the simulation logged at 60.0 fps alongside
+it. It is not shipping because it hung the game on roughly 60% of heavy scene
+loads, and the cause turned out to be structural rather than a bug to fix: a
+synthesized frame re-executes the game's own GPU commands, and some of those have
+preconditions that have expired by the time they run again. Three distinct hangs
+came from that one property.
+
+The remaining fix was to stop replaying commands and rebuild the extra frame from
+draw calls directly, which is months of work for a smoothness feature on a title
+that already holds 60. Abandoned deliberately. The full reasoning, measurements
+and dead ends are in `FrameInterp/PLAN.md` for anyone who revisits it.
+
 ## v1.0.20 - 2026-09-14
 
 ### Fixed - Scene-transition fades are now ultrawide

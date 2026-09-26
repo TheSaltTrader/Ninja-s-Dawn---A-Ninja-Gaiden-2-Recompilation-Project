@@ -38,7 +38,11 @@ struct Ng2Settings {
   // `monitor` cvar and nothing drove it, so the window went wherever Windows
   // put it - which on a two-screen setup is not where the size was chosen for.
   int monitor = 0;
-  int fps = 60;              // 30..144, drives the guest video mode
+  // 30..60, drives the guest video mode. The field still parses a higher number
+  // from an old settings file so those files load, but Clamp() brings it down to
+  // 60: this title paces its logic off the reported refresh rate, so above 60 it
+  // runs fast rather than smooth, and a player hit a crash at 144.
+  int fps = 60;
   bool vsync = true;
 
   // --- Graphics ----------------------------------------------------------
@@ -410,7 +414,14 @@ struct Ng2Settings {
   void Clamp() {
     window_width = std::clamp(window_width, 640, 7680);
     window_height = std::clamp(window_height, 480, 4320);
-    fps = std::clamp(fps, 30, 144);
+    // Upper bound is 60 deliberately, and it is enforced here rather than only in
+    // the menu so an old settings file carrying 120 or 144 - or a hand-edited one -
+    // loads as 60 instead of speeding the game up.
+    fps = std::clamp(fps, 30, 60);
+    // Same reason: vsync off raises the guest vblank from 60 Hz to 1000 Hz and
+    // this title advances its logic on vblank, so off is a speed-up, not tearing.
+    // Forced on whatever an old or hand-edited file says.
+    vsync = true;
     monitor = std::clamp(monitor, 0, 16);
     resolution_scale = std::clamp(resolution_scale, 1, 8);
     anisotropic = std::clamp(anisotropic, -1, 4);
