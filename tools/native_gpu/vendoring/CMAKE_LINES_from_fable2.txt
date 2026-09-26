@@ -1,0 +1,99 @@
+# Lines 30-127 of Fable II wt-fable2-nativegpu/CMakeLists.txt (the native backend's source list and settings)
+    src/fable2_gdb.cpp
+    src/fable2_crashdump.cpp
+    src/fable2_profiler.cpp
+    src/fable2_titleupdate.cpp
+    src/patch_hooks.cpp
+    src/native_gpu_trace.cpp
+    src/native_gpu_dump.cpp
+    src/native_gpu_present.cpp
+    src/native_gpu_census.cpp
+    src/native_gpu_shader_census.cpp
+    src/native_gpu_sdk_xlat.cpp
+    src/native_gpu_sdk_consts.cpp
+    src/native_gpu_rtc.cpp
+    src/native_gpu_backend.cpp
+    src/native_gpu_sdk_tess.cpp
+    src/native_gpu_state_decode.cpp
+    # The SDK's Xenos shader translator, compiled INTO the app (branch native-gpu).
+    # rexruntime.lib exports none of it (0 ShaderTranslator symbols; it lives in
+    # rexgpu-xenos.dll with hidden visibility), so the BSD sources are vendored
+    # verbatim from rexglue-src (see src/native_gpu_xlat/ORIGIN.txt). The three
+    # cvars they define (dxbc_switch, dxbc_source_map,
+    # draw_resolution_scaled_texture_offsets) are also registered by the plugin;
+    # rex::cvar rejects the duplicate registration and keeps the first owner,
+    # so both copies read the same value and nothing double-registers.
+    src/native_gpu_xlat/ucode.cpp
+    src/native_gpu_xlat/shader.cpp
+    src/native_gpu_xlat/translator.cpp
+    src/native_gpu_xlat/translator_disasm.cpp
+    src/native_gpu_xlat/dxbc.cpp
+    src/native_gpu_xlat/dxbc_translator.cpp
+    src/native_gpu_xlat/dxbc_translator_alu.cpp
+    src/native_gpu_xlat/dxbc_translator_fetch.cpp
+    src/native_gpu_xlat/dxbc_translator_memexport.cpp
+    src/native_gpu_xlat/dxbc_translator_om.cpp
+    src/native_gpu_xlat/thirdparty/dxbc/DXBCChecksum.cpp
+    src/native_gpu_xlat/xlat_support.cpp
+    src/native_gpu_xlat/register_file.cpp
+    src/native_gpu_xlat/registers.cpp
+    src/native_gpu_xlat/draw_util_vendored.cpp
+    src/native_gpu_xlat/pipeline_gs_vendored.cpp
+    src/native_gpu_xlat/rt_cache_vendored.cpp
+    src/native_gpu_xlat/draw_extent_estimator_vendored.cpp
+    src/native_gpu_xlat/shader_interpreter_vendored.cpp
+    src/native_gpu_xlat/rtc_d3d12/render_target_cache.cpp
+    src/native_gpu_xlat/rtc_d3d12/deferred_command_list.cpp
+    src/native_gpu_xlat/rtc_d3d12/d3d12_cpu_descriptor_pool.cpp
+    src/native_gpu_xlat/rtc_d3d12/d3d12_upload_buffer_pool.cpp
+    src/native_gpu_xlat/rtc_d3d12/d3d12_util.cpp
+    src/native_gpu_xlat/rtc_d3d12/facade.cpp
+    src/native_gpu_xlat/rtc_d3d12/shared_memory_base.cpp
+    src/native_gpu_xlat/rtc_d3d12/shared_memory.cpp
+    src/native_gpu_xlat/rtc_d3d12/texture_cache_base.cpp
+    src/native_gpu_xlat/rtc_d3d12/texture_conversion.cpp
+    src/native_gpu_xlat/rtc_d3d12/texture_extent.cpp
+    src/native_gpu_xlat/rtc_d3d12/texture_info.cpp
+    src/native_gpu_xlat/rtc_d3d12/texture_info_formats.cpp
+    src/native_gpu_xlat/rtc_d3d12/texture_util.cpp
+    src/native_gpu_xlat/rtc_d3d12/texture_cache.cpp
+    src/native_gpu_xlat/rtc_d3d12/command_processor.cpp
+    src/native_gpu_xlat/rtc_d3d12/pipeline_cache.cpp
+    src/native_gpu_xlat/rtc_d3d12/primitive_processor.cpp
+    src/native_gpu_xlat/rtc_d3d12/primitive_processor_base.cpp
+    src/native_gpu_xlat/rtc_d3d12/shader.cpp
+    src/native_gpu_xlat/rtc_d3d12/d3d12_descriptor_heap_pool.cpp
+    src/native_gpu_xlat/rtc_d3d12/cp_base.cpp
+    src/native_gpu_xlat/rtc_d3d12/sampler_info.cpp
+    src/native_gpu_xlat/rtc_d3d12/flags.cpp
+)
+
+# A build made with the disc's title update beside the executable the codegen
+# read (assets/default.xexp) is a different game version, and the setup screen
+# says so. The runtime applies the same patch at launch from game/default.xexp.
+if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/assets/default.xexp")
+    set(FABLE2_COMPILED_WITH_PATCH ON)
+else()
+    set(FABLE2_COMPILED_WITH_PATCH OFF)
+endif()
+
+if(WIN32)
+    # The icon resource (resources/fable2.rc -> fable2.ico) rides in the
+    # executable, so Explorer, the desktop and the taskbar show it.
+    add_executable(fable2 WIN32 ${FABLE2_SOURCES} resources/fable2.rc)
+else()
+    add_executable(fable2 ${FABLE2_SOURCES})
+endif()
+# The vendored SDK shader translator includes "thirdparty/dxbc/DXBCChecksum.h" relative to this dir.
+target_include_directories(fable2 PRIVATE src/native_gpu_xlat)
+# The translator is vendored from the commit the installed rexgpu-xenos.dll was
+# built from (so the in-app translation and the plugin's are one codegen, and the
+# DXBC differential compares like with like). That commit's translator needs
+# three headers newer than the installed SDK's - additive changes only - which
+# are vendored under include/ and must win over the SDK's copies.
+target_include_directories(fable2 BEFORE PRIVATE src/native_gpu_xlat/include)
+
+# The port's own version, from the VERSION file, baked in so the window title
+# and the diagnostics bundle name the build they came from. The SDK's own
+# title string names the SDK version, which never changes between our builds.
+file(READ "${CMAKE_CURRENT_SOURCE_DIR}/VERSION" FABLE2_VERSION_TEXT)

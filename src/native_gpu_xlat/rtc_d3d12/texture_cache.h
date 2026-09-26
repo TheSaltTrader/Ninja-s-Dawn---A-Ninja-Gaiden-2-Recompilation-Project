@@ -1,0 +1,658 @@
+// VENDORED from rexglue-src 23ace0b:include/rex/graphics/d3d12/texture_cache.h - systematic renames only (see vendor_rtc_d3d12.py / ORIGIN.txt):
+// namespaces d3d12 -> ngpu_d3d12, plugin headers -> rtc_d3d12/facade.h, cvars -> plugin registry reads (0 bool, 0 string, 0 int).
+#include <string>
+#include <cstdint>
+#include <rex/logging.h>
+namespace ng2::ngpu::xlat { bool PluginBool(const char*, bool); std::string PluginString(const char*, const char*); int32_t PluginInt(const char*, int32_t); double PluginDouble(const char*, double); }
+/**
+ ******************************************************************************
+ * Xenia : Xbox 360 Emulator Research Project                                 *
+ ******************************************************************************
+ * Copyright 2022 Ben Vanik. All rights reserved.                             *
+ * Released under the BSD license - see LICENSE in the root for more details. *
+ ******************************************************************************
+ *
+ * @modified    Tom Clay, 2026 - Adapted for ReXGlue runtime
+ */
+
+#pragma once
+
+#include <array>
+#include <functional>
+#include <memory>
+#include <cstring>
+#include <string>
+#include <unordered_map>
+#include <utility>
+#include <vector>
+
+#include <rex/assert.h>
+#include "rtc_d3d12/shader.h"
+#include "rtc_d3d12/shared_memory.h"
+#include "rtc_d3d12/texture_cache_base.h"
+#include <rex/graphics/pipeline/texture/util.h>
+#include <rex/graphics/register_file.h>
+#include <rex/graphics/xenos.h>
+#include <rex/ui/d3d12/d3d12_api.h>
+#include "rtc_d3d12/facade.h"
+
+namespace rex::graphics::ngpu_d3d12 {
+
+class D3D12CommandProcessor;
+
+class D3D12TextureCache final : public TextureCache {
+ public:
+  // Keys that can be stored for checking validity whether descriptors for host
+  // shader bindings are up to date.
+  struct TextureSRVKey {
+    TextureKey key;
+    uint32_t host_swizzle;
+    uint8_t swizzled_signs;
+    // [texpack] Which texture object and which set of its descriptors: a
+    // pack resource change or a recreated object changes it, so the shader's
+    // descriptor indices are rewritten in the same draw (see SRVGenerationOf).
+    uint32_t generation;
+  };
+
+  // Sampler parameters that can be directly converted to a host sampler or used
+  // for binding checking validity whether samplers are up to date.
+  union SamplerParameters {
+    uint32_t value;
+    struct {
+      xenos::ClampMode clamp_x : 3;         // 3
+      xenos::ClampMode clamp_y : 3;         // 6
+      xenos::ClampMode clamp_z : 3;         // 9
+      xenos::BorderColor border_color : 2;  // 11
+      // For anisotropic, these are true.
+      uint32_t mag_linear : 1;              // 12
+      uint32_t min_linear : 1;              // 13
+      uint32_t mip_linear : 1;              // 14
+      xenos::AnisoFilter aniso_filter : 3;  // 17
+      uint32_t mip_min_level : 4;           // 21
+      uint32_t mip_base_map : 1;            // 22
+      // Force the border color alpha to 1.0 (only meaningful with a border
+      // clamp mode). Canary d0dd98923.
+      uint32_t force_bc_w_to_max : 1;       // 23
+      // Maximum mip level is in the texture resource itself, but mip_base_map
+      // can be used to limit fetching to mip_min_level.
+    };
+
+    SamplerParameters() : value(0) { static_assert_size(*this, sizeof(value)); }
+    bool operator==(const SamplerParameters& parameters) const { return value == parameters.value; }
+    bool operator!=(const SamplerParameters& parameters) const { return value != parameters.value; }
+  };
+
+  static std::unique_ptr<D3D12TextureCache> Create(const RegisterFile& register_file,
+                                                   D3D12SharedMemory& shared_memory,
+                                                   uint32_t draw_resolution_scale_x,
+                                                   uint32_t draw_resolution_scale_y,
+                                                   D3D12CommandProcessor& command_processor,
+                                                   bool bindless_resources_used) {
+    std::unique_ptr<D3D12TextureCache> texture_cache(
+        new D3D12TextureCache(register_file, shared_memory, draw_resolution_scale_x,
+                              draw_resolution_scale_y, command_processor, bindless_resources_used));
+    if (!texture_cache->Initialize()) {
+      return nullptr;
+    }
+    return std::move(texture_cache);
+  }
+
+  ~D3D12TextureCache();
+
+  void ClearCache() override;
+
+  void BeginSubmission(uint64_t new_submission_index) override;
+  void BeginFrame() override;
+  void EndFrame();
+
+  // Must be called within a submission - creates and untiles textures needed by
+  // shaders and puts them in the SRV state. This may bind compute pipelines
+  // (notifying the command processor about that), so this must be called before
+  // binding the actual drawing pipeline.
+  void RequestTextures(uint32_t used_texture_mask) override;
+
+  // Returns whether texture SRV keys stored externally are still valid for the
+  // current bindings and host shader binding layout. Both keys and
+  // host_shader_bindings must have host_shader_binding_count elements
+  // (otherwise they are incompatible - like if this function returned false).
+  bool AreActiveTextureSRVKeysUpToDate(const TextureSRVKey* keys,
+                                       const D3D12Shader::TextureBinding* host_shader_bindings,
+                                       size_t host_shader_binding_count) const;
+  // Exports the current binding data to texture SRV keys so they can be stored
+  // for checking whether subsequent draw calls can keep using the same
+  // bindings. Write host_shader_binding_count keys.
+  void WriteActiveTextureSRVKeys(TextureSRVKey* keys,
+                                 const D3D12Shader::TextureBinding* host_shader_bindings,
+                                 size_t host_shader_binding_count) const;
+  void WriteActiveTextureBindfulSRV(const D3D12Shader::TextureBinding& host_shader_binding,
+                                    D3D12_CPU_DESCRIPTOR_HANDLE handle);
+  uint32_t GetActiveTextureBindlessSRVIndex(const D3D12Shader::TextureBinding& host_shader_binding);
+
+  SamplerParameters GetSamplerParameters(const D3D12Shader::SamplerBinding& binding) const;
+  void WriteSampler(SamplerParameters parameters, D3D12_CPU_DESCRIPTOR_HANDLE handle) const;
+
+  // Returns whether the actual scale is not smaller than the requested one.
+  static bool ClampDrawResolutionScaleToMaxSupported(uint32_t& scale_x, uint32_t& scale_y,
+                                                     const ui::ngpu_d3d12::D3D12Provider& provider);
+  // Ensures the tiles backing the range in the buffers are allocated.
+  bool EnsureScaledResolveMemoryCommitted(uint32_t start_unscaled, uint32_t length_unscaled,
+                                          uint32_t length_scaled_alignment_log2 = 0) override;
+  // Makes the specified range of up to 1-2 GB currently accessible on the GPU.
+  // One draw call can access only at most one range - the same memory is
+  // accessible through different buffers based on the range needed, so aliasing
+  // barriers are required.
+  bool MakeScaledResolveRangeCurrent(uint32_t start_unscaled, uint32_t length_unscaled,
+                                     uint32_t length_scaled_alignment_log2 = 0);
+  // These functions create a view of the range specified in the last successful
+  // MakeScaledResolveRangeCurrent call because that function must be called
+  // before this.
+  void CreateCurrentScaledResolveRangeUintPow2SRV(D3D12_CPU_DESCRIPTOR_HANDLE handle,
+                                                  uint32_t element_size_bytes_pow2);
+  void CreateCurrentScaledResolveRangeUintPow2UAV(D3D12_CPU_DESCRIPTOR_HANDLE handle,
+                                                  uint32_t element_size_bytes_pow2);
+  void TransitionCurrentScaledResolveRange(D3D12_RESOURCE_STATES new_state);
+  uint64_t GetCurrentScaledResolveRangeStartScaled() const {
+    return scaled_resolve_current_range_start_scaled_;
+  }
+  uint64_t GetCurrentScaledResolveRangeLengthScaled() const {
+    return scaled_resolve_current_range_length_scaled_;
+  }
+  ID3D12Resource* GetCurrentScaledResolveBufferResource() {
+    return GetCurrentScaledResolveBuffer().resource();
+  }
+  size_t GetCurrentScaledResolveBufferIndexPublic() const {
+    return GetCurrentScaledResolveBufferIndex();
+  }
+  void MarkCurrentScaledResolveRangeUAVWritesCommitNeeded() {
+    assert_true(IsDrawResolutionScaled());
+    GetCurrentScaledResolveBuffer().SetUAVBarrierPending();
+  }
+
+  // Returns the ID3D12Resource of the front buffer texture (in
+  // NON_PIXEL_SHADER_RESOURCE state), or nullptr in case of failure, and writes
+  // the description of its SRV. May call LoadTextureData, so the same
+  // restrictions (such as about descriptor heap change possibility) apply.
+  ID3D12Resource* RequestSwapTexture(D3D12_SHADER_RESOURCE_VIEW_DESC& srv_desc_out,
+                                     xenos::TextureFormat& format_out,
+                                     uint32_t* width_unscaled_out = nullptr,
+                                     uint32_t* height_unscaled_out = nullptr);
+
+ protected:
+  bool IsSignedVersionSeparateForFormat(TextureKey key) const override;
+  bool IsScaledResolveSupportedForFormat(TextureKey key) const override;
+  uint32_t GetHostFormatSwizzle(TextureKey key) const override;
+
+  uint32_t GetMaxHostTextureWidthHeight(xenos::DataDimension dimension) const override;
+  uint32_t GetMaxHostTextureDepthOrArraySize(xenos::DataDimension dimension) const override;
+
+  std::unique_ptr<Texture> CreateTexture(TextureKey key) override;
+
+  // This binds pipelines, allocates descriptors, and copies!
+  bool LoadTextureDataFromResidentMemoryImpl(Texture& texture, bool load_base,
+                                             bool load_mips) override;
+
+  void UpdateTextureBindingsImpl(uint32_t fetch_constant_mask) override;
+
+ private:
+  static constexpr uint32_t kLoadGuestXThreadsPerGroupLog2 = 2;
+  static constexpr uint32_t kLoadGuestYBlocksPerGroupLog2 = 5;
+
+  struct HostFormat {
+    // Format info for the regular case.
+    // DXGI format (typeless when different signedness or number representation
+    // is used) for the texture resource.
+    DXGI_FORMAT dxgi_format_resource;
+    // DXGI format for unsigned normalized or unsigned/signed float SRV.
+    DXGI_FORMAT dxgi_format_unsigned;
+    // The regular load shader, used when special load shaders (like
+    // signed-specific or decompressing) aren't needed.
+    LoadShaderIndex load_shader;
+    // DXGI format for signed normalized or unsigned/signed float SRV.
+    DXGI_FORMAT dxgi_format_signed;
+    // If the signed version needs a different bit representation on the host,
+    // this is the load shader for the signed version. Otherwise the regular
+    // load_shader will be used for the signed version, and a single copy will
+    // be created if both unsigned and signed are used.
+    LoadShaderIndex load_shader_signed;
+
+    // Do NOT add integer DXGI formats to this - they are not filterable, can
+    // only be read with Load, not Sample! If any game is seen using num_format
+    // 1 for fixed-point formats (for floating-point, it's normally set to 1
+    // though), add a constant buffer containing multipliers for the
+    // textures and multiplication to the tfetch implementation.
+
+    // Whether the DXGI format, if not uncompressing the texture, consists of
+    // blocks, thus copy regions must be aligned to block size (assuming it's
+    // the same as the guest block size).
+    bool is_block_compressed;
+    // Uncompression info for when the regular host format for this texture is
+    // block-compressed, but the size is not block-aligned, and thus such
+    // texture cannot be created in Direct3D on PC and needs decompression,
+    // however, such textures are common, for instance, in 4D5307E6. This only
+    // supports unsigned normalized formats - let's hope GPUSIGN_SIGNED was not
+    // used for DXN and DXT5A.
+    DXGI_FORMAT dxgi_format_uncompressed;
+    LoadShaderIndex load_shader_decompress;
+
+    // Mapping of Xenos swizzle components to DXGI format components.
+    uint32_t swizzle;
+  };
+
+  class D3D12Texture final : public Texture {
+   public:
+    union SRVDescriptorKey {
+      uint32_t key;
+      struct {
+        uint32_t is_signed : 1;
+        uint32_t host_swizzle : 12;
+        uint32_t dimension : 2;
+      };
+
+      SRVDescriptorKey() : key(0) { static_assert_size(*this, sizeof(key)); }
+
+      struct Hasher {
+        size_t operator()(const SRVDescriptorKey& key) const {
+          return std::hash<decltype(key.key)>{}(key.key);
+        }
+      };
+      bool operator==(const SRVDescriptorKey& other_key) const { return key == other_key.key; }
+      bool operator!=(const SRVDescriptorKey& other_key) const { return !(*this == other_key); }
+    };
+
+    ID3D12Resource* GetOrCreate3DAs2DResource(D3D12_RESOURCE_STATES end_state);
+
+    explicit D3D12Texture(D3D12TextureCache& texture_cache, const TextureKey& key,
+                          ID3D12Resource* resource, D3D12_RESOURCE_STATES resource_state,
+                          bool track_usage = true);
+    ~D3D12Texture();
+
+    ID3D12Resource* resource() const { return resource_.Get(); }
+
+    D3D12_RESOURCE_STATES SetResourceState(D3D12_RESOURCE_STATES new_state) {
+      D3D12_RESOURCE_STATES old_state = resource_state_;
+      resource_state_ = new_state;
+      return old_state;
+    }
+
+    uint32_t GetSRVDescriptorIndex(SRVDescriptorKey descriptor_key) const {
+      auto it = srv_descriptors_.find(descriptor_key);
+      return it != srv_descriptors_.cend() ? it->second : UINT32_MAX;
+    }
+
+    void AddSRVDescriptorIndex(SRVDescriptorKey descriptor_key, uint32_t descriptor_index) {
+      srv_descriptors_.emplace(descriptor_key, descriptor_index);
+    }
+
+    // [texpack] The replacement this resource was CREATED for, if any: its
+    // size and path, copied at creation. The upload and the view use THIS and
+    // never a fresh lookup. The pack can be switched between creation and
+    // upload (F9, or the settings screen, while a scene streams in), and a
+    // fresh lookup then describes an image of another size than the resource
+    // it is poured into. Measured on Fable II, 2026-09-11: an access violation
+    // in memcpy under std::istream::read on the GPU thread, one frame after
+    // the switch - the pack's rows written past the end of an upload buffer
+    // sized for the guest texture.
+    bool texpack_replaced() const { return texpack_replaced_; }
+    uint32_t texpack_width() const { return texpack_width_; }
+    uint32_t texpack_height() const { return texpack_height_; }
+    const std::string& texpack_path() const { return texpack_path_; }
+    void SetTexpackReplacement(uint32_t width, uint32_t height, std::string path) {
+      texpack_replaced_ = true;
+      texpack_width_ = width;
+      texpack_height_ = height;
+      texpack_path_ = std::move(path);
+    }
+    // The replacement's pixels are in the resource. A later load - the base
+    // cache re-loads whenever the game writes the guest memory - has nothing
+    // to do: the guest bytes are not what is shown. Measured at ~5 re-uploads
+    // a frame, 1.3 ms each, before this was remembered.
+    bool texpack_uploaded() const { return texpack_uploaded_; }
+    void SetTexpackUploaded() { texpack_uploaded_ = true; }
+    // [texpack] resolve-at-load: a SEPARATE upscaled resource the view uses
+    // instead of the guest one, chosen from the content actually in memory.
+    // The guest resource stays native-sized and decoded, so nothing is ever
+    // missing; this is only what the sampler reads when a pack file matched.
+    ID3D12Resource* texpack_resource() const { return texpack_resource_.Get(); }
+    uint32_t texpack_content_hash() const { return texpack_content_hash_; }
+    // Eight 8-byte samples of the guest bytes the replacement was resolved
+    // from, spread across the base level, and when they were last checked.
+    void SetTexpackSamples(const uint8_t* guest, uint32_t size, double now) {
+      for (int i = 0; i < 8; ++i)
+        texpack_samples_[i] = TexpackSampleAt(guest, size, i);
+      texpack_verified_at_ = now;
+    }
+    bool TexpackSamplesMatch(const uint8_t* guest, uint32_t size) const {
+      for (int i = 0; i < 8; ++i)
+        if (texpack_samples_[i] != TexpackSampleAt(guest, size, i)) return false;
+      return true;
+    }
+    double texpack_verified_at() const { return texpack_verified_at_; }
+    void SetTexpackVerifiedAt(double now) { texpack_verified_at_ = now; }
+    static uint64_t TexpackSampleAt(const uint8_t* guest, uint32_t size, int i) {
+      if (size < 8) return 0;
+      const uint64_t offset = (uint64_t(size - 8) * uint64_t(i)) / 7u;
+      uint64_t v = 0;
+      std::memcpy(&v, guest + offset, 8);
+      return v;
+    }
+    void SetTexpackResource(Microsoft::WRL::ComPtr<ID3D12Resource> r, uint32_t hash) {
+      texpack_resource_ = std::move(r);
+      texpack_content_hash_ = hash;
+    }
+    Microsoft::WRL::ComPtr<ID3D12Resource> DetachTexpackResource() {
+      texpack_content_hash_ = 0;
+      return std::move(texpack_resource_);
+    }
+    // Retires the descriptors (released once the current submission has
+    // completed) and bumps the generation, so the next draw rebinds.
+    void ClearSRVDescriptors();
+    uint32_t srv_generation() const { return srv_generation_; }
+
+   private:
+    Microsoft::WRL::ComPtr<ID3D12Resource> resource_;
+    D3D12_RESOURCE_STATES resource_state_;
+    std::unique_ptr<D3D12Texture> texture_3d_as_2d_;
+    bool texpack_replaced_ = false;
+    bool texpack_uploaded_ = false;
+    uint32_t texpack_width_ = 0;
+    uint32_t texpack_height_ = 0;
+    std::string texpack_path_;
+    Microsoft::WRL::ComPtr<ID3D12Resource> texpack_resource_;  // resolve-at-load 4x
+    uint32_t texpack_content_hash_ = 0;
+    uint64_t texpack_samples_[8] = {};
+    double texpack_verified_at_ = 0.0;
+    uint32_t srv_generation_ = 0;
+
+    // For bindful - indices in the non-shader-visible descriptor cache for
+    // copying to the shader-visible heap (much faster than recreating, which,
+    // according to profiling, was often a bottleneck in many games).
+    // For bindless - indices in the global shader-visible descriptor heap.
+    std::unordered_map<SRVDescriptorKey, uint32_t, SRVDescriptorKey::Hasher> srv_descriptors_;
+  };
+
+  static constexpr uint32_t kSRVDescriptorCachePageSize = 65536;
+
+  struct SRVDescriptorCachePage {
+   public:
+    explicit SRVDescriptorCachePage(ID3D12DescriptorHeap* heap)
+        : heap_(heap), heap_start_(heap->GetCPUDescriptorHandleForHeapStart()) {}
+    SRVDescriptorCachePage(const SRVDescriptorCachePage& page) = delete;
+    SRVDescriptorCachePage& operator=(const SRVDescriptorCachePage& page) = delete;
+    SRVDescriptorCachePage(SRVDescriptorCachePage&& page) {
+      std::swap(heap_, page.heap_);
+      std::swap(heap_start_, page.heap_start_);
+    }
+    SRVDescriptorCachePage& operator=(SRVDescriptorCachePage&& page) {
+      std::swap(heap_, page.heap_);
+      std::swap(heap_start_, page.heap_start_);
+      return *this;
+    }
+
+    ID3D12DescriptorHeap* heap() const { return heap_.Get(); }
+    D3D12_CPU_DESCRIPTOR_HANDLE heap_start() const { return heap_start_; }
+
+   private:
+    Microsoft::WRL::ComPtr<ID3D12DescriptorHeap> heap_;
+    D3D12_CPU_DESCRIPTOR_HANDLE heap_start_;
+  };
+
+  struct D3D12TextureBinding {
+    // Descriptor indices of texture and texture_signed of the respective
+    // TextureBinding returned from FindOrCreateTextureDescriptor.
+    uint32_t descriptor_index;
+    uint32_t descriptor_index_signed;
+
+    D3D12TextureBinding() { Reset(); }
+
+    void Reset() {
+      descriptor_index = UINT32_MAX;
+      descriptor_index_signed = UINT32_MAX;
+    }
+  };
+
+  class ScaledResolveVirtualBuffer {
+   public:
+    explicit ScaledResolveVirtualBuffer(ID3D12Resource* resource,
+                                        D3D12_RESOURCE_STATES resource_state)
+        : resource_(resource), resource_state_(resource_state) {}
+    ID3D12Resource* resource() const { return resource_.Get(); }
+    D3D12_RESOURCE_STATES SetResourceState(D3D12_RESOURCE_STATES new_state) {
+      D3D12_RESOURCE_STATES old_state = resource_state_;
+      if (old_state == D3D12_RESOURCE_STATE_UNORDERED_ACCESS) {
+        uav_barrier_pending_ = false;
+      }
+      resource_state_ = new_state;
+      return old_state;
+    }
+    // After writing through a UAV.
+    void SetUAVBarrierPending() {
+      if (resource_state_ == D3D12_RESOURCE_STATE_UNORDERED_ACCESS) {
+        uav_barrier_pending_ = true;
+      }
+    }
+    // After an aliasing barrier (which is even stronger than an UAV barrier).
+    void ClearUAVBarrierPending() { uav_barrier_pending_ = false; }
+
+   private:
+    Microsoft::WRL::ComPtr<ID3D12Resource> resource_;
+    D3D12_RESOURCE_STATES resource_state_;
+    bool uav_barrier_pending_ = false;
+  };
+
+  explicit D3D12TextureCache(const RegisterFile& register_file, D3D12SharedMemory& shared_memory,
+                             uint32_t draw_resolution_scale_x, uint32_t draw_resolution_scale_y,
+                             D3D12CommandProcessor& command_processor,
+                             bool bindless_resources_used);
+
+  bool Initialize();
+
+  // Whether decompression is needed on the host (Direct3D only allows creation
+  // of block-compressed textures with 4x4-aligned dimensions on PC).
+  bool IsDecompressionNeeded(xenos::TextureFormat format, uint32_t width, uint32_t height) const;
+  DXGI_FORMAT GetDXGIResourceFormat(xenos::TextureFormat format, uint32_t width,
+                                    uint32_t height) const {
+    const HostFormat& host_format = host_formats_[uint32_t(format)];
+    return IsDecompressionNeeded(format, width, height) ? host_format.dxgi_format_uncompressed
+                                                        : host_format.dxgi_format_resource;
+  }
+  DXGI_FORMAT GetDXGIResourceFormat(TextureKey key) const {
+    return GetDXGIResourceFormat(key.format, key.GetWidth(), key.GetHeight());
+  }
+  DXGI_FORMAT GetDXGIUnormFormat(xenos::TextureFormat format, uint32_t width,
+                                 uint32_t height) const {
+    const HostFormat& host_format = host_formats_[uint32_t(format)];
+    return IsDecompressionNeeded(format, width, height) ? host_format.dxgi_format_uncompressed
+                                                        : host_format.dxgi_format_unsigned;
+  }
+  DXGI_FORMAT GetDXGIUnormFormat(TextureKey key) const {
+    return GetDXGIUnormFormat(key.format, key.GetWidth(), key.GetHeight());
+  }
+
+  LoadShaderIndex GetLoadShaderIndex(TextureKey key) const;
+
+  static constexpr bool AreDimensionsCompatible(xenos::FetchOpDimension binding_dimension,
+                                                xenos::DataDimension resource_dimension) {
+    switch (binding_dimension) {
+      case xenos::FetchOpDimension::k1D:
+      case xenos::FetchOpDimension::k2D:
+        return resource_dimension == xenos::DataDimension::k1D ||
+               resource_dimension == xenos::DataDimension::k2DOrStacked ||
+               resource_dimension == xenos::DataDimension::k3D;
+      case xenos::FetchOpDimension::k3DOrStacked:
+        return resource_dimension == xenos::DataDimension::k3D;
+      case xenos::FetchOpDimension::kCube:
+        return resource_dimension == xenos::DataDimension::kCube;
+      default:
+        return false;
+    }
+  }
+
+  // Returns the index of an existing of a newly created non-shader-visible
+  // cached (for bindful) or a shader-visible global (for bindless) descriptor,
+  // or UINT32_MAX if failed to create.
+  // [texpack] resolve-at-load: build/refresh/drop the separate 4x resource the
+  // view samples, from the bytes in memory now.
+  void ApplyTexpackResolve(D3D12Texture& texture, const TextureKey& key);
+  // Once per half second per bound replaced texture: the samples against the
+  // memory; a change invalidates the range as a CPU write would.
+  void TexpackReverify(D3D12Texture& texture);
+  // [texpack] The mip chain of a replacement: a 2x2 box compute pass per
+  // level, recorded after the level-0 upload; leaves every level sampled.
+  bool TexpackMipInit();
+  bool TexpackGenerateMips(ID3D12Resource* res, uint32_t w, uint32_t h, uint32_t levels);
+  Microsoft::WRL::ComPtr<ID3D12RootSignature> texpack_mip_root_signature_;
+  Microsoft::WRL::ComPtr<ID3D12PipelineState> texpack_mip_pipeline_;
+  bool texpack_mip_init_tried_ = false;
+  // [texpack] Descriptor slots a texture stopped using, with the submission
+  // that may still read them; released once it has completed.
+  std::vector<std::pair<uint64_t, uint32_t>> texpack_retired_descriptors_;
+  void ReleaseRetiredDescriptors(uint64_t completed_submission);
+  static uint32_t SRVGenerationOf(const TextureBinding* binding);
+
+  uint32_t FindOrCreateTextureDescriptor(D3D12Texture& texture, xenos::DataDimension dimension,
+                                         bool is_signed, uint32_t host_swizzle);
+  void ReleaseTextureDescriptor(uint32_t descriptor_index);
+  D3D12_CPU_DESCRIPTOR_HANDLE GetTextureDescriptorCPUHandle(uint32_t descriptor_index) const;
+
+  size_t GetScaledResolveBufferCount() const {
+    assert_true(IsDrawResolutionScaled());
+    // Make sure any range up to 1 GB is accessible through 1 or 2 buffers.
+    // 2x2 scale buffers - just one 2 GB buffer for all 2 GB.
+    // 3x3 scale buffers - 4 buffers:
+    //  +0.0 +0.5 +1.0 +1.5 +2.0 +2.5 +3.0 +3.5 +4.0 +4.5
+    // |___________________|___________________|
+    //           |___________________|______________|
+    // Buffer N has an offset of N * 1 GB in the scaled resolve address space.
+    // The logic is:
+    // - 2 GB can be accessed through a [0 GB ... 2 GB) buffer - only need one.
+    // - 2.1 GB needs [0 GB ... 2 GB) and [1 GB ... 2.1 GB) - two buffers.
+    // - 3 GB needs [0 GB ... 2 GB) and [1 GB ... 3 GB) - two buffers.
+    // - 3.1 GB needs [0 GB ... 2 GB), [1 GB ... 3 GB) and [2 GB ... 3.1 GB) -
+    //   three buffers.
+    uint64_t address_space_size = uint64_t(SharedMemory::kBufferSize) *
+                                  (draw_resolution_scale_x() * draw_resolution_scale_y());
+    return size_t((address_space_size - 1) >> 30);
+  }
+  // Returns indices of two scaled resolve virtual buffers that the location in
+  // memory may be accessible through. May be the same if it's a location near
+  // the beginning or the end of the address represented only by one buffer.
+  std::array<size_t, 2> GetPossibleScaledResolveBufferIndices(uint64_t address_scaled) const {
+    assert_true(IsDrawResolutionScaled());
+    size_t address_gb = size_t(address_scaled >> 30);
+    size_t max_index = GetScaledResolveBufferCount() - 1;
+    // In different cases for 3x3:
+    //  +0.0 +0.5 +1.0 +1.5 +2.0 +2.5 +3.0 +3.5 +4.0 +4.5
+    // |12________2________|1_________2________|
+    //           |1_________2________|1_________12__|
+    return std::array<size_t, 2>{std::min(address_gb, max_index),
+                                 std::min(std::max(address_gb, size_t(1)) - size_t(1), max_index)};
+  }
+  // The index is also the gigabyte offset of the buffer from the start of the
+  // scaled physical memory address space.
+  size_t GetCurrentScaledResolveBufferIndex() const {
+    return scaled_resolve_1gb_buffer_indices_[scaled_resolve_current_range_start_scaled_ >> 30];
+  }
+  ScaledResolveVirtualBuffer& GetCurrentScaledResolveBuffer() {
+    ScaledResolveVirtualBuffer* scaled_resolve_buffer =
+        scaled_resolve_2gb_buffers_[GetCurrentScaledResolveBufferIndex()].get();
+    assert_not_null(scaled_resolve_buffer);
+    return *scaled_resolve_buffer;
+  }
+
+  xenos::ClampMode NormalizeClampMode(xenos::ClampMode clamp_mode) const;
+
+  static const HostFormat host_formats_[64];
+
+  D3D12CommandProcessor& command_processor_;
+  bool bindless_resources_used_;
+
+  // Bits per format, for checking if the host format should be
+  // point-filtered. Canary 197929d96.
+  uint64_t host_filterable_unsigned_ = 0;
+  uint64_t host_filterable_signed_ = 0;
+
+  Microsoft::WRL::ComPtr<ID3D12RootSignature> load_root_signature_;
+  std::array<Microsoft::WRL::ComPtr<ID3D12PipelineState>, kLoadShaderCount> load_pipelines_;
+  // Load pipelines for resolution-scaled resolve targets.
+  std::array<Microsoft::WRL::ComPtr<ID3D12PipelineState>, kLoadShaderCount> load_pipelines_scaled_;
+
+  std::vector<SRVDescriptorCachePage> srv_descriptor_cache_;
+  uint32_t srv_descriptor_cache_allocated_;
+  // Indices of cached descriptors used by deleted textures, for reuse.
+  std::vector<uint32_t> srv_descriptor_cache_free_;
+
+  enum class NullSRVDescriptorIndex {
+    k2DArray,
+    k3D,
+    kCube,
+
+    kCount,
+  };
+  // Contains null SRV descriptors of dimensions from NullSRVDescriptorIndex.
+  // For copying, not shader-visible.
+  Microsoft::WRL::ComPtr<ID3D12DescriptorHeap> null_srv_descriptor_heap_;
+  D3D12_CPU_DESCRIPTOR_HANDLE null_srv_descriptor_heap_start_;
+
+  std::array<D3D12TextureBinding, xenos::kTextureFetchConstantCount> d3d12_texture_bindings_;
+
+  // Unsupported texture formats used during this frame (for research and
+  // testing).
+  enum : uint8_t {
+    kUnsupportedResourceBit = 1,
+    kUnsupportedUnormBit = kUnsupportedResourceBit << 1,
+    kUnsupportedSnormBit = kUnsupportedUnormBit << 1,
+  };
+  uint8_t unsupported_format_features_used_[64];
+
+  // The tiled buffer for resolved data with resolution scaling.
+  // Because on Direct3D 12 (at least on Windows 10 2004) typed SRV or UAV
+  // creation fails for offsets above 4 GB, a single tiled 4.5 GB buffer can't
+  // be used for 3x3 resolution scaling.
+  // Instead, "sliding window" buffers allowing to access a single range of up
+  // to 1 GB (or up to 2 GB, depending on the low bits) at any moment are used.
+  // Parts of 4.5 GB address space can be accessed through 2 GB buffers as:
+  //  +0.0 +0.5 +1.0 +1.5 +2.0 +2.5 +3.0 +3.5 +4.0 +4.5
+  // |___________________|___________________|      or
+  //           |___________________|______________|
+  // (2 GB is also the amount of scaled physical memory with 2x resolution
+  // scale, and older Intel GPUs, while support tiled resources, only support 31
+  // virtual address bits per resource).
+  // Index is first gigabyte. Only including buffers containing over 1 GB
+  // (because otherwise the data will be fully contained in another).
+  // Size is calculated the same as in GetScaledResolveBufferCount.
+  std::array<std::unique_ptr<ScaledResolveVirtualBuffer>,
+             (uint64_t(SharedMemory::kBufferSize) *
+                  (kMaxDrawResolutionScaleAlongAxis * kMaxDrawResolutionScaleAlongAxis) -
+              1) /
+                 (UINT32_C(1) << 30)>
+      scaled_resolve_2gb_buffers_;
+  // Not very big heaps (16 MB) because they are needed pretty sparsely. One
+  // 2x-scaled 1280x720x32bpp texture is slighly bigger than 14 MB.
+  static constexpr uint32_t kScaledResolveHeapSizeLog2 = 24;
+  static constexpr uint32_t kScaledResolveHeapSize = uint32_t(1) << kScaledResolveHeapSizeLog2;
+  static_assert((kScaledResolveHeapSize % D3D12_TILED_RESOURCE_TILE_SIZE_IN_BYTES) == 0,
+                "Scaled resolve heap size must be a multiple of Direct3D tile size");
+  static_assert(kScaledResolveHeapSizeLog2 <= SharedMemory::kBufferSizeLog2,
+                "Scaled resolve heaps are assumed to be wholly mappable irrespective of "
+                "resolution scale, never truncated, for example, if the scaled resolve "
+                "address space is 4.5 GB, but the heap size is 1 GB");
+  static_assert(kScaledResolveHeapSizeLog2 <= 30,
+                "Scaled resolve heaps are assumed to only be wholly mappable to up to "
+                "two 2 GB buffers");
+  // Resident portions of the tiled buffer.
+  std::vector<Microsoft::WRL::ComPtr<ID3D12Heap>> scaled_resolve_heaps_;
+  // Number of currently resident portions of the tiled buffer, for profiling.
+  uint32_t scaled_resolve_heap_count_ = 0;
+  // Current scaled resolve state.
+  // For aliasing barrier placement, last owning buffer index for each of 1 GB.
+  size_t scaled_resolve_1gb_buffer_indices_[(uint64_t(SharedMemory::kBufferSize) *
+                                                 kMaxDrawResolutionScaleAlongAxis *
+                                                 kMaxDrawResolutionScaleAlongAxis +
+                                             ((uint32_t(1) << 30) - 1)) >>
+                                            30];
+  // Range used in the last successful MakeScaledResolveRangeCurrent call.
+  uint64_t scaled_resolve_current_range_start_scaled_;
+  uint64_t scaled_resolve_current_range_length_scaled_;
+};
+
+}  // namespace rex::graphics::ngpu_d3d12

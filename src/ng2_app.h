@@ -17,8 +17,7 @@
 #include "ng2_saveimport.h"
 #include "ng2_hwdetect.h"
 #include "ng2_autoskip.h"
-#include "ng2_native_gpu.h"
-#include "ng2_plume_renderer.h"
+#include "ng2_ngpu_bridge.h"
 #include "ng2_perf.h"
 #include "ng2_texnotify.h"
 #include "ng2_settings.h"
@@ -288,16 +287,14 @@ class Ng2App : public rex::ReXApp {
     ng2::StartPerfMonitor();
     perf_hud_ = std::make_unique<ng2::PerfHudOverlay>(drawer);
 
-    // The native renderer's draw hand-off from the GPU plugin. Off unless
-    // NG2_NATIVE_GPU is set, and a no-op if the plugin does not export it, so
-    // an older plugin or a stock build runs exactly as before.
-    ng2::ngpu::Start();
-
-    // The native renderer's own device and shadow window. Off unless
-    // NG2_NATIVE_GPU_WINDOW is set. It draws nothing yet - it clears and
-    // presents - so that two D3D12 devices coexisting in one process is
-    // established before any draw depends on it.
-    ng2::ngpu::render::Start();
+    // The native-GPU backend transplant: the plugin's draw / swap callbacks
+    // feed the plugin's own D3D12 backend, vendored in-app, and the native
+    // window presents its output. Off unless ngpu_backend is on (test lever
+    // NG2_NATIVE_GPU=1, ng2_tuning.h), and a no-op if the plugin lacks the
+    // exports, so an older plugin or a stock build runs exactly as before.
+    ng2::ngpu::Start(ng2::ngpu::render::WindowSpec{
+        settings_.window_width, settings_.window_height, settings_.fullscreen,
+        settings_.monitor, settings_.letterbox});
 
     // Escape quits. The window's close button already does, but a full-screen
     // game with no visible chrome needs a key that gets you out.
@@ -415,7 +412,6 @@ class Ng2App : public rex::ReXApp {
       return;
     shutting_down_ = true;
     StopTitleWatcher();
-    ng2::ngpu::render::Stop();
     ng2::ngpu::Stop();
     ng2::StopPerfMonitor();
     settings_.Clamp();

@@ -1,0 +1,3 @@
+fxc (Windows Kit 10.0.26100.0), SM 5.1 DXBC, 2026-09-26:
+  fxc /T vs_5_1 /E VsMain /O3 /Fh ng2_ngpu_blit_vs.h /Vn kNg2NgpuBlitVs ng2_ngpu_blit.hlsl
+  fxc /T ps_5_1 /E PsMain /O3 /Fh ng2_ngpu_blit_ps.h /Vn kNg2NgpuBlitPs ng2_ngpu_blit.hlsl

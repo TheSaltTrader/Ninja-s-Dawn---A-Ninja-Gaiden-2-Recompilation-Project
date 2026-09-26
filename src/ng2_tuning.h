@@ -37,6 +37,7 @@
 
 #include <cstdio>
 #include <cstdlib>
+#include <deque>
 #include <filesystem>
 #include <fstream>
 #include <string>
@@ -214,6 +215,45 @@ struct Ng2Tuning {
     if (const char* rb = std::getenv("NG2_READBACK"); rb && *rb) {
       out.push_back({"readback_resolve", rb,
                      "[test lever NG2_READBACK] resolve readback: none/fast/some/full"});
+    }
+    // --- The native-GPU backend transplant (2026-09-26) -----------------------
+    //
+    //   NG2_NATIVE_GPU=1      ngpu_backend=true: the plugin's callbacks feed the
+    //       plugin's own D3D12 backend vendored in-app, presenting on the native
+    //       window beside the game's (lockstep: both render; compare them).
+    //   NG2_NATIVE_OFFLOAD=1  gpu_offload_to_native=true (plugin): the plugin
+    //       draws nothing and the native backend is the only GPU. The game's
+    //       own window goes black - expected, not a defect.
+    //   NG2_TUNE=a=b;c=d      any cvars, for experiments (Fable II's FABLE2_TUNE);
+    //       items separated by ';' - a ',' would make the whole text one name.
+    //
+    // Levers, not settings, until the native path passes the release gate
+    // (claudecode/RELEASE_GATE.md); then they graduate to a settings row.
+    if (const char* ng = std::getenv("NG2_NATIVE_GPU"); ng && *ng && ng[0] != '0') {
+      out.push_back({"ngpu_backend", "true",
+                     "[test lever NG2_NATIVE_GPU] the native backend transplant (exe cvar)"});
+      if (const char* off = std::getenv("NG2_NATIVE_OFFLOAD"); off && *off && off[0] != '0') {
+        out.push_back({"gpu_offload_to_native", "true",
+                       "[test lever NG2_NATIVE_OFFLOAD] the plugin skips its GPU work; the native "
+                       "backend is the only GPU (plugin cvar)"});
+      }
+    }
+    if (const char* tune = std::getenv("NG2_TUNE"); tune && *tune) {
+      static std::deque<std::string> owned;   // Entry holds const char*; these must outlive it
+      std::string text(tune);
+      size_t start = 0;
+      while (start <= text.size()) {
+        size_t end = text.find(';', start);
+        if (end == std::string::npos) end = text.size();
+        std::string item = text.substr(start, end - start);
+        const size_t eq = item.find('=');
+        if (eq != std::string::npos && eq > 0) {
+          owned.push_back(item.substr(0, eq));
+          const char* name = owned.back().c_str();
+          out.push_back({name, item.substr(eq + 1), "[test lever NG2_TUNE] experiment cvar"});
+        }
+        start = end + 1;
+      }
     }
     return out;
   }

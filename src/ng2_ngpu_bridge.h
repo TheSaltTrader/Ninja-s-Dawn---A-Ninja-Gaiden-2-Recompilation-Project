@@ -1,0 +1,40 @@
+/**
+ * @file        ng2_ngpu_bridge.h
+ * @brief       NG2's side of the native-GPU BACKEND TRANSPLANT: the plugin's
+ *              draw / swap callbacks fed, in LOCKSTEP, into the plugin's own
+ *              D3D12 backend vendored in-app (src/native_gpu_xlat/rtc_d3d12,
+ *              driven by src/ng2_native_backend.cpp), and the native window
+ *              that presents its output (src/ng2_ngpu_window.cpp).
+ *
+ * The design and every number behind it are Fable II's
+ * (claudecode/NATIVE_GPU_MIGRATION_KIT/MIGRATION_GUIDE.md, 2026-09-26):
+ * lockstep - calling the backend INSIDE the plugin's GPU-thread callbacks -
+ * sees exactly the guest memory the plugin would have seen; an async replay
+ * read it a frame late (39,000 empty resolve rectangles). Under the plugin's
+ * gpu_offload_to_native the plugin keeps its PM4 parser and the bridge and
+ * skips its own GPU work: the native backend is then the only GPU, and the
+ * plugin's own window stays black - expected.
+ *
+ * Off by default. Switched on by the exe cvar ngpu_backend (test lever
+ * NG2_NATIVE_GPU=1 through ng2_tuning.h), and made the ONLY GPU by the
+ * plugin cvar gpu_offload_to_native (NG2_NATIVE_OFFLOAD=1). Without the
+ * exports (an older plugin) it logs and does nothing - a missing native path
+ * must never stop the game running.
+ */
+
+#pragma once
+
+#include "ng2_ngpu_window.h"
+
+namespace ng2::ngpu {
+
+// Binds the plugin's RexNgpu* exports and installs the lockstep consumer;
+// starts the native window when ngpu_backend is on. Call once the plugin is
+// loaded (OnPostSetup).
+void Start(const render::WindowSpec& window);
+
+// Removes the consumer (the plugin holds raw pointers into this module) and
+// stops the native window. Before the runtime tears down.
+void Stop();
+
+}  // namespace ng2::ngpu
