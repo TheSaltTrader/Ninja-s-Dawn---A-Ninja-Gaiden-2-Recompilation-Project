@@ -12,30 +12,38 @@ reported as unreadable, not as "every feature missing".  Items that have no
 string proof are printed as UNMEASURED and counted, so what this census cannot
 see is part of its output.
 
+ngpu_backend.dll (the native backend, 2026-09-26) is OPTIONAL: absent, its
+rows read UNMEASURED and the census still passes (the in-exe copy runs);
+present, it must carry NG2's plugin-side features, because under offload it
+is the only GPU and a build of it from a tree without them loses ultrawide,
+the fades and the texture pack exactly as v1.0.22 lost ultrawide.
+
 Exit status: 0 = every measurable item present; 1 = something MISSING;
-2 = a file could not be read.
+2 = a required file could not be read.
 """
 import argparse
 import os
-import re
 import sys
 
 # ---------------------------------------------------------------------------
 # The ledger.  One row per feature: (item, file, needle, note).
-# file: 'exe' | 'runtime' | 'plugin' | 'generated' | 'hooks' | None (unmeasured)
+# file: 'exe' | 'runtime' | 'plugin' | 'dll' | 'generated' | 'hooks' | None (unmeasured)
 # ---------------------------------------------------------------------------
 FILES = {
     "exe": "ng2.exe",
     "runtime": "rexruntime.dll",
     "plugin": "rexgpu-xenos.dll",
+    "dll": "ngpu_backend.dll",   # optional
 }
+OPTIONAL = {"dll"}
 
 # A control string every build of that file carries.  Verified against the
-# shipped v1.0.24 binaries on 2026-09-26.
+# shipped v1.0.24 binaries (and the kit's DLL) on 2026-09-26.
 CONTROLS = {
     "exe": b"video_mode_explicit",   # the cvar the app sets by name (v1.0.1)
     "runtime": b"rex_gpu_create",
     "plugin": b"rex_gpu_create",
+    "dll": b"NgpuBackendAbiVersion",
 }
 
 LEDGER = [
@@ -57,7 +65,7 @@ LEDGER = [
     ("fades: solid-2d gate",                "plugin",  b"solid2d",             "v1.0.20"),
     # 1.4 / 1.5 SDK fixes
     ("sdk: stuck-wait watchdog",            "runtime", b"watchdog",            "xboxkrnl_threading.cpp"),
-    ("sdk: ring re-init fix (both pointers)", "plugin", b"pointers reset",       "InitializeRingBuffer; the v1.0.0 attract-freeze fix"),
+    ("sdk: ring re-init fix (both pointers)", "plugin", b"pointers reset",     "InitializeRingBuffer; the v1.0.0 attract-freeze fix"),
     ("sdk: ring dump on bad packet",        "plugin",  b"RINGDUMP",            "command_processor.cpp"),
     ("sdk: clear_memory_page_state path",   "plugin",  b"clear_memory_page_state", "NG2 is the only title on it"),
     ("sdk: upload copy pool present",       "plugin",  b"shared_memory_upload_threads", "the POOL, not the fix"),
@@ -73,6 +81,15 @@ LEDGER = [
     # 1.4 60 fps
     ("60fps: guest fps at 60, correct speed", None,    None,                   "behavioural - deferred"),
     ("60fps: no rate above 60 offered",     None,      None,                   "lodestone census + README"),
+    # 6 the native backend (the transplant): the exe's side, and the DLL when present
+    ("native: exe binds the RexNgpu ABI",   "exe",     b"RexNgpuSetDrawCallback", "ng2_ngpu_bridge.cpp"),
+    ("native: exe presenter half",          "exe",     b"[ngpu-window]",       "ng2_ngpu_window.cpp"),
+    ("native dll: ultrawide widen k",       "dll",     b"ng2_fov_k",           "the DLL's IssueSwap / UpdateBindings"),
+    ("native dll: ultrawide mode",          "dll",     b"ng2_uw_mode",         "written at its swap"),
+    ("native dll: fades solid-2d gate",     "dll",     b"solid2d",             "v1.0.20 in the DLL"),
+    ("native dll: texpack replacement",     "dll",     b"[texpack]",           "texture_cache in the DLL"),
+    ("native dll: texpack mip pass",        "dll",     b"texpack_mip",         "in the DLL"),
+    ("native dll: settings across the boundary", "dll", b"NgpuBackendSetSetting", "ng2_fov_k in, ng2_uw_mode out"),
 ]
 
 # Every ledger string, for --compare (a candidate that lost any of these is
@@ -88,10 +105,14 @@ def read(path):
 def census(folder, generated=None, hooks=None):
     blobs = {}
     unreadable = []
+    absent_optional = []
     for key, name in FILES.items():
         path = os.path.join(folder, name)
         if not os.path.isfile(path):
-            unreadable.append("%s: missing from %s" % (name, folder))
+            if key in OPTIONAL:
+                absent_optional.append(name)
+            else:
+                unreadable.append("%s: missing from %s" % (name, folder))
             continue
         blob = read(path)
         if CONTROLS[key] not in blob:
@@ -116,17 +137,19 @@ def census(folder, generated=None, hooks=None):
         if where is None:
             unmeasured.append((item, note))
         elif where not in blobs:
-            unmeasured.append((item, "%s not readable here" % (FILES.get(where, where))))
+            what = FILES.get(where, where)
+            unmeasured.append((item, "%s not readable here%s" % (what, " (optional, absent)" if what in absent_optional else "")))
         elif needle in blobs[where]:
             present.append((item, note))
         else:
             missing.append((item, "%s lacks %r (%s)" % (FILES.get(where, where), needle.decode(), note)))
 
     print("carry census: %s" % folder)
-    for key in ("exe", "runtime", "plugin"):
-        path = os.path.join(folder, FILES[key])
+    for key in ("exe", "runtime", "plugin", "dll"):
         if key in blobs:
             print("  read %-16s %10d bytes" % (FILES[key], len(blobs[key])))
+    for name in absent_optional:
+        print("  absent %-14s (optional - the in-exe copy of the backend runs)" % name)
     if "generated_hits" in blobs:
         print("  generated: %d file(s) carry rex_spin_yield" % blobs["generated_hits"])
     for line in unreadable:
@@ -150,8 +173,9 @@ def compare(baseline, candidate):
         a = os.path.join(baseline, name)
         b = os.path.join(candidate, name)
         if not (os.path.isfile(a) and os.path.isfile(b)):
-            print("  %-16s cannot compare (missing on one side)" % name)
-            rc = 2
+            print("  %-16s cannot compare (missing on one side)%s" % (name, " - optional" if key in OPTIONAL else ""))
+            if key not in OPTIONAL:
+                rc = 2
             continue
         ba, bb = read(a), read(b)
         lost = [s.decode() for s in COMPARE_STRINGS if s in ba and s not in bb]
@@ -169,7 +193,7 @@ def compare(baseline, candidate):
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("folder", nargs="?", help="folder holding ng2.exe, rexruntime.dll, rexgpu-xenos.dll")
+    ap.add_argument("folder", nargs="?", help="folder holding ng2.exe, rexruntime.dll, rexgpu-xenos.dll (and ngpu_backend.dll)")
     ap.add_argument("--generated", help="the generated/ source dir (proves rex_spin_yield)")
     ap.add_argument("--hooks", help="config/hooks/patches.toml (proves the TOML-only hook names)")
     ap.add_argument("--compare", nargs=2, metavar=("BASELINE", "CANDIDATE"),

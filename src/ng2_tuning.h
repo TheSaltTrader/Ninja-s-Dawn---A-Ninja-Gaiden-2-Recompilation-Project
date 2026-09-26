@@ -41,6 +41,7 @@
 #include <filesystem>
 #include <fstream>
 #include <string>
+#include <string_view>
 #include <vector>
 
 #include <rex/cvar.h>
@@ -262,7 +263,29 @@ struct Ng2Tuning {
   /// Returns false if the file could not be written; a parse failure is
   /// reported by the SDK's own log line.
   static bool Apply(const std::filesystem::path& path,
-                    const std::vector<Entry>& entries) {
+                    const std::vector<Entry>& entries_in) {
+    // A repeated key kills the WHOLE config: the TOML parser refuses to redefine
+    // it and rex::cvar::LoadConfig then applies nothing - on 2026-09-26 a launcher
+    // passed one cvar twice through NG2_TUNE and the game ran without a single
+    // tuning entry (no clear_memory_page_state, no ROV, no keybinds), silently
+    // except for one error line. Duplicates are folded here, last one wins, so
+    // an experiment lever can override a fixed entry and can never drop them all.
+    std::vector<Entry> entries;
+    for (const auto& e : entries_in) {
+      bool replaced = false;
+      for (auto& u : entries) {
+        if (std::string_view(u.name) == std::string_view(e.name)) {
+          u = e;
+          replaced = true;
+          break;
+        }
+      }
+      if (!replaced) entries.push_back(e);
+    }
+    if (entries.size() != entries_in.size()) {
+      REXLOG_WARN("Tuning: {} duplicate entr{} folded (last value wins)", entries_in.size() - entries.size(),
+                  entries_in.size() - entries.size() == 1 ? "y" : "ies");
+    }
     std::error_code ec;
     std::filesystem::create_directories(path.parent_path(), ec);
     std::ofstream out(path, std::ios::trunc);

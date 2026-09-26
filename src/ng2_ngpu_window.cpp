@@ -14,11 +14,9 @@
 #include <rex/cvar.h>
 #include <rex/logging.h>
 
-#include "ng2_native_backend.h"
 #include "ng2_ngpu_bridge.h"
 #include "ngpu_shaders/ng2_ngpu_blit_ps.h"
 #include "ngpu_shaders/ng2_ngpu_blit_vs.h"
-#include "rtc_d3d12/facade.h"
 
 namespace ng2::ngpu::render {
 namespace {
@@ -312,9 +310,9 @@ D3D12_VIEWPORT ViewportFor(uint32_t out_w, uint32_t out_h, uint32_t& mode_out) {
 
 void PresentOnce() {
   // [async submit] the backend's swap submission (the guest output this frame samples) must be on the queue first.
-  if (!rtc::WaitSwapSubmitted(100)) ++g_stats.waits_timed_out;
+  if (!ng2::ngpu::BackendWaitSwapSubmitted(100)) ++g_stats.waits_timed_out;
   uint32_t ow = 0, oh = 0;
-  ID3D12Resource* out = backend::GuestOutput(ow, oh);
+  ID3D12Resource* out = ng2::ngpu::BackendGuestOutput(ow, oh);
   if (!out) { ++g_stats.skipped_no_output; return; }
   HandleResize();
   const uint32_t index = g_swap->GetCurrentBackBufferIndex();

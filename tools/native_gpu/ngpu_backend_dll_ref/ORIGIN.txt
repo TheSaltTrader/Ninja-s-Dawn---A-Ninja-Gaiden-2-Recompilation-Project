@@ -1,0 +1,5 @@
+ngpu_backend.dll reference copy (NOT tracked here; the DLL is a build artefact).
+From the Fable II kit, 2026-09-26 17:22: built from Fable II commit 012fcf3 on engine rexglue-src 8b4a025,
+clang-cl Release, CMake target ngpu_backend. sha256 (first 16) d522daf7a62f134d. ABI 1.
+src/ngpu_backend_api.h is the verbatim header; ngpu_backend_dll.cpp and ngpu_setting_table.inc are its source,
+kept for reading. The DLL itself is staged beside ng2.exe in the run folder by hand / by the launcher.

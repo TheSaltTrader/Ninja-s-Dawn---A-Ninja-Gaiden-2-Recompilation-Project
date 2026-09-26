@@ -25,7 +25,14 @@ param(
   [string]$Tune = "",
   [int]$Seconds = 240,
   [string]$Tag = "native",
-  [int]$SelfCheckEvery = 1024
+  [int]$SelfCheckEvery = 1024,
+  [switch]$Debugger,
+  # NG2's own launch-time pad script (ng2_autoskip.cpp, env NG2_PAD_SCRIPT): "t:button,t:button,autoskip:S" -
+  # each press at t seconds after launch, held 0.18 s; buttons a b x y start up down left right. No desktop input.
+  [string]$PadScript = "",
+  # Run windiff2.py against both windows this many seconds after launch (0 = not at all), --pairs 2 for the floor.
+  [int]$DiffAt = 0,
+  [int]$DiffPairs = 2
 )
 $ErrorActionPreference = "Stop"
 $root = Split-Path -Parent (Split-Path -Parent (Split-Path -Parent $MyInvocation.MyCommand.Path))
@@ -82,17 +89,42 @@ try {
   # 4. Launch.
   $env:NG2_NATIVE_GPU = "1"
   if ($Offload) { $env:NG2_NATIVE_OFFLOAD = "1" } else { Remove-Item Env:NG2_NATIVE_OFFLOAD -ErrorAction SilentlyContinue }
-  $tune = "ngpu_backend_selfcheck_every=$SelfCheckEvery"
-  if ($Tune) { $tune = $tune + ";" + $Tune }
-  $env:NG2_TUNE = $tune
+  # PowerShell variable names are case-insensitive: a local `$tune` IS the `-Tune` parameter, and the first
+  # leg (17:31) passed "ngpu_backend_selfcheck_every=1;ngpu_backend_selfcheck_every=1" - which the TOML parser
+  # refused, dropping EVERY tuning entry for that run. Distinct name, and the text is printed below.
+  $tuneText = "ngpu_backend_selfcheck_every=$SelfCheckEvery"
+  if ($Tune) { $tuneText = $tuneText + ";" + $Tune }
+  $env:NG2_TUNE = $tuneText
+  if ($PadScript) { $env:NG2_PAD_SCRIPT = $PadScript } else { Remove-Item Env:NG2_PAD_SCRIPT -ErrorAction SilentlyContinue }
   $logsBefore = @(Get-ChildItem (Join-Path $bin "logs") -Filter "ng2_*.log" -ErrorAction SilentlyContinue | Sort-Object Name)
-  $p = Start-Process -FilePath $exe -WorkingDirectory $bin -PassThru
-  $pid_started = $p.Id
-  Write-Host "started ng2.exe pid $pid_started (offload=$($Offload.IsPresent), NG2_TUNE=$tune); running $Seconds s"
+  if ($Debugger) {
+    # Under cdb: on an unhandled exception it prints !analyze and the stacks to $cdbLog and quits, so a crash yields
+    # a symbolised stack from ONE run. Symbols: the DLL's pdb beside it, the fork pair's pdbs, the exe's own.
+    $cdb = "C:\Program Files (x86)\Windows Kits\10\Debuggers\x64\cdb.exe"
+    $cdbLog = "D:\ng2_frameinterp\work\cdb_" + $Tag + "_" + $stamp + ".log"
+    $sym = "srv*;" + $bin + ";" + $Pair + ";D:\ng2_frameinterp\ng2-rexglue\out\win-amd64\Release"
+    $cmds = '.sympath ' + $sym + ';.reload;g;!analyze -v;~*kv;q'
+    $p = Start-Process -FilePath $cdb -ArgumentList @('-g', '-G', '-o', '-logo', $cdbLog, '-y', $sym, '-c', ('"' + $cmds + '"'), ('"' + $exe + '"')) -WorkingDirectory $bin -PassThru
+    Write-Host "cdb pid $($p.Id) drives the game; its log: $cdbLog"
+    Start-Sleep -Seconds 4
+    $game = Get-Process -Name ng2 -ErrorAction SilentlyContinue | Where-Object { $_.StartTime -gt (Get-Date).AddSeconds(-30) } | Select-Object -First 1
+    if ($game) { $pid_started = $game.Id } else { $pid_started = $p.Id }
+  } else {
+    $p = Start-Process -FilePath $exe -WorkingDirectory $bin -PassThru
+    $pid_started = $p.Id
+  }
+  Write-Host "started ng2.exe pid $pid_started (offload=$($Offload.IsPresent), NG2_TUNE=$tuneText); running $Seconds s"
   $deadline = (Get-Date).AddSeconds($Seconds)
+  $launched = Get-Date
+  $diffDone = $false
   while ((Get-Date) -lt $deadline) {
     Start-Sleep -Seconds 5
     if ($p.HasExited) { Write-Host "the game exited on its own (code $($p.ExitCode))"; break }
+    if ($DiffAt -gt 0 -and -not $diffDone -and ((Get-Date) - $launched).TotalSeconds -ge $DiffAt) {
+      $diffDone = $true
+      Write-Host "=== windiff2 at +$DiffAt s (tag $Tag, $DiffPairs pairs) ==="
+      python (Join-Path $root "tools\native_gpu\windiff2.py") --tag $Tag --pairs $DiffPairs 2>&1 | ForEach-Object { Write-Host $_ }
+    }
   }
   if (-not $p.HasExited) {
     Stop-Process -Id $pid_started -Force -ErrorAction SilentlyContinue

@@ -287,14 +287,9 @@ class Ng2App : public rex::ReXApp {
     ng2::StartPerfMonitor();
     perf_hud_ = std::make_unique<ng2::PerfHudOverlay>(drawer);
 
-    // The native-GPU backend transplant: the plugin's draw / swap callbacks
-    // feed the plugin's own D3D12 backend, vendored in-app, and the native
-    // window presents its output. Off unless ngpu_backend is on (test lever
-    // NG2_NATIVE_GPU=1, ng2_tuning.h), and a no-op if the plugin lacks the
-    // exports, so an older plugin or a stock build runs exactly as before.
-    ng2::ngpu::Start(ng2::ngpu::render::WindowSpec{
-        settings_.window_width, settings_.window_height, settings_.fullscreen,
-        settings_.monitor, settings_.letterbox});
+    // (The native-GPU backend transplant starts in OnPostSetup, not here: the
+    // backend reads rex::system::kernel_state() at start, and this runs before
+    // the kernel exists - the 17:36 leg crashed in the DLL's Driver::Init.)
 
     // Escape quits. The window's close button already does, but a full-screen
     // game with no visible chrome needs a key that gets you out.
@@ -1161,6 +1156,18 @@ class Ng2App : public rex::ReXApp {
     // Apply the saved ultrawide / FOV now that the GPU plugin (which owns the
     // ng2_fov_k cvar) is loaded and its cvars are registered.
     ApplyFov();
+
+    // The native-GPU backend transplant: the plugin's draw / swap callbacks
+    // feed the plugin's own D3D12 backend (ngpu_backend.dll, or the copy
+    // vendored in-app), and the native window presents its output. HERE, after
+    // the plugin is loaded and the kernel state is up (the backend reads
+    // kernel_state()->memory() at start), and after ApplyFov so the backend
+    // receives the field-of-view factor. Off unless ngpu_backend is on (test
+    // lever NG2_NATIVE_GPU=1, ng2_tuning.h), and a no-op if the plugin lacks
+    // the exports, so an older plugin or a stock build runs exactly as before.
+    ng2::ngpu::Start(ng2::ngpu::render::WindowSpec{
+        settings_.window_width, settings_.window_height, settings_.fullscreen,
+        settings_.monitor, settings_.letterbox});
 
     // Self-update. Wire the module to this install, register the clean-exit that
     // lets the staged updater replace our files, and - if the player has left

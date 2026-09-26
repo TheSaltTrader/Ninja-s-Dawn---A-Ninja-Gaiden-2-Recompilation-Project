@@ -1,9 +1,15 @@
 // NG2 native-GPU bridge: the plugin's callbacks -> the transplanted backend, in lockstep. See ng2_ngpu_bridge.h.
 //
-// Adapted from Fable II's app glue (NATIVE_GPU_MIGRATION_KIT/app_integration/lockstep_bridge_reference.cpp,
-// the 2026-09-26 state that measured 0.0027-0.0030 against the plugin and 59.6-60.0 fps in Bowerstone under offload).
+// Two backends, one glue. The DLL route (ngpu_backend.dll, Fable II's game-agnostic build of the same backend plus
+// its lockstep glue; NATIVE_GPU_MIGRATION_KIT/bin/ngpu_backend_dll) is the delivery the user asked for and is the
+// default when the DLL sits beside the exe. The in-exe route (src/native_gpu_xlat + ng2_native_backend.cpp) is the
+// same code compiled into ng2.exe, kept as the fallback and for diffing. Both are fed from the same plugin callbacks
+// and present through the same native window.
+//
+// Adapted from Fable II's app glue (NATIVE_GPU_MIGRATION_KIT/app_integration/lockstep_bridge_reference.cpp, the
+// 2026-09-26 state that measured 0.0027-0.0030 against the plugin and 59.6-60.0 fps in Bowerstone under offload).
 // What is NG2's own here: the loading -> world signal for the reveal hold (the game's mode word), the present
-// request into NG2's raw-D3D12 window, and the counters.
+// request into NG2's raw-D3D12 window, the ultrawide two-homes handling, and the counters.
 #include "ng2_ngpu_bridge.h"
 
 #include <windows.h>
@@ -15,7 +21,9 @@
 #include <atomic>
 #include <cstddef>
 #include <cstdint>
+#include <cstdio>
 #include <cstring>
+#include <string>
 
 #include <rex/cvar.h>
 #include <rex/logging.h>
@@ -23,6 +31,7 @@
 #include <rex/system/kernel_state.h>
 
 #include "ng2_native_backend.h"
+#include "ngpu_backend_api.h"
 #include "rtc_d3d12/facade.h"
 
 // The vendored backend's own copies (src/native_gpu_xlat/rtc_d3d12/flags.cpp; declared in the vendored
@@ -32,11 +41,15 @@ double& FLAGS_ng2_fov_k_storage_();
 int32_t& FLAGS_ng2_uw_mode_storage_();
 
 // ---------------------------------------------------------------------------------------------------------------------
-// cvars. The exe owns these names; the vendored backend reads the ones it needs through the accessors at the bottom.
+// cvars. The exe owns these names; the vendored backend reads the ones it needs through the accessors at the bottom,
+// the DLL receives them as NgpuBackendOptions.
 // ---------------------------------------------------------------------------------------------------------------------
 REXCVAR_DEFINE_BOOL(ngpu_backend, false, "GPU",
-                    "Native-GPU BACKEND TRANSPLANT (read at startup): the plugin's own D3D12 backend, vendored "
-                    "in-app, renders every draw on the native window's device; test lever NG2_NATIVE_GPU=1");
+                    "Native-GPU BACKEND TRANSPLANT (read at startup): the plugin's own D3D12 backend renders every "
+                    "draw on the native window's device; test lever NG2_NATIVE_GPU=1");
+REXCVAR_DEFINE_BOOL(ngpu_backend_dll, true, "GPU",
+                    "Use ngpu_backend.dll beside the exe (the game-agnostic build) when it loads and answers ABI 1; "
+                    "otherwise the copy compiled into ng2.exe. NG2_TUNE=ngpu_backend_dll=false forces the in-exe copy");
 REXCVAR_DEFINE_BOOL(ngpu_backend_lockstep, true, "GPU",
                     "Feed the transplanted backend INSIDE the plugin's draw / swap callbacks (its GPU thread, the "
                     "same instant) - guest memory is exactly what the plugin reads");
@@ -122,12 +135,35 @@ RevealFn g_reveal_plugin = nullptr;
 uint64_t* g_dirty = nullptr;
 uint32_t g_dirty_words = 0;
 
-bool g_backend_on = false;          // the backend initialised on the native window's device
+// ---------------------------------------------------------------------------------------------------------------------
+// ngpu_backend.dll, bound by name so a missing or older DLL falls back to the in-exe copy instead of failing to load
+// the exe (the .lib is deliberately not linked).
+// ---------------------------------------------------------------------------------------------------------------------
+struct BackendDll {
+  HMODULE module = nullptr;
+  uint32_t (*AbiVersion)() = nullptr;
+  void (*DefaultOptions)(NgpuBackendOptions*) = nullptr;
+  int (*Start)(const NgpuBackendOptions*, ID3D12Device*, ID3D12CommandQueue*) = nullptr;
+  void (*OnDraw)(const void*) = nullptr;
+  void (*OnSwap)(uint32_t, uint32_t, uint32_t) = nullptr;
+  void (*RevealAfterLoad)() = nullptr;
+  int (*ShouldPresent)() = nullptr;
+  int (*WaitSwapSubmitted)(uint32_t) = nullptr;
+  ID3D12Resource* (*GuestOutput)(uint32_t*, uint32_t*) = nullptr;
+  void (*Stats)(NgpuBackendStatsT*) = nullptr;
+  void (*PresentMode)(int32_t*, double*) = nullptr;
+  int (*GetSetting)(const char*, char*, uint32_t) = nullptr;
+  int (*SetSetting)(const char*, const char*) = nullptr;
+};
+BackendDll g_dll;
+bool g_use_dll = false;          // the DLL route is live
+bool g_backend_on = false;       // some backend initialised on the native window's device
 bool g_lockstep = false;
 const uint32_t* g_live_regs = nullptr;
 uint32_t g_live_reg_count = 0;
+double g_last_fov_k = 0.0;       // pushed into the DLL at Start if ApplyFov ran first
 
-// Register sync state (GPU thread only).
+// Register sync state (GPU thread only) - the in-exe route; the DLL does its own.
 uint32_t g_prev[kRegisterFileCount];
 bool g_prev_valid = false;
 bool g_dirty_ok = true;
@@ -139,6 +175,57 @@ std::atomic<uint64_t> g_draws_seen{0}, g_draws_bad_size{0}, g_draws_lockstep{0};
 uint64_t g_fail_nocode = 0, g_fail_withcode = 0;
 uint64_t g_nocode[2][4] = {};   // [stage][inline-len-mismatch, inline-null, unreadable, no-addr]
 uint64_t g_check_n = 0, g_check_bad = 0, g_check_runs = 0;
+
+template <typename T>
+T Bind(HMODULE m, const char* name) {
+  return reinterpret_cast<T>(GetProcAddress(m, name));
+}
+
+std::string ExeFolder() {
+  char path[MAX_PATH] = {};
+  const DWORD n = GetModuleFileNameA(nullptr, path, MAX_PATH);
+  std::string s(path, n);
+  const size_t slash = s.find_last_of("\\/");
+  return slash == std::string::npos ? std::string(".") : s.substr(0, slash);
+}
+
+bool LoadBackendDll() {
+  const std::string path = ExeFolder() + "\\ngpu_backend.dll";
+  HMODULE m = LoadLibraryA(path.c_str());
+  if (!m) {
+    REXLOG_INFO("[ngpu] no ngpu_backend.dll beside the exe ({}; error {}) - the in-exe copy of the backend runs", path,
+                GetLastError());
+    return false;
+  }
+  g_dll.module = m;
+  g_dll.AbiVersion = Bind<decltype(g_dll.AbiVersion)>(m, "NgpuBackendAbiVersion");
+  g_dll.DefaultOptions = Bind<decltype(g_dll.DefaultOptions)>(m, "NgpuBackendDefaultOptions");
+  g_dll.Start = Bind<decltype(g_dll.Start)>(m, "NgpuBackendStart");
+  g_dll.OnDraw = Bind<decltype(g_dll.OnDraw)>(m, "NgpuBackendOnDraw");
+  g_dll.OnSwap = Bind<decltype(g_dll.OnSwap)>(m, "NgpuBackendOnSwap");
+  g_dll.RevealAfterLoad = Bind<decltype(g_dll.RevealAfterLoad)>(m, "NgpuBackendRevealAfterLoad");
+  g_dll.ShouldPresent = Bind<decltype(g_dll.ShouldPresent)>(m, "NgpuBackendShouldPresent");
+  g_dll.WaitSwapSubmitted = Bind<decltype(g_dll.WaitSwapSubmitted)>(m, "NgpuBackendWaitSwapSubmitted");
+  g_dll.GuestOutput = Bind<decltype(g_dll.GuestOutput)>(m, "NgpuBackendGuestOutput");
+  g_dll.Stats = Bind<decltype(g_dll.Stats)>(m, "NgpuBackendStats");
+  g_dll.PresentMode = Bind<decltype(g_dll.PresentMode)>(m, "NgpuBackendPresentMode");
+  g_dll.GetSetting = Bind<decltype(g_dll.GetSetting)>(m, "NgpuBackendGetSetting");
+  g_dll.SetSetting = Bind<decltype(g_dll.SetSetting)>(m, "NgpuBackendSetSetting");
+  const bool complete = g_dll.AbiVersion && g_dll.DefaultOptions && g_dll.Start && g_dll.OnDraw && g_dll.OnSwap &&
+                        g_dll.RevealAfterLoad && g_dll.ShouldPresent && g_dll.WaitSwapSubmitted &&
+                        g_dll.GuestOutput && g_dll.Stats && g_dll.PresentMode && g_dll.GetSetting &&
+                        g_dll.SetSetting;
+  const uint32_t abi = g_dll.AbiVersion ? g_dll.AbiVersion() : 0;
+  if (!complete || abi != NGPU_BACKEND_ABI) {
+    REXLOG_INFO("[ngpu] ngpu_backend.dll at {} is {} (ABI {} vs {} expected) - the in-exe copy of the backend runs",
+                path, complete ? "complete" : "MISSING exports", abi, NGPU_BACKEND_ABI);
+    FreeLibrary(m);
+    g_dll = BackendDll();
+    return false;
+  }
+  REXLOG_INFO("[ngpu] ngpu_backend.dll loaded from {} (ABI {})", path, abi);
+  return true;
+}
 
 // ---------------------------------------------------------------------------------------------------------------------
 // Guest memory helpers.
@@ -166,8 +253,8 @@ bool ReadGuestU32(uint32_t va, uint32_t& out) {
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
-// The register sync: the plugin's dirty bitmap first, the SSE2 blocked full scan as the fallback, and the SELF-CHECK
-// that keeps the bitmap honest (Fable II: 30.9 M + 21.9 M + 23.1 M draws, 0 mismatches).
+// IN-EXE ROUTE: the register sync - the plugin's dirty bitmap first, the SSE2 blocked full scan as the fallback, and
+// the SELF-CHECK that keeps the bitmap honest (Fable II: 30.9 M + 21.9 M + 23.1 M draws, 0 mismatches).
 // ---------------------------------------------------------------------------------------------------------------------
 void LockstepSync(const uint32_t* regs) {
   static const uint32_t check_every = uint32_t(std::max(0, REXCVAR_GET(ngpu_backend_selfcheck_every)));
@@ -243,7 +330,7 @@ void LockstepSync(const uint32_t* regs) {
 }
 
 // Registers whose VALUE CHANGED outside the forwarded ranges, accumulated over the run and printed every 600 swaps.
-// A title may need a range Fable II did not; this is how NG2 finds out.
+// A title may need a range Fable II did not; this is how NG2 finds out (in-exe route; the DLL reports its own).
 void DirtyCoverageAtSwap() {
   if (!g_dirty) return;
   const uint32_t n = std::min<uint32_t>(g_dirty_words, uint32_t(std::size(g_dirty_outside)));
@@ -269,9 +356,7 @@ void DirtyCoverageAtSwap() {
               "ranges so far this run:{}{}", total, list, total > 80 ? " ..." : "");
 }
 
-// ---------------------------------------------------------------------------------------------------------------------
-// The backend, brought up on the native window's device the first time a draw arrives.
-// ---------------------------------------------------------------------------------------------------------------------
+// The in-exe backend, brought up on the native window's device the first time a draw arrives.
 bool LockstepReady() {
   if (g_backend_on) return true;
   if (!render::Ready()) return false;
@@ -280,9 +365,9 @@ bool LockstepReady() {
   tried = true;
   g_backend_on = backend::Init(render::Device(), render::Queue());
   g_lockstep = g_backend_on;
-  REXLOG_INFO("[ngpu] LOCKSTEP: {}", g_backend_on
-                                          ? "the plugin's draw callback feeds the transplanted backend directly"
-                                          : "backend initialisation FAILED - the native path stays off");
+  REXLOG_INFO("[ngpu] LOCKSTEP (in-exe): {}", g_backend_on
+                                                   ? "the plugin's draw callback feeds the transplanted backend directly"
+                                                   : "backend initialisation FAILED - the native path stays off");
   return g_backend_on;
 }
 
@@ -323,7 +408,8 @@ void LockstepDraw(const RexNgpuDraw* d) {
 // REVEAL HOLD, NG2's trigger. The game's mode word at guest 0x84C25070 (mapped for the ultrawide work, v1.0.19):
 // 0 = front-end (title / difficulty / load), 2 = the chapter card, 3 = gameplay, 128+ = in-engine cinematic.
 // A transition INTO gameplay from the front-end or the chapter card is a load finishing - the moment the stage's
-// pipelines are still compiling and the picture is partial. Held frames are counted on the backend's own readiness.
+// pipelines are still compiling and the picture is partial. The DLL holds on its own once told; the in-exe route
+// counts held frames on the backend's readiness below.
 // ---------------------------------------------------------------------------------------------------------------------
 constexpr uint32_t kModeWordAddress = 0x84C25070;
 constexpr uint32_t kModeGameplay = 3;
@@ -337,6 +423,7 @@ void NoteModeWord() {
   if (g_last_mode != 0xFFFFFFFF && mode == kModeGameplay && g_last_mode != kModeGameplay && g_last_mode < 128) {
     ++g_world_entries;
     if (g_reveal_plugin) g_reveal_plugin();   // the plugin path's own hold (its presenter), when it presents
+    if (g_use_dll && g_dll.RevealAfterLoad) g_dll.RevealAfterLoad();
   }
   g_last_mode = mode;
 }
@@ -394,6 +481,10 @@ void OnDraw(const RexNgpuDraw* d) {
     return;
   }
   g_draws_seen.fetch_add(1, std::memory_order_relaxed);
+  if (g_use_dll) {
+    g_dll.OnDraw(d);   // the DLL does its own register sync, self-check and coverage
+    return;
+  }
   if (REXCVAR_GET(ngpu_backend_lockstep) && d->regs && d->reg_count >= kForwardedEnd) {
     // The live-regs pointer FIRST: the swap callback reads fetch constant 0 through it. Forgetting it in Fable II
     // meant no swaps, and the bindless descriptors were exhausted within seconds.
@@ -403,8 +494,45 @@ void OnDraw(const RexNgpuDraw* d) {
   }
 }
 
+void LogPeriodic() {
+  static uint32_t n = 0;
+  if ((++n % 300) != 1) return;
+  const auto ws = render::GetStats();
+  if (g_use_dll) {
+    NgpuBackendStatsT st = {};
+    g_dll.Stats(&st);
+    int32_t mode = 0;
+    double k = 0.0;
+    g_dll.PresentMode(&mode, &k);
+    REXLOG_INFO("[ngpu] LOCKSTEP (dll): {} draws seen, {} fed ({} failed), {} swaps, self-check {} runs / {} "
+                "mismatches, {} presented / {} held by the DLL; uw mode {} fov_k {:.4f} | window presented {} of {} "
+                "requests ({} without output, {} waits timed out)",
+                g_draws_seen.load(), st.draws, st.draw_failed, st.swaps, st.selfcheck_runs, st.selfcheck_mismatches,
+                st.frames_presented, st.frames_held, mode, k, ws.presented, ws.requests, ws.skipped_no_output,
+                ws.waits_timed_out);
+    return;
+  }
+  const auto st = backend::GetStats();
+  REXLOG_INFO("[ngpu] LOCKSTEP (in-exe): {} draws seen, {} fed ({} failed: {} with no VS microcode, {} with it), {} "
+              "swaps, {} shader loads ({} failed), {} register writes, dirty bitmap {}; no microcode VS inline-len {} "
+              "inline-null {} unreadable {} no-addr {} | PS {} {} {} {} | window presented {} of {} requests "
+              "({} without output, {} waits timed out), uw mode {}",
+              g_draws_seen.load(), st.draws, st.draw_failed, g_fail_nocode, g_fail_withcode, st.swaps,
+              st.shader_loads, st.shader_load_failed, g_regs_written,
+              g_dirty ? (g_dirty_ok ? "in use" : "abandoned after a miss") : "absent",
+              g_nocode[0][0], g_nocode[0][1], g_nocode[0][2], g_nocode[0][3],
+              g_nocode[1][0], g_nocode[1][1], g_nocode[1][2], g_nocode[1][3],
+              ws.presented, ws.requests, ws.skipped_no_output, ws.waits_timed_out, ws.last_mode);
+}
+
 void OnSwap(uint32_t fb, uint32_t fb_w, uint32_t fb_h) {
   NoteModeWord();
+  if (g_use_dll) {
+    g_dll.OnSwap(fb, fb_w, fb_h);
+    if (g_dll.ShouldPresent()) render::RequestPresent();
+    LogPeriodic();
+    return;
+  }
   if (!g_live_regs || !g_backend_on || !g_lockstep) return;
   uint32_t fetch0[6];
   for (uint32_t i = 0; i < 6; ++i) fetch0[i] = g_live_regs[0x4800 + i];
@@ -417,26 +545,7 @@ void OnSwap(uint32_t fb, uint32_t fb_w, uint32_t fb_h) {
   // reaching this swap (Fable II: frames behind while walking, a whole menu behind in pause).
   if (!RevealHold()) render::RequestPresent();
   DirtyCoverageAtSwap();
-  static uint32_t n = 0;
-  if ((++n % 300) == 1) {
-    const auto st = backend::GetStats();
-    const auto ws = render::GetStats();
-    REXLOG_INFO("[ngpu] LOCKSTEP: {} draws seen, {} fed ({} failed: {} with no VS microcode, {} with it), {} swaps, "
-                "{} shader loads ({} failed), {} register writes, dirty bitmap {}; no microcode VS inline-len {} "
-                "inline-null {} unreadable {} no-addr {} | PS {} {} {} {} | window presented {} of {} requests "
-                "({} without output, {} waits timed out), uw mode {}",
-                g_draws_seen.load(), st.draws, st.draw_failed, g_fail_nocode, g_fail_withcode, st.swaps,
-                st.shader_loads, st.shader_load_failed, g_regs_written,
-                g_dirty ? (g_dirty_ok ? "in use" : "abandoned after a miss") : "absent",
-                g_nocode[0][0], g_nocode[0][1], g_nocode[0][2], g_nocode[0][3],
-                g_nocode[1][0], g_nocode[1][1], g_nocode[1][2], g_nocode[1][3],
-                ws.presented, ws.requests, ws.skipped_no_output, ws.waits_timed_out, ws.last_mode);
-  }
-}
-
-template <typename T>
-T Bind(HMODULE m, const char* name) {
-  return reinterpret_cast<T>(GetProcAddress(m, name));
+  LogPeriodic();
 }
 
 }  // namespace
@@ -479,18 +588,46 @@ void Start(const render::WindowSpec& window) {
     REXLOG_INFO("[ngpu] the native window / device did not come up - native path stays off");
     return;
   }
+  // The DLL first, when asked for and present; the in-exe copy otherwise.
+  if (REXCVAR_GET(ngpu_backend_dll) && LoadBackendDll()) {
+    NgpuBackendOptions o = {};
+    g_dll.DefaultOptions(&o);
+    o.size = sizeof(o);
+    o.own_window = 0;          // NG2's window and presenter half (ng2_ngpu_window.cpp)
+    o.register_callbacks = 0;  // this module forwards the plugin's callbacks
+    o.async_submit = REXCVAR_GET(ngpu_backend_async_submit) ? 1 : 0;
+    o.upload_skip = REXCVAR_GET(ngpu_backend_upload_skip) ? 1 : 0;
+    o.hoist_uploads = REXCVAR_GET(ngpu_backend_hoist_uploads) ? 1 : 0;
+    o.fast_valid = REXCVAR_GET(ngpu_backend_fast_valid) ? 1 : 0;
+    o.gpu_prof = REXCVAR_GET(ngpu_gpu_prof) ? 1 : 0;
+    o.reveal_hold = REXCVAR_GET(ngpu_reveal_hold) ? 1 : 0;
+    o.reveal_hold_frames = REXCVAR_GET(ngpu_reveal_hold_frames);
+    o.reveal_hold_max_ms = REXCVAR_GET(ngpu_reveal_hold_max_ms);
+    o.selfcheck_every = REXCVAR_GET(ngpu_backend_selfcheck_every);
+    if (g_dll.Start(&o, render::Device(), render::Queue())) {
+      g_use_dll = true;
+      g_backend_on = true;
+      g_lockstep = true;
+      if (g_last_fov_k > 0.0) {
+        char text[32];
+        std::snprintf(text, sizeof(text), "%.6f", g_last_fov_k);
+        g_dll.SetSetting("ng2_fov_k", text);
+      }
+      REXLOG_INFO("[ngpu] ngpu_backend.dll started in manual mode on the native window's device (async_submit {} "
+                  "upload_skip {} hoist {} fast_valid {} reveal_hold {}/{} frames/{} ms selfcheck every {})",
+                  o.async_submit, o.upload_skip, o.hoist_uploads, o.fast_valid, o.reveal_hold, o.reveal_hold_frames,
+                  o.reveal_hold_max_ms, o.selfcheck_every);
+    } else {
+      REXLOG_INFO("[ngpu] NgpuBackendStart FAILED - the in-exe copy of the backend runs");
+      FreeLibrary(g_dll.module);
+      g_dll = BackendDll();
+    }
+  }
   std::memset(g_dirty_outside, 0, sizeof(g_dirty_outside));
   g_set_swap(&OnSwap);
   g_set_draw(&OnDraw);
-  REXLOG_INFO("[ngpu] lockstep consumer installed (record {} bytes)", sizeof(RexNgpuDraw));
-}
-
-void SetFovK(double k) {
-  FLAGS_ng2_fov_k_storage_() = k;
-}
-
-int UltrawideMode() {
-  return int(FLAGS_ng2_uw_mode_storage_());
+  REXLOG_INFO("[ngpu] lockstep consumer installed (record {} bytes; backend: {})", sizeof(RexNgpuDraw),
+              g_use_dll ? "ngpu_backend.dll" : "in-exe copy, initialised at the first draw");
 }
 
 void Stop() {
@@ -500,13 +637,50 @@ void Stop() {
   g_set_draw = nullptr;
   g_set_swap = nullptr;
   render::Stop();
-  if (g_backend_on) {
+  if (g_use_dll) {
+    NgpuBackendStatsT st = {};
+    g_dll.Stats(&st);
+    REXLOG_INFO("[ngpu] totals (dll): {} draws seen ({} bad size), {} fed, {} failed, {} swaps, self-check {} runs / "
+                "{} mismatches, {} presented / {} held, {} loads into gameplay",
+                g_draws_seen.load(), g_draws_bad_size.load(), st.draws, st.draw_failed, st.swaps, st.selfcheck_runs,
+                st.selfcheck_mismatches, st.frames_presented, st.frames_held, g_world_entries);
+  } else if (g_backend_on) {
     const auto st = backend::GetStats();
-    REXLOG_INFO("[ngpu] totals: {} draws seen ({} bad size), {} fed, {} failed, {} swaps, {} shader loads ({} failed), "
-                "{} loads into gameplay, self-check {} runs / {} mismatches",
+    REXLOG_INFO("[ngpu] totals (in-exe): {} draws seen ({} bad size), {} fed, {} failed, {} swaps, {} shader loads "
+                "({} failed), {} loads into gameplay, self-check {} runs / {} mismatches",
                 g_draws_seen.load(), g_draws_bad_size.load(), st.draws, st.draw_failed, st.swaps, st.shader_loads,
                 st.shader_load_failed, g_world_entries, g_check_runs, g_check_bad);
   }
+}
+
+void SetFovK(double k) {
+  g_last_fov_k = k;
+  FLAGS_ng2_fov_k_storage_() = k;
+  if (g_use_dll && g_dll.SetSetting) {
+    char text[32];
+    std::snprintf(text, sizeof(text), "%.6f", k);
+    g_dll.SetSetting("ng2_fov_k", text);
+  }
+}
+
+int UltrawideMode() {
+  if (g_use_dll && g_dll.PresentMode) {
+    int32_t mode = 0;
+    double k = 0.0;
+    g_dll.PresentMode(&mode, &k);
+    return int(mode);
+  }
+  return int(FLAGS_ng2_uw_mode_storage_());
+}
+
+bool BackendWaitSwapSubmitted(uint32_t timeout_ms) {
+  if (g_use_dll) return g_dll.WaitSwapSubmitted(timeout_ms) != 0;
+  return rtc::WaitSwapSubmitted(timeout_ms);
+}
+
+ID3D12Resource* BackendGuestOutput(uint32_t& width, uint32_t& height) {
+  if (g_use_dll) return g_dll.GuestOutput(&width, &height);
+  return backend::GuestOutput(width, height);
 }
 
 }  // namespace ng2::ngpu

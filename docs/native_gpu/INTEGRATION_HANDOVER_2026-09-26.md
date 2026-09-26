@@ -21,7 +21,9 @@ fades, 60 fps at the correct game speed, and every SDK fix.
 |---|---|---|
 | App, alt branch | `ng2recomp` branch `native-gpu-ng2`, worktree `D:\ng2_frameinterp\ng2recomp-worktree` | v1.0.24 merged (`6c86551`), ledger + census (`e1edb41`, `f26126e`), transplant wired (this commit) |
 | Engine fork | `D:\ng2_frameinterp\ng2-rexglue` branch `native-integration` | `d87ebec2` Fable's rexglue-src main **8b4a025** imported wholesale outside thirdparty/; `80ac2721` NG2's ring re-init fix + RINGDUMP restored. The parser TU compiles (warnings only) |
-| Fable's kit | `claudecode\NATIVE_GPU_MIGRATION_KIT` | received 16:36; the game-agnostic `ngpu_backend.dll` is STILL COMING |
+| Fable's kit | `claudecode\NATIVE_GPU_MIGRATION_KIT` | received 16:36; `bin/ngpu_backend_dll/` arrived 17:22 (ABI 1, sha256 d522daf7..., from Fable commit 012fcf3 on engine 8b4a025). **THE DLL IS NG2's DEFAULT ROUTE** (cvar `ngpu_backend_dll`, manual mode: NG2's window + presenter half, callbacks forwarded, `NgpuBackendSetSetting("ng2_fov_k")` in, `NgpuBackendPresentMode` out); the in-exe copy is the fallback when the DLL is absent or answers another ABI. The header is `src/ngpu_backend_api.h` verbatim; the DLL is staged beside the exe (not tracked). Fable's caveat: the DLL was only run under offload there, so DLL-in-lockstep is first tested here |
+| Fork-built SDK pair | `D:\ng2_frameinterp\ng2-rexglue\out\win-amd64\Release\` | built 17:23 by the waiter: plugin md5 `353c79e21479` (7,405,056 B), runtime `e0c0217b745b` (11,036,160 B). Verified by content: all five RexNgpu exports, gpu_offload_to_native, ng2_fov_k / ng2_uw_mode / NG2_UW_NOPAUSE / solid2d / [texpack] / texpack_mip, `pointers reset`, RINGDUMP, wait_reg_mem_yield_ms; runtime ng2_uw_mode / video_mode_explicit / watchdog |
+| EMBARGO | lifted 17:31 by the Fable session: "optimisation testing is complete, the machine is yours"; lock free, no game running | runs allowed from here, one game at a time |
 | Vendored backend | `src/native_gpu_xlat/` (171 files, 8.6 MB) + `src/ng2_native_backend.{h,cpp}` | Fable's tree verbatim, namespace `fable2::ngpu` -> `ng2::ngpu` (50 files, 267 replacements); `ORIGIN.txt` says why not re-vendored |
 | NG2's glue | `src/ng2_ngpu_bridge.{h,cpp}` | plugin ABI bound by GetProcAddress, lockstep draw/swap, dirty-bitmap register sync with self-check and coverage, reveal hold on NG2's mode word |
 | NG2's window | `src/ng2_ngpu_window.{h,cpp}`, `src/ngpu_shaders/` | raw D3D12 (no Plume), own thread, presents at the swap, THE ULTRAWIDE PRESENTER HALF (fill / pillarbox / keep-aspect from `ng2_uw_mode`) |
@@ -122,3 +124,25 @@ fades, 60 fps at the correct game speed, and every SDK fix.
 - claudecode-76 (manager): verified the user's instruction, un-parked NG2 in
   `blocked_teams.txt`, corrected the sibling premise, verified the ring
   finding on Fable's logs, flagged that 8b4a025 is unpushed (pinned here).
+
+## 6. First legs (embargo lifted 17:31)
+
+All through `tools/native_gpu/run_native.ps1` (stages the fork pair, claims the lock, backs up the
+saves, `NG2_NATIVE_GPU=1`, kills only its own PID, restores). Logs beside the exe under `logs/`,
+launcher logs in `D:/ng2_frameinterp/work/leg_*.log`.
+
+| leg | what | result |
+|---|---|---|
+| lockstep1 17:31 | fork pair, native on, selfcheck 1 | NATIVE NEVER STARTED, and the run had NO tuning at all: the launcher's `$tune`/`-Tune` were one variable (PowerShell names are case-insensitive) and passed the self-check cvar twice; the TOML parser refused the duplicate and `rex::cvar::LoadConfig` applied nothing (one error line). The game still booted and rendered on the fork pair at the cutscene's 30 fps then 60 at the title. Fixed: launcher variable renamed; `Ng2Tuning::Apply` now folds duplicates (last wins) so one repeated key can never drop the config again |
+| lockstep2 17:36 | same, tuning fixed | native window up, DLL loaded (ABI 1), then 0xC0000005 in ngpu_backend.dll+0x7645 = `Driver::Init` at `KernelState::memory()`: `kernel_state()` was NULL because NG2 started the native path in `OnCreateDialogs` (UI creation), before the kernel exists. Fixed: `ng2::ngpu::Start` moved to `OnPostSetup`, after `ApplyFov` (where Fable starts it). Symbolised with llvm-symbolizer on the DLL's pdb from the Windows event log's fault offset |
+| lockstep3 17:39 | same, start in OnPostSetup, 200 s, offload OFF, selfcheck EVERY draw | **FIRST NATIVE NG2 FRAMES.** DLL started in manual mode on NG2's device; `[ngpu] LOCKSTEP (dll)` at 17:42:57: 791,138 draws seen, 791,138 fed, 0 failed, 8,701 swaps, self-check 799,838 runs / 0 mismatches, window presented 8,700 of 8,700 requests, 0 waits timed out. Both windows showed the same title frame 11 ms apart (screens 17:40:21). Rates as pairs, plugin line: intro/attract segment 30.0 fps in both leg 1 (no native) and leg 3 (lockstep), title 60.0 in both - lockstep did not slow the game where the two legs overlap; lockstep legs are not timing-valid anyway (both renderers use the GPU). DLL diagnostics per frame at the logos: GPU TIME 0.12 ms, CPU COST plugin GPU thread 2.6 ms + submit thread 0.4 ms, 4 upload batches hoisted |
+
+Observed, not yet acted on: the native window opens on monitor index 0 in EnumDisplayMonitors order,
+which is the leftmost monitor here, while the game's window uses `ng2_platform`'s ordering (primary);
+align the window module with `ng2::MonitorFullSize`'s index semantics. Each `[swap]` line appears
+twice in the log under the DLL: the vendored command processor reports swaps too (same numbers).
+
+Next, in the Fable order: the static-scene picture check with the floor first
+(`windiff2.py --pairs 2` on the main menu opened by the launch-time pad script, `-PadScript
+"45:start,48:start" -DiffAt 70`), then offload ON with a plugin-alone baseline interleaved on the
+same scene (title + attract demo, no input) for the timing pair.
