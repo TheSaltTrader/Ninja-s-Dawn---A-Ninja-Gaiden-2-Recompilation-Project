@@ -37,4 +37,15 @@ void Start(const render::WindowSpec& window);
 // stops the native window. Before the runtime tears down.
 void Stop();
 
+// THE ULTRAWIDE VALUES HAVE TWO HOMES under the transplant. The vendored backend
+// carries its own copies of the plugin's cvars (accessor-only statics, read from
+// the plugin registry ONCE at first use; a REXCVAR_SET inside the vendored code
+// writes only that copy). ng2_fov_k is set by the app (ApplyFov, live from the
+// menu): push it into the backend's copy too, or a toggle never reaches it.
+// ng2_uw_mode is written by the vendored IssueSwap at every swap: the native
+// window reads that copy, which is right whether or not the plugin's own swap
+// path still runs its detection under offload.
+void SetFovK(double k);
+int UltrawideMode();   // the backend's ng2_uw_mode: 0 off, 1 gameplay (fill), 2 menu/video (pillarbox)
+
 }  // namespace ng2::ngpu

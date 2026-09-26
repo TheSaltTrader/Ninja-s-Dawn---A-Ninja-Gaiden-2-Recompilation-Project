@@ -25,6 +25,12 @@
 #include "ng2_native_backend.h"
 #include "rtc_d3d12/facade.h"
 
+// The vendored backend's own copies (src/native_gpu_xlat/rtc_d3d12/flags.cpp; declared in the vendored
+// include/rex/graphics/flags.h). Declared here by their storage names so this file does not depend on which
+// flags.h the include order picks.
+double& FLAGS_ng2_fov_k_storage_();
+int32_t& FLAGS_ng2_uw_mode_storage_();
+
 // ---------------------------------------------------------------------------------------------------------------------
 // cvars. The exe owns these names; the vendored backend reads the ones it needs through the accessors at the bottom.
 // ---------------------------------------------------------------------------------------------------------------------
@@ -477,6 +483,14 @@ void Start(const render::WindowSpec& window) {
   g_set_swap(&OnSwap);
   g_set_draw(&OnDraw);
   REXLOG_INFO("[ngpu] lockstep consumer installed (record {} bytes)", sizeof(RexNgpuDraw));
+}
+
+void SetFovK(double k) {
+  FLAGS_ng2_fov_k_storage_() = k;
+}
+
+int UltrawideMode() {
+  return int(FLAGS_ng2_uw_mode_storage_());
 }
 
 void Stop() {

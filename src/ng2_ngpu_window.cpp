@@ -15,6 +15,7 @@
 #include <rex/logging.h>
 
 #include "ng2_native_backend.h"
+#include "ng2_ngpu_bridge.h"
 #include "ngpu_shaders/ng2_ngpu_blit_ps.h"
 #include "ngpu_shaders/ng2_ngpu_blit_vs.h"
 #include "rtc_d3d12/facade.h"
@@ -285,9 +286,10 @@ void HandleResize() {
 //   ng2_uw_mode 2 (menu / video):            the largest box of the OUTPUT's aspect, centred (pillarbox 16:9).
 //   ng2_uw_mode 0 (feature off):             the player's Keep-aspect setting: on = fit, off = stretch.
 D3D12_VIEWPORT ViewportFor(uint32_t out_w, uint32_t out_h, uint32_t& mode_out) {
-  uint32_t mode = 0;
-  const std::string m = rex::cvar::GetFlagByName("ng2_uw_mode");
-  if (!m.empty() && m[0] >= '0' && m[0] <= '9') mode = uint32_t(m[0] - '0');
+  // The BACKEND's ng2_uw_mode (its vendored IssueSwap writes it every swap), not the plugin registry's - see
+  // ng2_ngpu_bridge.h: under offload the plugin's own swap path may not run its detection at all.
+  const int m = ng2::ngpu::UltrawideMode();
+  const uint32_t mode = (m >= 0 && m <= 2) ? uint32_t(m) : 0u;
   bool fit;
   if (mode == 1) fit = false;
   else if (mode == 2) fit = true;

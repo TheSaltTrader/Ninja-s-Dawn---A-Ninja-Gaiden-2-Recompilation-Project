@@ -63,8 +63,13 @@ fades, 60 fps at the correct game speed, and every SDK fix.
   will be lockstep beside the plugin (both render), then offload.
 - **Neither DLL is built from the fork's `native-integration` branch yet.**
   A plugin/runtime pair carrying the RexNgpu* exports and the ring fix is
-  needed before the first run; a full SDK build is heavy, so it waits for a
-  machine-free window.
+  needed before the first run. The Fable session runs back-to-back legs, so
+  `D:/ng2_frameinterp/work/wait_then_build_pair.ps1` (detached, PID 119920 at
+  17:14) starts `build_fork_pair.cmd` after the lock has read machine-free for
+  three consecutive minutes; its log is beside it. Not on the critical path
+  until the embargo lifts. The first-run launcher is
+  `tools/native_gpu/run_native.ps1` (stages the pair with a backup and a
+  STAGED marker, claims the lock, backs up the saves, kills only its own PID).
 - **ng2.exe BUILDS with the whole transplant** (2026-09-26 17:20: 71 steps,
   0 errors, warnings only; the exe carries the ngpu_backend cvar, the RexNgpu*
   symbol names and the [ngpu-window] log strings, and the carry census reads
@@ -73,11 +78,17 @@ fades, 60 fps at the correct game speed, and every SDK fix.
   `[texpack]`, so the replacement path exists in the backend; the exe's
   `texture_pack_path` reaches it through the plugin's cvar registry
   (accessors). UNVERIFIED until a run.
-- **Ultrawide under offload:** the plugin still runs IssueSwap's scene
-  detection and writes `ng2_uw_mode`? The vendored IssueSwap contains it
-  too. Which one runs under offload decides where the value comes from;
-  the window reads the registry either way. UNVERIFIED (asked the Fable
-  session).
+- **Ultrawide under offload - SETTLED by reading the code (17:30).** The plugin's
+  IssueSwap returns at its FIRST line under offload (d3d12/command_processor.cpp:2489),
+  before its scene detection, so the plugin registry's `ng2_uw_mode` goes stale.
+  The vendored IssueSwap runs the detection but `REXCVAR_SET` inside the vendored
+  code writes an APP-LOCAL static (rtc_d3d12/flags.cpp accessor-only definitions),
+  never the registry; and the vendored `ng2_fov_k` is read from the registry once.
+  So the two values have TWO HOMES. Fixed: the native window reads the backend's
+  copy (`ng2::ngpu::UltrawideMode()`), and `ApplyFov` pushes k into the backend's
+  copy (`ng2::ngpu::SetFovK`) beside its registry write. The same shape will apply
+  to every accessor-only cvar in the coming DLL - asked the Fable session for a
+  get/set-copy entry in its C API. UNVERIFIED in a run.
 - **The game's own window goes black under offload.** Fable accepted a
   second window; for a shippable NG2 the native output must eventually
   land in the game's window (a shared-handle copy into the runtime

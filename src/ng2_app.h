@@ -884,6 +884,8 @@ class Ng2App : public rex::ReXApp {
     }
     k = std::clamp(k, 0.40, 1.20);
     rex::cvar::SetFlagByName("ng2_fov_k", std::to_string(k));
+    // The transplanted backend keeps its own copy of the cvar (ng2_ngpu_bridge.h).
+    ng2::ngpu::SetFovK(k);
     REXLOG_INFO("FOV: ultrawide={} -> ng2_fov_k={:.4f}", settings_.ultrawide, k);
   }
 
