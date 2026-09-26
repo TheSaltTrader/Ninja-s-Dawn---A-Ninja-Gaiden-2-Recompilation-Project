@@ -32,7 +32,9 @@ param(
   [string]$PadScript = "",
   # Run windiff2.py against both windows this many seconds after launch (0 = not at all), --pairs 2 for the floor.
   [int]$DiffAt = 0,
-  [int]$DiffPairs = 2
+  [int]$DiffPairs = 2,
+  # The BASELINE arm of a timing pair: the same fork pair, NO native path (NG2_NATIVE_GPU unset). One thing differs.
+  [switch]$Baseline
 )
 $ErrorActionPreference = "Stop"
 $root = Split-Path -Parent (Split-Path -Parent (Split-Path -Parent $MyInvocation.MyCommand.Path))
@@ -87,8 +89,13 @@ try {
   }
 
   # 4. Launch.
-  $env:NG2_NATIVE_GPU = "1"
-  if ($Offload) { $env:NG2_NATIVE_OFFLOAD = "1" } else { Remove-Item Env:NG2_NATIVE_OFFLOAD -ErrorAction SilentlyContinue }
+  if ($Baseline) {
+    Remove-Item Env:NG2_NATIVE_GPU -ErrorAction SilentlyContinue
+    Remove-Item Env:NG2_NATIVE_OFFLOAD -ErrorAction SilentlyContinue
+  } else {
+    $env:NG2_NATIVE_GPU = "1"
+    if ($Offload) { $env:NG2_NATIVE_OFFLOAD = "1" } else { Remove-Item Env:NG2_NATIVE_OFFLOAD -ErrorAction SilentlyContinue }
+  }
   # PowerShell variable names are case-insensitive: a local `$tune` IS the `-Tune` parameter, and the first
   # leg (17:31) passed "ngpu_backend_selfcheck_every=1;ngpu_backend_selfcheck_every=1" - which the TOML parser
   # refused, dropping EVERY tuning entry for that run. Distinct name, and the text is printed below.

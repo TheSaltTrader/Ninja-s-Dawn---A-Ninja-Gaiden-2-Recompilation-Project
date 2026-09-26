@@ -146,3 +146,5 @@ Next, in the Fable order: the static-scene picture check with the floor first
 (`windiff2.py --pairs 2` on the main menu opened by the launch-time pad script, `-PadScript
 "45:start,48:start" -DiffAt 70`), then offload ON with a plugin-alone baseline interleaved on the
 same scene (title + attract demo, no input) for the timing pair.
+
+| menu1 17:44 | lockstep, pad script START at 22 s and 34 s (main menu), windiff2 at +60 s, 2 pairs | native vs game mean abs diff 0.0209 / 0.0208 (pixels over 0.1: 4.6% / 4.5%); FLOOR from the same window 2.3 s apart: native vs native 0.0163, game vs game 0.0163 (over 0.1: 0.6%). The menu's fog moves, so the floor is high; the excess over it is 0.0045 and 4 points of over-0.1 pixels - close, NOT parity-proven. Client sizes differed (native 1276x728 on the 1.0-scale monitor, game 1273x720 on the 1.25-scale primary), a resampling term to remove by placing the native window on the game's monitor. A truly static subject (a paused gameplay scene from a save, or the options screen) decides it. Captures in D:/ng2_frameinterp/captures/menu1_* |
