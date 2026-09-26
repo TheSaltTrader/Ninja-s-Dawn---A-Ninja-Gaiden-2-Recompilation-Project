@@ -1,24 +1,34 @@
-# Handoff — resume point after 2026-09-05
+# Handoff — resume point, current at 2026-09-26
 
 Written so this work can be picked up cold, from nothing but this file. It is a
 working document, not a published one: `local/` and this file are outside the
 publication allowlist (`tools/stage_repo.py`), so absolute paths and machine
 specifics are safe to write here and will never be staged.
 
-Everything below is the state at the end of 2026-09-05.
+Sections 1, 2, 4-7 and 11 are the state at 2026-09-26. Sections 3, 8, 9 and
+10 - build and deploy, the withdrawn claims, the gotchas and the diagnostic
+scripts - are the durable part and carry forward unchanged unless noted.
 
 ---
 
 ## 1. One-paragraph summary
 
-Three things were fixed and shipped: the stuck-wait watchdog (which was
-instrumenting one of five kernel wait paths and no critical sections at all),
-two graphics settings that had been inert since v0.5.4, and two faults in the
-publication allowlist. Two open bugs — **music dying mid-session** and the
-**chapter 12 → 13 hang** — were each traced to named guest functions and named
-kernel objects but are *not fixed*. A third bug was discovered: the
-**attract-demo freeze is not actually fixed**, and it sits on the default path.
-Four earlier claims were withdrawn, one of which had been used as evidence.
+The port is released and maintained: **v1.0.24**, public on GitHub, with the
+first packaged build at v0.1.0 on 2026-09-03. Both bugs this file was written
+around are closed - **music dying mid-session** (v1.0.2) and the **chapter
+12 → 13 hang** (v1.0.6, the post-boss state machine waiting on an achievement
+write state the port never set). Ultrawide (3D) shipped in v1.0.17 and was
+refined through v1.0.20; the frame-rate and V-Sync options were removed in
+v1.0.21 once both were shown to be game-speed controls rather than display
+controls.
+
+The most recent work is worth reading as a pair. v1.0.22 fixed a real race in
+the GPU plugin's upload copy pool and, in the same release, lost ultrawide by
+staging a stale runtime - the packaging check passed because it compared where
+each DLL came from rather than what was inside it. v1.0.23 restored it and added
+a feature gate that refuses to package a runtime or plugin missing its NG2
+features, plus an all-or-nothing updater. v1.0.24 made an install leave the
+setup screen ready to press Play.
 
 ---
 
@@ -26,11 +36,12 @@ Four earlier claims were withdrawn, one of which had been used as evidence.
 
 | Item | State |
 |---|---|
-| Version | `1.0.0` (`VERSION`) |
-| Lodestone census | 6/6 green — `python tools/lodestone_census.py` |
+| Version | `1.0.24` (`VERSION`) |
+| Lodestone census | green — `python tools/lodestone_census.py`. It died with a `KeyError` for a period; see gotchas. |
 | Publication staging | 83 files, sweep clean — `python tools/stage_repo.py` |
 | Release decision | **Source + docs only.** No `ng2.exe`, no game assets, ever. |
-| Not yet pushed | GitHub repo `TheSaltTrader/Ninja-s-Dawn---A-Ninja-Gaiden-2-Recompilation-Project` |
+| Published | GitHub repo `TheSaltTrader/Ninja-s-Dawn---A-Ninja-Gaiden-2-Recompilation-Project`, releases through v1.0.24 |
+| Standalone install | `D:\Ninja Gaiden 2 Portable` tracks the latest release (`make_release.py --update <folder>`) |
 
 Modified today, all built and deployed:
 
@@ -93,7 +104,11 @@ it is very verbose and perturbs timing.
 
 ---
 
-## 4. OPEN — music stops mid-session
+## 4. CLOSED (v1.0.2) — music stops mid-session
+
+Kept because the investigation below is how the audio path was mapped, and
+the diagnostic scripts in section 10 were built for it.
+
 
 **Reproduced twice**, once from a player session and once locally; identical
 captures. Full write-up in `docs/XENIA_ISSUES.md`.
@@ -174,7 +189,13 @@ findings from them are all recorded above, the raw files are not preserved.
 
 ---
 
-## 5. OPEN — chapter 12 → 13 hang
+## 5. CLOSED (v1.0.6) — chapter 12 → 13 hang
+
+Root cause, found after this section was written: the post-boss state machine
+(`sub_8242BCF8`, case 17) waits for the profile block's achievement-write
+state at `[0x8555B988]` to reach >= 2, which this port never set. The analysis
+below led to it and is kept for the method.
+
 
 ### The handshake, confirmed
 
@@ -214,7 +235,7 @@ the log should now name the object. Then `capture_hang.sh <pid>` for stacks.
 
 ---
 
-## 6. FIXED today
+## 6. FIXED on 2026-09-05
 
 ### Stuck-wait watchdog — all blocking paths
 
@@ -253,7 +274,12 @@ claimed was excluded — was excluded only because its two files happened to be 
 
 ---
 
-## 7. NEW — the attract-demo freeze is not fixed
+## 7. NOT SEEN SINCE — the attract-demo freeze
+
+Not closed by a fix, but not reproduced since the ring work was fully
+deployed. It stays listed because absence of a repro is not a root cause, and
+it sat on the default path. The README's Known issues says the same.
+
 
 Leaving the title screen alone reproduced a ring parse failure three times,
 twice ending in a hard freeze. **Not** the re-initialisation race fixed in
@@ -280,6 +306,8 @@ Arguably higher impact than either bug above, because it is on the default path.
 | "0 ring failures on every build since" | Reproduced three times in one afternoon, twice ending in a freeze. |
 | "Kernel waits ruled out" for chapter 12 | Rested on watchdog silence when 4 of 5 wait paths were never instrumented. |
 | "Nothing healthy waits five minutes" | Disproven by the running build within minutes: two threads crossed 300s while the game held 60 fps. |
+| "Keeping the existing `rexruntime.dll` is the conservative choice" (v1.0.22) | The opposite. The SDK's own `bin/rexruntime.dll` is a stale build that predates the ultrawide presenter; every release from v1.0.17 to v1.0.20 shipped a runtime carrying it. Staging the SDK copy shipped a release with ultrawide silently absent. |
+| "Both SDK DLLs are stock, so the pair is right" | Origin agreement is not feature presence. `check_sdk_pair()` passed on the v1.0.22 build. `check_ng2_features()` now reads the staged files for `ng2_uw_mode` and the fade counter, behind a control string. |
 
 ---
 
@@ -300,6 +328,28 @@ Arguably higher impact than either bug above, because it is on the default path.
 - **Kill processes by PID only, never by window title.**
 - **`$Pid` is read-only in PowerShell** — a `param([int]$Pid)` cannot bind.
 - Check where log output actually *stops* before blaming what follows it.
+- **Ultrawide lives in BOTH SDK DLLs.** The GPU plugin widens the 3D projection;
+  the presenter in `rexruntime.dll` decides whether the frame fills or
+  pillarboxes, wired by the `ng2_uw_mode` cvar. A plugin-only build widens into a
+  frame that is letterboxed anyway, and ultrawide reads as simply absent. Stage
+  both from a known-good release (v1.0.20's runtime `86d407efda2d` carries it);
+  `make_release.py` now refuses to package without them.
+- **`RexBlue/win-amd64/bin/` is not authoritative.** It held a runtime older than
+  the last four releases. Check a staged DLL against a release, not against the
+  SDK tree.
+- **Run the settings census after touching settings or the UI.** It enumerates
+  every field in `ng2_settings.h` and checks reachability and documentation. It
+  spent a period dying with `KeyError: 'reason'` - a row removed from the UI in
+  v1.0.21 whose ledger entry still claimed a `doc_phrase` - and a census that
+  cannot run looks exactly like one that passes.
+- **The census checks coverage, not accuracy.** It verifies a phrase appears in
+  the README. It passed while the README still offered a 30-144 frame-rate range
+  and a V-Sync row for settings that had been removed as unsafe.
+- **`AppData/Local/Temp/claude` can fill the system drive.** It reached 138 GB,
+  120 GB of it one folder of runaway shader HLSL (single files of 32 GB - a
+  translator failing to terminate, not large output). When a disk is full, MOVE
+  to another volume before deleting anything: `rm -rf` here bypasses the Recycle
+  Bin and there were no shadow copies.
 
 ---
 
@@ -324,20 +374,19 @@ apart. Zero delta over 8s = genuinely blocked.
 
 ## 11. Suggested order of work
 
-1. **The attract-demo freeze** — highest impact, on the default path, and
-   reproducible within minutes at the title screen rather than needing a
-   playthrough. Start by finding what makes the parser read a non-packet when no
-   ring re-initialisation has occurred.
-2. **The music bug** — reproduces on its own in 20–40 minutes; instrumented;
-   the specific question is why nothing waits on event B.
-3. **Chapter 12 → 13** — blocked on a real playthrough.
-4. Re-cut the release package; the current one predates all of today's fixes.
+1. **Verify the v1.0.24 install rescan end to end.** The path only runs on a real
+   disc install and has not been exercised; if the DLC or saves still need a
+   manual Rescan afterwards, that is where to look.
+2. **The attract-demo freeze** — not seen since the ring work deployed, but never
+   root-caused. Reproducible at the title screen rather than needing a
+   playthrough, so it is the cheapest of the remaining unknowns to attack.
+3. **BC7/BC3 texture compression** — never attempted.
+4. **~1,300 missing guest functions** need per-candidate extent validation before
+   bulk registration; a previous attempt produced overlapping extents and
+   undefined-label compile errors.
 
-Still open from before today, untouched: chapter 12 runs at ~28 fps (later
-withdrawn: the test machine's GPU was saturated by other work); BC7/BC3
-texture compression never attempted; ~1,300 missing guest functions need
-per-candidate extent validation before bulk registration (a previous attempt
-produced overlapping extents and undefined-label compile errors).
+The "chapter 12 runs at ~28 fps" item is withdrawn: the test machine's GPU was
+saturated by other work at the time. Items 3 and 4 above carry the rest.
 
 ---
 

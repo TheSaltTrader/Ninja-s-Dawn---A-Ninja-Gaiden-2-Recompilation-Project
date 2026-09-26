@@ -274,9 +274,22 @@ def main():
     for field in subjects:
         if field in in_ui:
             covered += 1
-        elif field in ledger:
+        elif field in ledger and "reason" in ledger[field]:
             declared += 1
             lines.append("  declared  %-24s %s" % (field, ledger[field]["reason"]))
+        elif field in ledger:
+            # In the ledger, but as a doc_phrase entry - which asserts the
+            # setting IS in a UI. It is not. That is a real disagreement
+            # between the ledger and the code (usually a row removed from a
+            # settings screen whose ledger entry was not re-declared), and it
+            # is reported rather than raised: this used to be a KeyError, which
+            # killed the whole census and left every other sweep unrun.
+            uncovered += 1
+            lines.append("  LEDGER DISAGREES  %s: declared with a doc_phrase, "
+                         "but it is in no UI" % field)
+            failures.append(
+                "setting '%s' is declared with a doc_phrase but appears in no "
+                "UI - if it was retired, give it a reason instead" % field)
         else:
             uncovered += 1
             lines.append("  NOT COVERED  %s" % field)
