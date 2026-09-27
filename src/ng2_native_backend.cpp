@@ -25,6 +25,7 @@ int32_t& FLAGS_guest_fps_x10_storage_();
 int32_t& FLAGS_gpu_frame_draws_storage_();
 int32_t& FLAGS_gpu_frame_depth_draws_storage_();
 int32_t& FLAGS_ng2_uw_mode_storage_();
+int32_t& FLAGS_ng2_uw_fade_storage_();
 double& FLAGS_ng2_fov_k_storage_();
 int32_t& FLAGS_texture_pack_original_storage_();
 int32_t& FLAGS_texture_pack_replaced_storage_();
@@ -186,6 +187,7 @@ class Driver {
         {"gpu_frame_draws", &FLAGS_gpu_frame_draws_storage_, INT32_MIN},
         {"gpu_frame_depth_draws", &FLAGS_gpu_frame_depth_draws_storage_, INT32_MIN},
         {"ng2_uw_mode", &FLAGS_ng2_uw_mode_storage_, INT32_MIN},
+        {"ng2_uw_fade", &FLAGS_ng2_uw_fade_storage_, INT32_MIN},   // [ng2-fade-mode] the app paints it
         {"texture_pack_original", &FLAGS_texture_pack_original_storage_, INT32_MIN},
         {"texture_pack_replaced", &FLAGS_texture_pack_replaced_storage_, INT32_MIN},
         {"texture_warm_total", &FLAGS_texture_warm_total_storage_, INT32_MIN},

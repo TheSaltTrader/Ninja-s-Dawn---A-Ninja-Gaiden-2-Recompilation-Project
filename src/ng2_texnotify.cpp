@@ -290,4 +290,22 @@ PerfHudOverlay::PerfHudOverlay(rex::ui::ImGuiDrawer* drawer)
     : rex::ui::ImGuiDialog(drawer) {}
 PerfHudOverlay::~PerfHudOverlay() = default;
 
+AspectFadeOverlay::AspectFadeOverlay(rex::ui::ImGuiDrawer* drawer) : rex::ui::ImGuiDialog(drawer) {}
+AspectFadeOverlay::~AspectFadeOverlay() = default;
+
+void AspectFadeOverlay::OnDraw(ImGuiIO& io) {
+  (void)io;
+  const int32_t level = rex::cvar::Query<int32_t>("ng2_uw_fade");
+  if (level <= 0) return;
+  static bool logged = false;
+  if (!logged) {
+    logged = true;
+    REXLOG_INFO("[ng2uw] fade overlay: first paint at level {} (the app sees the detector's fade)", level);
+  }
+  const ImGuiViewport* vp = ImGui::GetMainViewport();
+  const int a = std::clamp(level * 255 / 1000, 0, 255);
+  ImGui::GetBackgroundDrawList()->AddRectFilled(vp->Pos, ImVec2(vp->Pos.x + vp->Size.x, vp->Pos.y + vp->Size.y),
+                                                IM_COL32(0, 0, 0, a));
+}
+
 }  // namespace ng2

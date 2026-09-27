@@ -286,6 +286,7 @@ class Ng2App : public rex::ReXApp {
     ng2::SetHudSettings(&settings_);
     ng2::StartPerfMonitor();
     perf_hud_ = std::make_unique<ng2::PerfHudOverlay>(drawer);
+    fade_overlay_ = std::make_unique<ng2::AspectFadeOverlay>(drawer);   // [ng2-fade-mode]
 
     // (The native-GPU backend transplant starts in OnPostSetup, not here: the
     // backend reads rex::system::kernel_state() at start, and this runs before
@@ -1370,6 +1371,7 @@ class Ng2App : public rex::ReXApp {
   std::unique_ptr<ng2::WarmOverlay> warm_overlay_;
   std::unique_ptr<ng2::update::UpdateOverlay> update_overlay_;
   std::unique_ptr<ng2::PerfHudOverlay> perf_hud_;
+  std::unique_ptr<ng2::AspectFadeOverlay> fade_overlay_;
 
   // What the first-run hardware detection saw, reported once logging exists.
   ng2::GpuInfo detect_gpu_;

@@ -68,6 +68,17 @@ class PerfHudOverlay final : public rex::ui::ImGuiDialog {
   void OnDraw(ImGuiIO& io) override;
 };
 
+// [ng2-fade-mode] The black fade the scene detector asks for around a fill / pillarbox switch (ng2_uw_fade,
+// 0..1000, published by whichever renderer runs): a full-window rectangle behind the other overlays.
+class AspectFadeOverlay final : public rex::ui::ImGuiDialog {
+ public:
+  explicit AspectFadeOverlay(rex::ui::ImGuiDrawer* drawer);
+  ~AspectFadeOverlay() override;
+
+ protected:
+  void OnDraw(ImGuiIO& io) override;
+};
+
 class TextureNotifyOverlay final : public rex::ui::ImGuiDialog {
  public:
   explicit TextureNotifyOverlay(rex::ui::ImGuiDrawer* drawer);

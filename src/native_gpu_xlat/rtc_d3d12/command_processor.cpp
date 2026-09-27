@@ -2668,7 +2668,39 @@ void D3D12CommandProcessor::IssueSwap(uint32_t frontbuffer_ptr, uint32_t frontbu
     } else if (s_uw_gameplay && s_uw_menu_streak >= 10) {
       s_uw_gameplay = false;
     }
-    const int mode = !feature ? 0 : (s_uw_gameplay ? 1 : 2);
+    const int mode_detected = !feature ? 0 : (s_uw_gameplay ? 1 : 2);
+    // [ng2-fade-mode] User rule 2026-09-27: a switch between the ultrawide fill (1) and the 16:9 pillarbox (2) is
+    // a fade out / fade in, never a cut (death -> continue, the Start/Select menus). The SHOWN mode - the rendering
+    // layout below (FOV widen, 2D compression) and the presenter's letterbox together - holds while the fade level
+    // rises to full black over ng2_uw_fade_frames swaps; both switch at full black; the level then falls back. A
+    // detector that changes its mind during the rise (a blip) lets the level fall from where it is and nothing
+    // switches. The exe paints the black from ng2_uw_fade (0..1000) on both renderers.
+    static int s_uw_mode_shown = -1;
+    static int s_uw_fade = 0;
+    {
+      const int fade_frames = std::max(1, int(REXCVAR_GET(ng2_uw_fade_frames)));
+      const int step = 1000 / fade_frames + 1;
+      if (s_uw_mode_shown < 0 || !feature) {
+        s_uw_mode_shown = mode_detected;
+        s_uw_fade = 0;
+      } else if (mode_detected != s_uw_mode_shown) {
+        static int s_fade_frames_out = 0;
+        ++s_fade_frames_out;
+        s_uw_fade = std::min(1000, s_uw_fade + step);
+        if (s_uw_fade >= 1000) {   // at full black: layout and letterbox switch together
+          REXLOG_INFO("[ng2uw] fade: {} swaps to black, switching mode {} -> {}", s_fade_frames_out, s_uw_mode_shown,
+                      mode_detected);
+          s_uw_mode_shown = mode_detected;
+          s_fade_frames_out = 0;
+        }
+      } else {
+        const int before = s_uw_fade;
+        s_uw_fade = std::max(0, s_uw_fade - step);
+        if (before > 0 && s_uw_fade == 0) REXLOG_INFO("[ng2uw] fade: back in, mode {}", s_uw_mode_shown);
+      }
+      REXCVAR_SET(ng2_uw_fade, s_uw_fade);
+    }
+    const int mode = s_uw_mode_shown;
     REXCVAR_SET(ng2_uw_mode, mode);
     if (std::getenv("NG2_DUMP_VSCONST")) {
       static int s_uw_dbg = 0;

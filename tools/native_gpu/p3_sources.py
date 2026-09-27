@@ -101,8 +101,11 @@ votes = collections.defaultdict(collections.Counter)   # reg -> source -> draws 
 used = collections.Counter()
 no_call = 0
 for addr, issuer, ordn, r2, r4 in draws:
-    key = issuer if issuer else addr
-    cands = containing(key)
+    # The draw's own address first (a direct draw in a per-frame buffer written by a hooked call); then the IB
+    # packet it was reached through (a template draw, credited to the issuing call).
+    cands = containing(addr)
+    if not cands and issuer:
+        cands = containing(issuer)
     if not cands:
         no_call += 1
         continue

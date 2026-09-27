@@ -64,6 +64,8 @@ REXCVAR_DECLARE(double, ng2_fov_k);
 // (fill the screen; the 3D is FOV-widened to stay correct), 2 = menu or video
 // (pillarbox 16:9). Stays 0 for every non-NG2 title.
 REXCVAR_DECLARE(int32_t, ng2_uw_mode);
+REXCVAR_DECLARE(int32_t, ng2_uw_fade);
+REXCVAR_DECLARE(int32_t, ng2_uw_fade_frames);
 REXCVAR_DECLARE(bool, force_depth_clamp);
 REXCVAR_DECLARE(bool, spirv_disable_rounding_mode_rte);
 REXCVAR_DECLARE(bool, snorm16_render_target_full_range);

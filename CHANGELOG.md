@@ -30,6 +30,14 @@ backend handed over and the frames the plugin presented from them; the
 `[ngpu] PACK COUNTERS` line shows the pack replacing textures under the
 native path.
 
+### Changed - Ultrawide: a fade between the full-width and the 16:9 pictures
+
+Every switch between the full-width picture (gameplay) and the 16:9 one
+(menus, the continue screen after a death, videos) now fades to black
+and back over about a fifth of a second each way instead of cutting, on
+both renderers. The game's own layout and the screen's letterbox change
+together at full black, so nothing is ever shown stretched.
+
 ### Fixed - Ultrawide: the Start menu is shown at 16:9
 
 On an ultrawide display the Start (weapons / items) menu's drifting red mist
