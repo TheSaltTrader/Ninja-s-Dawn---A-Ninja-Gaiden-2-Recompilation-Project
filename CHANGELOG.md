@@ -3,6 +3,119 @@
 Versions are cut with `tools/make_release.py`, which refuses to package a
 version that has no section here.
 
+## v1.0.25 - 2026-09-26
+
+### Fixed - the enhanced-textures indicator said the pack was idle while it was working
+
+With the texture pack on, the settings menu's status line read "Enhanced
+textures: ON - nothing on this screen is in the pack yet" and the on-screen
+notice "0 enhanced loaded" - in every release from v1.0.20 to v1.0.24 as
+played, and most likely since v1.0.13 - while the pack was in fact replacing
+textures on screen (a trace on the Chapter 1 route counted 752 replacements
+against an indicator of 0). The counter behind both lines was incremented
+only on an older replacement path that the pack's normal path (resolving
+each texture by its content as it loads) never takes. The counter now counts
+that path, so the status line reads "ON and in use" and the notice shows the
+number of enhanced textures loaded. The pack itself was never affected: the
+textures on screen were the enhanced ones all along.
+
+The 5-second `[swap]` line in the log also carries the two counters
+(`texpack registry replaced N original M`), so a log says what the indicator
+would show.
+
+### Fixed - Ultrawide: the pause menu no longer flips between full width and 16:9, and the fade back into the game covers the screen
+
+Opening the pause / weapons menu switched the picture to 16:9, and on the way
+back the fade played inside the 16:9 band before the sides snapped in. Worse,
+the switch was not steady: the two game flags that signalled "paused" toggle
+about once a second while the menu is open, so the screen swung between full
+width and pillarbox for as long as the menu stayed up (measured in every
+release since v1.0.19, which introduced those flags). The menu is now treated
+like any other 2D screen over the game - drawn in its 16:9 band over the
+ultrawide world, with nothing switching underneath it - so the darkening fade
+in and out of the menu covers the whole screen. Set NG2_UW_PAUSE_16_9=1 in the
+environment for the old behaviour.
+
+A frame that draws the game's fade-to-black now counts as ultrawide even when
+no world is behind it, so the fades that bracket a video or a scene change
+cover the full width instead of the 16:9 band.
+
+### Improved - The game's own textures are prepared at a chapter load, with or without the pack
+
+Even with the enhanced textures off, a scene streaming in made the game
+create hundreds of textures on the rendering thread in one frame (542 on
+arrival in Chapter 1: a 145 ms frame). The game now remembers, per chapter,
+the shapes of the textures it created, and at the next load of that chapter
+a worker prepares them ahead of time (within `texture_precreate_mb`, 512 by
+default), while the game itself is not creating anything; the streaming
+burst then takes ready-made textures. Measured on the same route with the
+pack off: the arrival frame 145 ms -> 38 ms (the 542 creations 102 ms ->
+2 ms), the whole route's worst frame 145 -> 72 ms. The first visit to a
+chapter records; every visit after that benefits.
+
+With the pack on, the stage pre-cache now goes further than reading files:
+the pack's textures for the stage are built ready for the GPU during the
+load (within `texture_pack_prebuild_mb`, 1536 by default), so a texture
+whose content matches swaps to the finished one with no read, no creation
+and no upload in play.
+
+### Fixed - Antialiasing now changes immediately from the settings screen, and the rows that need a restart say so
+
+The Antialiasing row said the change applies at once, and the game did push
+it, but the GPU plugin read the value once at startup and refused changes
+after that - so a new setting only showed up on the next launch. The plugin
+now takes the change on the next frame. Supersampling, anisotropic filtering
+and the other GPU rows are decided when the renderer starts and cannot be
+rebuilt underneath a running game; those rows now carry a red "restart
+required" note beside the value (the note existed but was never drawn).
+
+A census of every row on the screen (tools/f10_census.py: each row, the
+setting it edits, the value the game hands the renderer at launch and while
+running, and where the renderer reads it) found two more: "Dither the
+output" and "Extra sharpness" are read by the presenter once at start-up, so
+changing them in-game does nothing until a restart - both rows now carry the
+restart note (and the sharpness value is now handed over at launch, which it
+never was); and "Fuzzy alpha test" reaches only shaders compiled after the
+change, so it carries the note too.
+Everything else on the screen reaches what it should, live or at launch as
+labelled.
+
+The anisotropic filtering labels were one level high: "1x" turned filtering
+off, "16x" gave 8x, and true 16x could not be chosen (the Fable II team found
+the same in its own menu). The row now offers Default (4x), Off, 2x, 4x, 8x
+and 16x, and a saved value keeps the strength it always had - a saved "16x"
+was 8x and now reads "8x".
+
+### Improved - Far less stutter when a scene streams in with the texture pack on
+
+When a scene loads, the game asks for hundreds of textures in one frame. With
+the enhanced-textures pack on, every one of them also had its pack file read
+and its GPU resources created on the rendering thread, inside that frame. On
+arrival in Chapter 1 that was a single 1.2-second frame (572 textures, 413 of
+them from the pack), and every later streaming point cost 300-900 ms.
+
+The pack's work now happens on worker threads: the file is read and the
+resources are created off the rendering thread - mostly taken from a pool
+the worker fills ahead of time for the shapes the pack holds - and the
+enhanced texture is swapped in a frame or two later; the game's own texture
+shows until then, at native resolution. The worker also stays off the GPU
+device while the game itself is creating textures in a burst, because any
+concurrent creation doubled the game's own creation cost.
+
+Measured on the same route, the shipped build twice against the new one: the
+arrival frame 1230/1221 ms before, 286 ms after; the later streaming frames
+873/631/474/290 ms before, 20/69/78/36 ms after; the time the rendering
+thread spent inside texture loads over the whole route 4.3/3.8 s before,
+0.4 s after; 5-second windows with a frame over 100 ms, 7/9 before, 2 after.
+What remains of the arrival frame is the game's own creation of 542
+textures (132 ms) plus their decode (118 ms).
+
+Settings for the curious (Advanced): `texture_pack_async` (on),
+`texture_pack_apply_per_frame` (24, the replacements a frame swaps in) and
+`texture_pack_spare_mb` (256, video memory for the pre-created pool). The
+`[hitch]` and `[swap]` log lines now say how much of a slow frame went into
+texture creation, texture loading and pack reads.
+
 ## v1.0.24 - 2026-09-22
 
 ### Changed - Installing from a disc image now leaves the setup screen ready

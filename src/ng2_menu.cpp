@@ -406,7 +406,7 @@ bool DrawSettings(Ng2Settings& s, const PageOptions& opts) {
           }
           changed = true;
         }
-        if (!live) RestartTag();
+        RestartTag();  // always: the row is restart-bound whether or not it is editable (2026-09-27)
       }
     }
 
@@ -427,7 +427,7 @@ bool DrawSettings(Ng2Settings& s, const PageOptions& opts) {
         changed = true;
       }
     }
-    if (!live) RestartTag();
+    RestartTag();  // always: the row is restart-bound whether or not it is editable (2026-09-27)
 
     // Say it here rather than letting the window silently come up smaller: a
     // size the screen cannot show is the difference between "4K" meaning
@@ -461,7 +461,7 @@ bool DrawSettings(Ng2Settings& s, const PageOptions& opts) {
       s.fps = kFpsValues[fps_index];
       changed = true;
     }
-    if (!live) RestartTag();
+    RestartTag();  // always: the row is restart-bound whether or not it is editable (2026-09-27)
     // The "above 60 the game runs faster, not smoother" line that used to sit
     // here is gone with the options it described. A warning under a setting is
     // not a substitute for not offering it.
@@ -536,7 +536,7 @@ bool DrawSettings(Ng2Settings& s, const PageOptions& opts) {
       s.internal_720p = size_index == 1;
       changed = true;
     }
-    if (!live) RestartTag();
+    RestartTag();  // always: the row is restart-bound whether or not it is editable (2026-09-27)
 
     RowStart("Supersampling",
              "Renders the game's own framebuffer at a multiple of its size and "
@@ -559,7 +559,7 @@ bool DrawSettings(Ng2Settings& s, const PageOptions& opts) {
       s.resolution_scale = scale_index + 1;
       changed = true;
     }
-    if (!live) RestartTag();
+    RestartTag();  // always: the row is restart-bound whether or not it is editable (2026-09-27)
     ImGui::EndDisabled();
 
     // Not restart-bound: the plugin applies this post-process per swap, so it
@@ -590,7 +590,7 @@ bool DrawSettings(Ng2Settings& s, const PageOptions& opts) {
              "Worth trying if shadows shimmer or surfaces flicker where they "
              "meet.");
     changed |= ImGui::Checkbox("##accdepth", &s.accurate_depth);
-    if (!live) RestartTag();
+    RestartTag();  // always: the row is restart-bound whether or not it is editable (2026-09-27)
     ImGui::EndDisabled();
 
     RowStart("Fuzzy alpha test",
@@ -600,6 +600,10 @@ bool DrawSettings(Ng2Settings& s, const PageOptions& opts) {
              "It does change what the alpha test accepts, so it is off unless "
              "asked for.");
     changed |= ImGui::Checkbox("##fuzzyalpha", &s.fuzzy_alpha);
+    // The plugin reads this when it translates a pixel shader, so a change here
+    // reaches only shaders compiled after it; the ones already cached keep the
+    // old test. Whole-scene consistency needs the next launch (F10 census).
+    RestartTag();
 
     RowStart("Skip chapter cinematics",
              "Dismisses the in-engine cinematic each chapter opens with, so a "
@@ -677,6 +681,7 @@ bool DrawSettings(Ng2Settings& s, const PageOptions& opts) {
                "filter's own amount.");
       ImGui::SetNextItemWidth(240.0f);
       changed |= ImGui::SliderFloat("##cassharp", &s.cas_sharpness, 0.0f, 1.0f, "%.2f");
+      RestartTag();  // the presenter reads the CAS sharpness once at init (F10 census, 2026-09-27)
     }
 
     ImGui::BeginDisabled(false);  // restart-bound, but always editable: the change is saved now and applied on the next launch (RestartTag says so), and ApplyLiveSettings never pushes these live
@@ -730,18 +735,28 @@ bool DrawSettings(Ng2Settings& s, const PageOptions& opts) {
       s.texture_cache_mb = kCacheMb[cache_index];
       changed = true;
     }
-    if (!live) RestartTag();
+    RestartTag();  // always: the row is restart-bound whether or not it is editable (2026-09-27)
 
     RowStart("Anisotropic filtering",
              "Forces a filtering level on every texture the game samples. "
              "\"Game default\" leaves the title's own sampler settings alone.");
-    const char* aniso[] = {"Game default", "1x", "2x", "4x", "8x", "16x"};
-    int aniso_index = std::clamp(s.anisotropic + 1, 0, 5);
+    // The plugin's anisotropic_override: -1 no override (its own default then
+    // applies, which is 3 = forced 4x), 0 off, 1 = 1x, 2 = 2x, 3 = 4x, 4 = 8x,
+    // 5 = 16x. The row used to send index-1, so "1x" sent off, "16x" sent 8x and
+    // real 16x could not be chosen (F10 census, 2026-09-27, found on Fable II
+    // first). The stored value keeps the plugin's meaning: a saved 4 is 8x and
+    // now says so.
+    static const int aniso_values[] = {-1, 0, 2, 3, 4, 5};
+    const char* aniso[] = {"Default (4x)", "Off", "2x", "4x", "8x", "16x"};
+    int aniso_index = 0;
+    for (int i = 0; i < 6; ++i)
+      if (aniso_values[i] == s.anisotropic) aniso_index = i;
+    if (s.anisotropic == 1) aniso_index = 1;  // a saved "1x" (which sent off) reads as Off
     if (ImGui::Combo("##aniso", &aniso_index, aniso, 6)) {
-      s.anisotropic = aniso_index - 1;
+      s.anisotropic = aniso_values[aniso_index];
       changed = true;
     }
-    if (!live) RestartTag();
+    RestartTag();  // always: the row is restart-bound whether or not it is editable (2026-09-27)
     ImGui::EndDisabled();
 
     RowStart("Skip intro videos",
@@ -759,6 +774,7 @@ bool DrawSettings(Ng2Settings& s, const PageOptions& opts) {
 
     RowStart("Dither the output", "Hides colour banding on 8-bit displays.");
     changed |= ImGui::Checkbox("##dither", &s.present_dither);
+    RestartTag();  // the presenter reads present_dither once at init (F10 census, 2026-09-27)
 
     ImGui::EndTable();
   }
@@ -870,6 +886,11 @@ void ApplyLiveSettings(const Ng2Settings& s, rex::ui::Window* window) {
   SetCvar("present_cas_additional_sharpness", std::to_string(s.cas_sharpness));
   SetCvar("present_dither", s.present_dither ? "true" : "false");
   SetCvar("present_letterbox", s.letterbox ? "true" : "false");
+  // The presenter reads present_effect / present_dither / the CAS sharpness
+  // from the cvars ONCE, when it initialises (F10 census, 2026-09-27), and the
+  // executable has no public route to its live setter (Window::presenter() is
+  // protected), so the writes above are for the next launch; the two rows say
+  // "restart required".
   // Unconditional, not from the setting: vsync off is a game-speed change on this
   // title, the row is no longer offered, and this live path must not be able to
   // reintroduce it from a stale value.

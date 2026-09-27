@@ -122,6 +122,9 @@ struct Ng2Tuning {
 
     out.push_back({"present_dither", s.present_dither ? "true" : "false",
                    "dither the 10bpc output down to 8bpc"});
+    out.push_back({"present_cas_additional_sharpness", std::to_string(s.cas_sharpness),
+                   "the presenter reads it once at init; the F10 census (2026-09-27) found it "
+                   "was never in the startup list"});
     out.push_back({"present_letterbox", s.letterbox ? "true" : "false",
                    "keep the guest aspect ratio instead of stretching"});
 
@@ -143,7 +146,7 @@ struct Ng2Tuning {
     // setting; nothing else belongs inside it.
     if (s.anisotropic >= 0) {
       out.push_back({"anisotropic_override", std::to_string(s.anisotropic),
-                     "forced anisotropic filtering level, 0=1x .. 4=16x"});
+                     "forced anisotropic filtering level: 0 off, 1 = 1x, 2 = 2x, 3 = 4x, 4 = 8x, 5 = 16x"});
     }
 
     // Texture pack. These are GPU PLUGIN cvars, so this file is the only way

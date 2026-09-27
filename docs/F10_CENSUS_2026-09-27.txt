@@ -1,0 +1,162 @@
+F10 SETTINGS CENSUS - 25 rows in src/ng2_menu.cpp; SDK source D:\ng2_frameinterp\rexglue-v1025; startup evidence from ng2_125.log
+
+Fullscreen  fields=fullscreen  tag=-  text claims=-
+   -> executable-side: read by the exe outside the menu at fullscreen x3
+
+Monitor  fields=monitor,window_height,window_width  tag=restart  text claims=-
+   -> executable-side: read by the exe outside the menu at monitor x4, window_height x6, window_width x6
+
+Resolution  fields=window_height,window_width  tag=restart  text claims=-
+   -> executable-side: read by the exe outside the menu at window_height x6, window_width x6
+
+Frame rate  fields=fps  tag=restart  text claims=-
+   -> executable-side: read by the exe outside the menu at fps x9
+
+Keep aspect ratio  fields=letterbox  tag=-  text claims=-
+   present_letterbox                  via live (ApplyLiveSettings)         pushed at startup = true
+      defined  src/ui/presenter.cpp (kRequiresRestart)
+      read     src/ui/presenter.cpp:Presenter::GetGuestOutputPaintFlow [use]
+   present_letterbox                  via startup tuning                   pushed at startup = true
+      defined  src/ui/presenter.cpp (kRequiresRestart)
+      read     src/ui/presenter.cpp:Presenter::GetGuestOutputPaintFlow [use]
+
+Ultrawide (3D)  fields=ultrawide  tag=-  text claims=immediately
+   ng2_fov_k                          via live (ApplyLiveSettings)         NOT pushed at startup
+      defined  src/graphics/flags.cpp (default lifecycle)
+      read     src/graphics/d3d12/command_processor.cpp:D3D12CommandProcessor::IssueSwap [use]
+      read     src/graphics/d3d12/command_processor.cpp:D3D12CommandProcessor::UpdateBindings [use]
+
+Hide the pointer after  fields=cursor_hide_seconds  tag=-  text claims=-
+   -> executable-side: read by the exe outside the menu at cursor_hide_seconds x2
+
+Keyboard and mouse  fields=keyboard_control  tag=-  text claims=-
+   mnk_mode                           via live (ApplyLiveSettings)         pushed at startup = false
+      defined  src/input/mnk/mnk_input_driver.cpp (default lifecycle)
+      read     src/input/mnk/mnk_input_driver.cpp:MnkInputDriver::IsEnabled [use]
+   mnk_mode                           via startup tuning                   pushed at startup = false
+      defined  src/input/mnk/mnk_input_driver.cpp (default lifecycle)
+      read     src/input/mnk/mnk_input_driver.cpp:MnkInputDriver::IsEnabled [use]
+
+Quality preset  fields=-  tag=-  text claims=-
+   -> NO READ SITE in the executable outside the menu for (no field) (nothing acts on it, or it is read through a path this census cannot see)
+
+Internal render size  fields=internal_720p  tag=restart  text claims=-
+   -> executable-side: read by the exe outside the menu at internal_720p x1
+
+Supersampling  fields=resolution_scale  tag=restart  text claims=-
+   draw_resolution_scale_x            via startup tuning                   pushed at startup = 2
+      defined  src/graphics/pipeline/texture/cache.cpp (kRequiresRestart)
+      read     exe:src/ng2_app.h:? [use]
+      read     src/graphics/pipeline/texture/cache.cpp:TextureCache::GetConfigDrawResolutionScale [init]
+   draw_resolution_scale_y            via startup tuning                   pushed at startup = 2
+      defined  src/graphics/pipeline/texture/cache.cpp (kRequiresRestart)
+      read     exe:src/ng2_app.h:? [use]
+      read     src/graphics/pipeline/texture/cache.cpp:TextureCache::GetConfigDrawResolutionScale [init]
+   resolution_scale                   via startup tuning                   pushed at startup = 2
+      defined  src/graphics/pipeline/texture/cache.cpp (kRequiresRestart)
+      read     src/graphics/pipeline/texture/cache.cpp:TextureCache::GetConfigDrawResolutionScale [init]
+
+Antialiasing  fields=antialias  tag=-  text claims=-
+   swap_post_effect                   via live (ApplyLiveSettings)         pushed at startup = fxaa_extreme
+      defined  src/graphics/graphics_system.cpp (kHotReload)
+      read     src/graphics/graphics_system.cpp:GraphicsSystem::SetupGuestGpu [init]
+      read     src/graphics/graphics_system.cpp:change callback [use]
+   swap_post_effect                   via startup tuning                   pushed at startup = fxaa_extreme
+      defined  src/graphics/graphics_system.cpp (kHotReload)
+      read     src/graphics/graphics_system.cpp:GraphicsSystem::SetupGuestGpu [init]
+      read     src/graphics/graphics_system.cpp:change callback [use]
+
+Accurate depth  fields=accurate_depth  tag=restart  text claims=-
+   depth_float24_convert_in_pixel_shader via startup tuning                   pushed at startup = true
+      defined  src/graphics/flags.cpp (kHotReload)
+      read     src/graphics/d3d12/render_target_cache.cpp:D3D12RenderTargetCache::Initialize [init]
+      read     src/graphics/vulkan/render_target_cache.cpp:? [use]
+   depth_float24_round                via startup tuning                   pushed at startup = true
+      defined  src/graphics/flags.cpp (kHotReload)
+      read     src/graphics/d3d12/render_target_cache.cpp:D3D12RenderTargetCache::Initialize [init]
+      read     src/graphics/vulkan/render_target_cache.cpp:? [use]
+
+Fuzzy alpha test  fields=fuzzy_alpha  tag=restart  text claims=-
+   use_fuzzy_alpha_epsilon            via startup tuning                   pushed at startup = false
+      defined  src/graphics/flags.cpp (default lifecycle)
+      read     src/graphics/pipeline/shader/dxbc_translator_om.cpp:DxbcShaderTranslator::CompletePixelShader [use]
+
+Skip chapter cinematics  fields=skip_cinematics  tag=-  text claims=-
+   -> executable-side: read by the exe outside the menu at skip_cinematics x1
+
+On-screen readouts  fields=hud_bars,hud_cpu,hud_enabled,hud_fps,hud_gpu,hud_menu_bars,hud_ram,hud_vram  tag=-  text claims=-
+   -> NO READ SITE in the executable outside the menu for hud_menu_bars (nothing acts on it, or it is read through a path this census cannot see)
+
+Sharpening  fields=present_effect  tag=restart  text claims=-
+   present_effect                     via live (ApplyLiveSettings)         NOT pushed at startup
+      defined  src/ui/presenter.cpp (kRequiresRestart)
+      defined  src/ui/presenter.cpp (kRequiresRestart)
+      read     src/ui/presenter.cpp:BuildGuestOutputPaintConfigFromCVar [init]
+
+Extra sharpness  fields=cas_sharpness  tag=restart  text claims=-
+   present_cas_additional_sharpness   via live (ApplyLiveSettings)         NOT pushed at startup
+      defined  src/ui/presenter.cpp (kRequiresRestart)
+      read     src/ui/presenter.cpp:BuildGuestOutputPaintConfigFromCVar [init]
+   present_cas_additional_sharpness   via startup tuning                   NOT pushed at startup
+      defined  src/ui/presenter.cpp (kRequiresRestart)
+      read     src/ui/presenter.cpp:BuildGuestOutputPaintConfigFromCVar [init]
+
+Texture cache  fields=hardware_detected,texture_cache_mb,texture_scale  tag=restart  text claims=-
+   texture_cache_memory_limit_hard    via startup tuning                   pushed at startup = 8192
+      defined  src/graphics/pipeline/texture/cache.cpp (kRequiresRestart)
+      read     src/graphics/pipeline/texture/cache.cpp:TextureCache::CompletedSubmissionUpdated [use]
+   texture_cache_memory_limit_soft    via startup tuning                   pushed at startup = 4096
+      defined  src/graphics/pipeline/texture/cache.cpp (kRequiresRestart)
+      read     src/graphics/pipeline/texture/cache.cpp:TextureCache::CompletedSubmissionUpdated [use]
+
+Anisotropic filtering  fields=anisotropic  tag=restart  text claims=-
+   anisotropic_override               via startup tuning                   pushed at startup = 4
+      defined  src/graphics/pipeline/texture/cache.cpp (kHotReload)
+      read     src/graphics/d3d12/texture_cache.cpp:D3D12TextureCache::GetSamplerParameters [use]
+      read     src/graphics/vulkan/texture_cache.cpp:VulkanTextureCache::GetSamplerParameters [use]
+
+Skip intro videos  fields=video_mode  tag=-  text claims=-
+   ng2_video_mode                     via live (ApplyLiveSettings)         NOT pushed at startup
+      defined  exe:src/patch_hooks.cpp (default lifecycle)
+      read     exe:src/patch_hooks.cpp:ng2PatchSkipVideos [use]
+
+Dither the output  fields=present_dither  tag=restart  text claims=restart
+   present_dither                     via live (ApplyLiveSettings)         pushed at startup = false
+      defined  src/ui/presenter.cpp (kRequiresRestart)
+      read     src/ui/presenter.cpp:BuildGuestOutputPaintConfigFromCVar [init]
+   present_dither                     via startup tuning                   pushed at startup = false
+      defined  src/ui/presenter.cpp (kRequiresRestart)
+      read     src/ui/presenter.cpp:BuildGuestOutputPaintConfigFromCVar [init]
+
+Folder  fields=texture_path  tag=-  text claims=-
+   texture_pack_path                  via live (ApplyLiveSettings)         pushed at startup = D:/Ninja
+      defined  src/graphics/d3d12/texture_cache.cpp (kHotReload)
+      read     exe:src/ng2_menu.cpp:SettingsOverlay::DrawTextures [use]
+      read     src/graphics/d3d12/texture_cache.cpp:D3D12TextureCache::ApplyTexpackResolve [use]
+      read     src/graphics/d3d12/texture_cache.cpp:D3D12TextureCache::BeginSubmission [use]
+      read     src/graphics/d3d12/texture_cache.cpp:D3D12TextureCache::LoadTextureDataFromResidentMemoryImplBody [use]
+      read     src/graphics/d3d12/texture_cache.cpp:D3D12TextureCache::TexpackAsyncDrain [use]
+      read     src/graphics/d3d12/texture_cache.cpp:TexturePackDimsForId [use]
+
+Dump while playing  fields=texture_dump,texture_pack  tag=restart  text claims=restart
+   texture_pack_path                  via live (ApplyLiveSettings)         pushed at startup = D:/Ninja
+      defined  src/graphics/d3d12/texture_cache.cpp (kHotReload)
+      read     exe:src/ng2_menu.cpp:SettingsOverlay::DrawTextures [use]
+      read     src/graphics/d3d12/texture_cache.cpp:D3D12TextureCache::ApplyTexpackResolve [use]
+      read     src/graphics/d3d12/texture_cache.cpp:D3D12TextureCache::BeginSubmission [use]
+      read     src/graphics/d3d12/texture_cache.cpp:D3D12TextureCache::LoadTextureDataFromResidentMemoryImplBody [use]
+      read     src/graphics/d3d12/texture_cache.cpp:D3D12TextureCache::TexpackAsyncDrain [use]
+      read     src/graphics/d3d12/texture_cache.cpp:TexturePackDimsForId [use]
+
+Use the upscaled textures  fields=texture_dump,texture_pack  tag=-  text claims=next launch,at startup
+   texture_pack_path                  via live (ApplyLiveSettings)         pushed at startup = D:/Ninja
+      defined  src/graphics/d3d12/texture_cache.cpp (kHotReload)
+      read     exe:src/ng2_menu.cpp:SettingsOverlay::DrawTextures [use]
+      read     src/graphics/d3d12/texture_cache.cpp:D3D12TextureCache::ApplyTexpackResolve [use]
+      read     src/graphics/d3d12/texture_cache.cpp:D3D12TextureCache::BeginSubmission [use]
+      read     src/graphics/d3d12/texture_cache.cpp:D3D12TextureCache::LoadTextureDataFromResidentMemoryImplBody [use]
+      read     src/graphics/d3d12/texture_cache.cpp:D3D12TextureCache::TexpackAsyncDrain [use]
+      read     src/graphics/d3d12/texture_cache.cpp:TexturePackDimsForId [use]
+
+== SUMMARY: 25 rows; 2 without a GPU cvar (executable-side or untraced); findings: 1
+  - On-screen readouts: field(s) hud_menu_bars written by the menu but read nowhere else
