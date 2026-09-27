@@ -114,6 +114,23 @@ std::atomic<uint64_t> g_fe_kicks{0};
 std::atomic<uint64_t> g_fe_stop_unfilled_ring{0}, g_fe_stop_unfilled_ib{0}, g_fe_stop_short_ring{0}, g_fe_stop_short_ib{0}, g_fe_ib_unreadable{0}, g_fe_ib_deep{0};
 std::atomic<int> g_fe_stop_logged{0};
 std::atomic<uint64_t> g_fe_ring_resets{0}, g_fe_resyncs{0};
+// [p5] SIDE-EFFECT CENSUS, front-end side (NG2_P5=1): what the front end would do for each side-effect packet
+// it decodes -> p5_fe.bin {frame, kind, addr, value}; kinds as the plugin's (fork command_processor.cpp ng2_p5):
+// 1 MEM_WRITE, 2/3 COND_WRITE memory/register, 4/5 EVENT_WRITE_SHD literal/counter, 6 EXT, 7 ZPD, 8 REG_TO_MEM,
+// 9 INTERRUPT, 10 REG_RMW, 11 read-pointer write-back, 12 XE_SWAP, 13 WAIT_REG_MEM.
+bool g_p5 = false;
+FILE* g_p5_f = nullptr;
+uint64_t g_p5_n = 0;
+uint32_t g_fe_swap_counter = 0;   // XE_SWAP packets decoded since start (the plugin's counter_)
+inline uint32_t FeGpuSwap(uint32_t v, uint32_t endian) {
+  switch (endian & 3) {
+    case 1: return ((v & 0x00FF00FFu) << 8) | ((v >> 8) & 0x00FF00FFu);
+    case 2: return _byteswap_ulong(v);
+    case 3: return (v << 16) | (v >> 16);
+    default: return v;
+  }
+}
+void P5Note(uint32_t kind, uint32_t addr, uint32_t value);
 // [p3 draw] NG2_P3DRAW=1: the front end DRAWS (Fable's design (a)): the shaders it tracks from IM_LOAD /
 // IM_LOAD_IMMEDIATE, a dirty bitmap of the registers it wrote since the last draw, and at each DRAW packet the
 // bridge's FrontEndDraw with its own register file; at XE_SWAP the bridge's FrontEndSwap. All on the guest
@@ -197,6 +214,64 @@ uint32_t FeDecode(const uint8_t* body, uint32_t n, uint32_t phys_base) {
       const uint32_t op = (h >> 8) & 0x7F, cnt = ((h >> 16) & 0x3FFF) + 1;
       g_fe_ops[op].fetch_add(1, std::memory_order_relaxed);
       if (op == 0x64) { ++g_fe_frame; g_fe_ord.clear(); }   // XE_SWAP: a new frame for the ordinals
+      // [p5] the side-effect packets: recorded as the plugin would perform them; register effects executed.
+      if (!((h & 1) && (g_fe_bin_mask & g_fe_bin_select) == 0)) {
+        auto* ksm = ks ? ks->memory() : nullptr;
+        if (op == 0x3D && cnt >= 2) {                                 // MEM_WRITE
+          const uint32_t a0 = be(i + 1);
+          for (uint32_t k = 0; k + 1 < cnt; ++k) P5Note(1, a0 + 4 * k, be(i + 2 + k));
+        } else if (op == 0x45 && cnt >= 6) {                          // COND_WRITE
+          const uint32_t wi = be(i + 1), poll = be(i + 2), ref = be(i + 3), mask = be(i + 4), wa = be(i + 5), wd = be(i + 6);
+          uint32_t v = 0;
+          if (wi & 0x10) {
+            const uint8_t* pp = ksm ? ksm->TranslatePhysical<const uint8_t*>(poll & ~3u) : nullptr;
+            uint32_t raw = 0;
+            if (pp) std::memcpy(&raw, pp, 4);
+            v = FeGpuSwap(raw, poll & 3);
+          } else {
+            v = poll < 0x5000 ? g_fe_regs[poll] : 0;
+          }
+          bool m = false;
+          switch (wi & 7) {
+            case 1: m = (v & mask) < ref; break;
+            case 2: m = (v & mask) <= ref; break;
+            case 3: m = (v & mask) == ref; break;
+            case 4: m = (v & mask) != ref; break;
+            case 5: m = (v & mask) >= ref; break;
+            case 6: m = (v & mask) > ref; break;
+            case 7: m = true; break;
+            default: break;
+          }
+          if (m) {
+            P5Note((wi & 0x100) ? 2 : 3, wa, wd);
+            if (!(wi & 0x100) && wa < 0x5000) FeSet(wa, wd);
+          }
+        } else if (op == 0x58 && cnt >= 3) {                          // EVENT_WRITE_SHD
+          const uint32_t ini = be(i + 1);
+          P5Note((ini >> 31) ? 5 : 4, be(i + 2), (ini >> 31) ? g_fe_swap_counter : be(i + 3));
+        } else if (op == 0x5A && cnt >= 2) {                          // EVENT_WRITE_EXT
+          P5Note(6, be(i + 2), 0);
+        } else if (op == 0x5B && cnt >= 1) {                          // EVENT_WRITE_ZPD
+          P5Note(7, g_fe_regs[0x2325], be(i + 1));
+        } else if (op == 0x3E && cnt >= 2) {                          // REG_TO_MEM
+          const uint32_t r = be(i + 1);
+          P5Note(8, be(i + 2), r < 0x5000 ? g_fe_regs[r] : 0);
+        } else if (op == 0x54 && cnt >= 1) {                          // INTERRUPT
+          P5Note(9, 0, be(i + 1));
+        } else if (op == 0x21 && cnt >= 3) {                          // REG_RMW
+          const uint32_t info = be(i + 1), am = be(i + 2), om = be(i + 3), r = info & 0x1FFF;
+          uint32_t v = r < 0x5000 ? g_fe_regs[r] : 0;
+          v &= ((info >> 31) & 1) ? ((am & 0x1FFF) < 0x5000 ? g_fe_regs[am & 0x1FFF] : 0) : am;
+          v |= ((info >> 30) & 1) ? ((om & 0x1FFF) < 0x5000 ? g_fe_regs[om & 0x1FFF] : 0) : om;
+          P5Note(10, r, v);
+          if (r < 0x5000) FeSet(r, v);
+        } else if (op == 0x64 && cnt >= 4) {                          // XE_SWAP
+          P5Note(12, be(i + 2), g_fe_swap_counter);
+          ++g_fe_swap_counter;
+        } else if (op == 0x3C && cnt >= 3) {                          // WAIT_REG_MEM
+          P5Note(13, be(i + 2), be(i + 3));
+        }
+      }
       // Predicated tiling, as the GPU (and the plugin) apply it: SET_BIN_MASK/SELECT LO/HI keep the bin state; a
       // predicated packet (header bit 0) runs only when mask & select overlap. (NG2 never tiles; kept for parity.)
       if ((op == 0x50 || op == 0x51) && i + 2 < w) {
@@ -346,6 +421,7 @@ void FeKick(uint32_t ring_ptr, uint32_t ring_bytes, uint32_t wptr) {
     g_fe_ringcopy.insert(g_fe_ringcopy.end(), ring + k * 4, ring + k * 4 + 4);
   const uint32_t base = ring_ptr + g_fe_rptr * 4;   // exact for draws before a wrap; ring-resident draws are rare
   const uint32_t used = FeDecode(g_fe_ringcopy.data(), uint32_t(g_fe_ringcopy.size()), base);
+  if (g_p5) P5Note(11, 0, (g_fe_rptr + used / 4) % nd);   // [p5] where the front end's read index lands
   if (used == 0 && !g_fe_ringcopy.empty()) {   // no progress: stuck on a dword that is not a header
     if (g_fe_stuck_pos == g_fe_rptr) {
       if (++g_fe_stuck_n >= 16) {
@@ -439,6 +515,10 @@ void Init() {
     g_src = true;
     REXLOG_INFO("[p3src] source census ON: guest frame {} -> p3_src.bin (calls: args + samples) and p3_fe.bin (draws)", g_src_frame);
   }
+  if (const char* m = std::getenv("NG2_P5"); m && *m && *m != '0') {
+    g_p5 = true;
+    REXLOG_INFO("[p5] side-effect census ON (front-end side) -> p5_fe.bin; the plugin writes p5_plugin.bin");
+  }
   if (const char* m = std::getenv("NG2_P3DRAW"); m && *m && *m != '0') {
     g_p3draw = true;
     REXLOG_INFO("[p3draw] THE FRONT END DRAWS: the guest thread records every draw it decodes and swaps at XE_SWAP; the plugin's callbacks are compare-only");
@@ -494,6 +574,17 @@ void Discover(int hook, uint32_t dev) {
   }
 }
 
+void P5Note(uint32_t kind, uint32_t addr, uint32_t value) {
+  if (!g_p5) return;
+  const uint32_t f = g_frame.load(std::memory_order_relaxed);
+  if (f + 1 < g_start || f > g_start + g_count) return;
+  if (!g_p5_f) g_p5_f = std::fopen("p5_fe.bin", "wb");
+  if (!g_p5_f) { g_p5 = false; return; }
+  const uint32_t rec[4] = {f, kind, addr, value};
+  std::fwrite(rec, sizeof(rec), 1, g_p5_f);
+  ++g_p5_n;
+}
+
 void FeReport(const char* why) {
   std::vector<std::pair<uint32_t, uint32_t>> top;
   uint32_t regs_bad = 0;
@@ -521,6 +612,11 @@ void FeReport(const char* why) {
 
 void Write() {
   if (g_fe) FeReport("census window end");
+  if (g_p5_f) {
+    std::fclose(g_p5_f);
+    g_p5_f = nullptr;
+    REXLOG_INFO("[p5] wrote p5_fe.bin: {} side effects", g_p5_n);
+  }
   if (g_src) {
     std::lock_guard<std::mutex> lock2(g_src_mu);
     if (g_src_f) { std::fclose(g_src_f); g_src_f = nullptr; }
