@@ -244,3 +244,24 @@ understood. Pin stays true.
 Fable II's town at ~14.0 ms CPU for ~3,400 draws (4.12 us/draw; GPU 11.8 ms) and NG2's Chapter 1 at ~4.8 ms
 for ~2,700 draws (1.78 us/draw; GPU ~1.05 ms). Draws are not fungible across titles (scene, state changes,
 resolution, texture loads), but NG2 should not expect to inherit Fable's CPU cost from the layer itself.
+
+### The gameplay timing pair (18:07-18:20): Chapter 1 combat, baseline / offload / baseline / offload
+
+Same fork pair, same exe, same pad script into Chapter 1 (gameplay from ~+75 s), 180 s each, interleaved,
+one variable. `abfps2.py --from 80` (19 windows each, a single 60-fps phase in every leg):
+
+| leg | fps median (min-max) | p50 ms | p99 ms median / max | worst ms | hitches | native GPU ms/frame | native CPU on the plugin GPU thread (submit) |
+|---|---|---|---|---|---|---|---|
+| gbase1 (plugin alone) | 60.0 (59.0-60.0) | 16.60 | 19.00 / 30.5 | 31.0 | 0 | - | - |
+| goff1 (offload) | 60.0 (60.0-60.0) | 16.60 | 19.00 / 19.5 | 19.8 | 0 | 1.09 | 5.47 (0.83) |
+| gbase2 (plugin alone) | 60.0 | 16.70 | 18.90 / 19.6 | 20.1 | 0 | - | - |
+| goff2 (offload) | 60.0 | 16.60 | 19.00 / 29.8 | 30.5 | 0 | 0.96 | 4.43 (0.62) |
+
+Offload legs: 17.1 M and 10.6 M draws fed over 10,501 swaps each (the combat evolved differently - draws
+per frame are not fixed by the route), 0 failed, 0 self-check mismatches, 18 frames held at the reveal.
+
+READ: at every percentile the offload legs sit on the plugin-alone distribution; the worst-frame band has
+one ~30 ms frame in one leg of EACH arm, so it has no direction at n=2. NG2's plugin path already holds 60
+here, so **there is no speed bump to measure at the cap**; the native path's cost is ~1 ms GPU and 4.4-5.5
+ms CPU per frame, and what it can buy on this title is HEADROOM - which shows only when the GPU is made the
+limiter. Next pair: the same route at 3x internal resolution (draw_resolution_scale 3), both arms.
