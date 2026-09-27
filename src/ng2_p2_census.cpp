@@ -17,6 +17,8 @@
 #include <rex/logging.h>
 #include <rex/system/kernel_state.h>
 
+#include "ng2_ngpu_bridge.h"   // [p3 draw] FrontEndDraw / FrontEndSwap
+
 namespace ng2::p2 {
 namespace {
 
@@ -112,6 +114,21 @@ std::atomic<uint64_t> g_fe_kicks{0};
 std::atomic<uint64_t> g_fe_stop_unfilled_ring{0}, g_fe_stop_unfilled_ib{0}, g_fe_stop_short_ring{0}, g_fe_stop_short_ib{0}, g_fe_ib_unreadable{0}, g_fe_ib_deep{0};
 std::atomic<int> g_fe_stop_logged{0};
 std::atomic<uint64_t> g_fe_ring_resets{0}, g_fe_resyncs{0};
+// [p3 draw] NG2_P3DRAW=1: the front end DRAWS (Fable's design (a)): the shaders it tracks from IM_LOAD /
+// IM_LOAD_IMMEDIATE, a dirty bitmap of the registers it wrote since the last draw, and at each DRAW packet the
+// bridge's FrontEndDraw with its own register file; at XE_SWAP the bridge's FrontEndSwap. All on the guest
+// thread; the plugin's callbacks are compare-only then.
+bool g_p3draw = false;
+uint32_t g_fe_vs = 0, g_fe_vs_dwords = 0, g_fe_ps = 0, g_fe_ps_dwords = 0;
+bool g_fe_vs_inline = false, g_fe_ps_inline = false;
+std::vector<uint8_t> g_fe_imm_vs, g_fe_imm_ps;
+uint64_t g_fe_dirty[(0x5000 + 63) / 64];
+std::atomic<uint64_t> g_fe_draws_issued{0}, g_fe_swaps_issued{0};
+inline void FeSet(uint32_t reg, uint32_t v) {
+  g_fe_regs[reg] = v;
+  g_fe_src[reg] = 0;
+  g_fe_dirty[reg >> 6] |= uint64_t(1) << (reg & 63);
+}
 // [p3 src] SOURCE CENSUS (NG2_P3SRC=<guest frame>): every hooked call's r3-r10 plus 256 bytes behind each
 // pointer-like argument, and every draw the front end decodes in that frame with its register file and the IB
 // packet that led to it - joined offline (tools/native_gpu/p3_sources.py) to find each per-draw register's source.
@@ -168,11 +185,11 @@ uint32_t FeDecode(const uint8_t* body, uint32_t n, uint32_t phys_base) {
       const uint32_t base = h & 0x7FFF, cnt = ((h >> 16) & 0x3FFF) + 1, one = (h >> 15) & 1;
       for (uint32_t k = 0; k < cnt && i + 1 + k < w; ++k) {
         const uint32_t reg = one ? base : base + k;
-        if (reg < 0x5000) { g_fe_regs[reg] = be(i + 1 + k); g_fe_src[reg] = 0; }
+        if (reg < 0x5000) FeSet(reg, be(i + 1 + k));
       }
       i += 1 + cnt;
     } else if (t == 1) {
-      if (i + 2 < w) { g_fe_regs[h & 0x7FF] = be(i + 1); g_fe_regs[(h >> 11) & 0x7FF] = be(i + 2); }
+      if (i + 2 < w) { FeSet(h & 0x7FF, be(i + 1)); FeSet((h >> 11) & 0x7FF, be(i + 2)); }
       i += 3;
     } else if (t == 2) {
       ++i;
@@ -205,7 +222,7 @@ uint32_t FeDecode(const uint8_t* body, uint32_t n, uint32_t phys_base) {
         if (typ < 5)
           for (uint32_t k = 0; k + 1 < cnt && i + 2 + k < w; ++k) {
             const uint32_t reg = kSpace[typ] + idx + k;
-            if (reg < 0x5000) { g_fe_regs[reg] = be(i + 2 + k); g_fe_src[reg] = 0; }
+            if (reg < 0x5000) FeSet(reg, be(i + 2 + k));
           }
       } else if (op == 0x2F && i + 3 < w && ks && ks->memory()) {   // LOAD_ALU_CONSTANT: from guest memory
         const uint32_t addr = be(i + 1) & 0x3FFFFFFF, d = be(i + 2), size = be(i + 3) & 0xFFF;
@@ -216,7 +233,7 @@ uint32_t FeDecode(const uint8_t* body, uint32_t n, uint32_t phys_base) {
             const uint32_t reg = kSpace[typ] + idx + k;
             const uint8_t* p = src + k * 4;
             if (reg < 0x5000) {
-              g_fe_regs[reg] = (uint32_t(p[0]) << 24) | (uint32_t(p[1]) << 16) | (uint32_t(p[2]) << 8) | uint32_t(p[3]);
+              FeSet(reg, (uint32_t(p[0]) << 24) | (uint32_t(p[1]) << 16) | (uint32_t(p[2]) << 8) | uint32_t(p[3]));
               g_fe_src[reg] = addr + k * 4;
             }
           }
@@ -235,8 +252,38 @@ uint32_t FeDecode(const uint8_t* body, uint32_t n, uint32_t phys_base) {
         } else {
           g_fe_ib_unreadable.fetch_add(1, std::memory_order_relaxed);
         }
+      } else if (op == 0x27 && cnt >= 2) {                            // IM_LOAD: shader at an address
+        const uint32_t addr_type = be(i + 1), dwords = be(i + 2) & 0xFFFF;
+        if ((addr_type & 3) == 0) { g_fe_vs = addr_type & ~3u; g_fe_vs_dwords = dwords; g_fe_vs_inline = false; }
+        else { g_fe_ps = addr_type & ~3u; g_fe_ps_dwords = dwords; g_fe_ps_inline = false; }
+      } else if (op == 0x2B && cnt >= 2) {                            // IM_LOAD_IMMEDIATE: shader in the packet
+        const bool ps = (be(i + 1) & 3) != 0;
+        const uint32_t dwords = std::min<uint32_t>(be(i + 2) & 0xFFFF, cnt - 2);
+        std::vector<uint8_t>& dst = ps ? g_fe_imm_ps : g_fe_imm_vs;
+        dst.assign(body + (i + 3) * 4, body + (i + 3 + dwords) * 4);   // raw big-endian bytes as the guest wrote them
+        (ps ? g_fe_ps_inline : g_fe_vs_inline) = true;
+        (ps ? g_fe_ps_dwords : g_fe_vs_dwords) = dwords;
+      } else if (op == 0x64 && cnt >= 4 && g_p3draw) {                // XE_SWAP: magic, front buffer, width, height
+        ::ng2::ngpu::FrontEndSwap(be(i + 2), be(i + 3), be(i + 4), g_fe_regs, g_fe_dirty);
+        g_fe_swaps_issued.fetch_add(1, std::memory_order_relaxed);
       } else if (op == 0x22 || op == 0x36) {                         // DRAW_INDX / DRAW_INDX_2
         g_fe_draws.fetch_add(1, std::memory_order_relaxed);
+        if (g_p3draw) {
+          ::ng2::ngpu::FeDrawInfo d{};
+          if (op == 0x22) {   // viz query token, initiator, then for a DMA source the index base and size
+            d.draw_initiator = cnt >= 2 ? be(i + 2) : 0;
+            if (((d.draw_initiator >> 6) & 3) == 0 && cnt >= 4) { d.index_addr = be(i + 3); d.index_size = be(i + 4); }
+          } else {
+            d.draw_initiator = be(i + 1);
+          }
+          d.vs_addr = g_fe_vs; d.vs_dwords = g_fe_vs_dwords; d.ps_addr = g_fe_ps; d.ps_dwords = g_fe_ps_dwords;
+          d.vs_inline = g_fe_vs_inline; d.ps_inline = g_fe_ps_inline;
+          d.vs_code = g_fe_imm_vs.empty() ? nullptr : g_fe_imm_vs.data();
+          d.ps_code = g_fe_imm_ps.empty() ? nullptr : g_fe_imm_ps.data();
+          d.vs_code_dwords = uint32_t(g_fe_imm_vs.size() / 4); d.ps_code_dwords = uint32_t(g_fe_imm_ps.size() / 4);
+          ::ng2::ngpu::FrontEndDraw(g_fe_regs, g_fe_dirty, d);
+          g_fe_draws_issued.fetch_add(1, std::memory_order_relaxed);
+        }
         const uint32_t addr = (phys_base + i * 4) & 0x1FFFFFFFu;
         const uint32_t ord = g_fe_ord[addr]++;
         if (g_src && g_frame.load(std::memory_order_relaxed) == g_src_frame) {   // [p3 src] every draw of the frame
@@ -391,6 +438,10 @@ void Init() {
     g_src_frame = uint32_t(std::strtoul(m, nullptr, 0));
     g_src = true;
     REXLOG_INFO("[p3src] source census ON: guest frame {} -> p3_src.bin (calls: args + samples) and p3_fe.bin (draws)", g_src_frame);
+  }
+  if (const char* m = std::getenv("NG2_P3DRAW"); m && *m && *m != '0') {
+    g_p3draw = true;
+    REXLOG_INFO("[p3draw] THE FRONT END DRAWS: the guest thread records every draw it decodes and swaps at XE_SWAP; the plugin's callbacks are compare-only");
   }
   if (const char* m = std::getenv("NG2_P3FE"); m && *m) {
     g_fe_every = std::max<uint32_t>(1, uint32_t(std::strtoul(m, nullptr, 0)));
@@ -762,6 +813,9 @@ void BridgeSwap() {
   g_bridge_frame.fetch_add(1, std::memory_order_relaxed);
   g_br_ord.clear();   // the bridge's per-address execution ordinals restart with its frame
 }
+
+bool FrontEndDraws() { return g_p3draw; }
+void FrontEndCounts(uint64_t& draws, uint64_t& swaps) { draws = g_fe_draws_issued.load(); swaps = g_fe_swaps_issued.load(); }
 
 }  // namespace ng2::p2
 

@@ -37,6 +37,19 @@ struct ID3D12Resource;
 
 namespace ng2::ngpu {
 
+// [p3 draw] What the front end hands the bridge at a DRAW packet it decoded (the plugin's RexNgpuDraw, minus the
+// register-file pointer, which comes as the front end's own file plus a dirty bitmap of what it wrote).
+struct FeDrawInfo {
+  uint32_t draw_initiator, index_addr, index_size;
+  uint32_t vs_addr, vs_dwords, ps_addr, ps_dwords;
+  bool vs_inline, ps_inline;
+  const uint8_t* vs_code;   // inline microcode (big-endian dwords), valid for the call
+  const uint8_t* ps_code;
+  uint32_t vs_code_dwords, ps_code_dwords;
+};
+void FrontEndDraw(const uint32_t* regs, uint64_t* dirty, const FeDrawInfo& d);
+void FrontEndSwap(uint32_t fb, uint32_t w, uint32_t h, const uint32_t* regs, uint64_t* dirty);
+
 // Binds the plugin's RexNgpu* exports and installs the lockstep consumer;
 // starts the native window when ngpu_backend is on. Call once the plugin is
 // loaded (OnPostSetup).

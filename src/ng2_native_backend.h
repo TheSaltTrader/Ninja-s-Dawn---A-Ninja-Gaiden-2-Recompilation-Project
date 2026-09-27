@@ -43,6 +43,8 @@ bool Draw(const DrawRecord& d);
 
 // The frame's swap: fetch constant 0 (6 dwords) as the swap saw it, the gamma ramp tables (nullptr = unchanged),
 // the front buffer the XE_SWAP packet named.
+// [p3 draw] The gamma ramp alone (the plugin's swap callback delivers it while the front end swaps).
+void SetGamma(const uint32_t* gamma_table_256, const uint32_t* gamma_pwl_rgb);
 void Swap(uint32_t frontbuffer_ptr, uint32_t width, uint32_t height, const uint32_t* fetch0,
           const uint32_t* gamma_table_256, const uint32_t* gamma_pwl_rgb);
 // End of a replayed frame that had no swap (submits the pending work).

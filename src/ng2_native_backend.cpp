@@ -153,6 +153,17 @@ class Driver {
     ::ng2::ngpu::rtc::NoteSwapSubmission(cp_->LastQueuedSubmission());   // [async submit] the frame waits for it
   }
 
+  void SetGamma(const uint32_t* table, const uint32_t* pwl) {
+    if (!cp_) return;
+    if (table && std::memcmp(cp_->gamma_ramp_256_entry_table_, table, 256 * 4)) {
+      std::memcpy(cp_->gamma_ramp_256_entry_table_, table, 256 * 4);
+      cp_->gamma_ramp_256_entry_table_up_to_date_ = false;
+    }
+    if (pwl && std::memcmp(cp_->gamma_ramp_pwl_rgb_, pwl, 128 * 3 * 4)) {
+      std::memcpy(cp_->gamma_ramp_pwl_rgb_, pwl, 128 * 3 * 4);
+      cp_->gamma_ramp_pwl_up_to_date_ = false;
+    }
+  }
   void EndFrameNoSwap() { cp_->EndSubmission(false); }
   void InitShaderStorage(const std::filesystem::path& cache_root, uint32_t title_id) {
     if (cp_) cp_->InitializeShaderStorage(cache_root, title_id, true);   // blocking: pipelines exist before the draws
@@ -236,6 +247,7 @@ bool Ready() { return g_driver.Ready(); }
 void WriteRegister(uint32_t index, uint32_t value) { g_driver.WriteRegister(index, value); }
 bool Draw(const DrawRecord& d) { return g_driver.Draw(d); }
 void Swap(uint32_t fb, uint32_t w, uint32_t h, const uint32_t* fetch0, const uint32_t* table, const uint32_t* pwl) { g_driver.Swap(fb, w, h, fetch0, table, pwl); }
+void SetGamma(const uint32_t* table, const uint32_t* pwl) { g_driver.SetGamma(table, pwl); }
 void EndFrameNoSwap() { g_driver.EndFrameNoSwap(); }
 void InitShaderStorage(const std::filesystem::path& cache_root, uint32_t title_id) { g_driver.InitShaderStorage(cache_root, title_id); }
 void ShutdownShaderStorage() { g_driver.ShutdownShaderStorage(); }

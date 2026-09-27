@@ -442,6 +442,36 @@ bool LockstepReady() {
   return g_backend_on;
 }
 
+// [p3 draw] The front end's register file: only the registers it wrote since the last draw (its dirty bitmap)
+// reach the backend, compared against what the backend has (g_prev, shared with the plugin path - which no
+// longer writes the backend while the front end draws).
+void FrontEndSync(const uint32_t* regs, uint64_t* dirty) {
+  if (!g_prev_valid) {   // the first sync: everything in the ranges, so the backend starts from the file
+    for (const auto& r : kRanges)
+      for (uint32_t k = r[0]; k < r[1]; ++k) { g_prev[k] = regs[k]; backend::WriteRegister(k, regs[k]); }
+    g_prev_valid = true;
+    std::memset(dirty, 0, sizeof(uint64_t) * ((0x5000 + 63) / 64));
+    return;
+  }
+  for (const auto& r : kRanges) {
+    for (uint32_t w = r[0] >> 6; w <= (r[1] - 1) >> 6; ++w) {
+      uint64_t bits = dirty[w];
+      if (!bits) continue;
+      dirty[w] = 0;
+      while (bits) {
+        unsigned long b;
+        _BitScanForward64(&b, bits);
+        const uint32_t k = (w << 6) + uint32_t(b);
+        bits &= bits - 1;
+        if (k < r[0] || k >= r[1] || g_prev[k] == regs[k]) continue;
+        g_prev[k] = regs[k];
+        backend::WriteRegister(k, regs[k]);
+        ++g_regs_written;
+      }
+    }
+  }
+}
+
 void LockstepDraw(const RexNgpuDraw* d) {
   if (!LockstepReady()) return;
   LockstepSync(d->regs);
@@ -564,6 +594,7 @@ void OnDraw(const RexNgpuDraw* d) {
     g_dll.OnDraw(d);   // the DLL does its own register sync, self-check and coverage
     return;
   }
+  if (ng2::p2::FrontEndDraws()) return;   // [p3 draw] compare-only: BridgeDraw above did the comparison
   if (REXCVAR_GET(ngpu_backend_lockstep) && d->regs && d->reg_count >= kForwardedEnd) {
     // The live-regs pointer FIRST: the swap callback reads fetch constant 0 through it. Forgetting it in Fable II
     // meant no swaps, and the bindless descriptors were exhausted within seconds.
@@ -693,6 +724,7 @@ int ProvideOutput(ID3D12Resource** resource, uint32_t* width, uint32_t* height, 
   return 1;
 }
 
+void AfterSwap();   // the hold / letterbox / present logic after a swap, shared with the front end's swap
 void OnSwap(uint32_t fb, uint32_t fb_w, uint32_t fb_h) {
   NoteModeWord();
   if (g_use_dll) {
@@ -707,13 +739,22 @@ void OnSwap(uint32_t fb, uint32_t fb_w, uint32_t fb_h) {
   static uint32_t table[256];
   static uint32_t pwl[128 * 3];
   const bool gamma = g_get_gamma && g_get_gamma(table, pwl);   // valid only during this callback
+  ng2::p2::BridgeSwap();   // [p3] the frame stamp for p3_bridge.bin
+  if (ng2::p2::FrontEndDraws()) {   // [p3 draw] the front end swapped at the XE_SWAP packet; only the gamma is ours
+    if (gamma) backend::SetGamma(table, pwl);
+    LogPeriodic();
+    return;
+  }
   LockstepSync(g_live_regs);
   {
     static uint32_t swaps = 0;
     if ((++swaps % 30) == 0) SyncSwapPostEffect(false);   // the F10 row's live change reaches the backend
   }
-  ng2::p2::BridgeSwap();   // [p3] the frame stamp for p3_bridge.bin
   backend::Swap(fb, fb_w, fb_h, fetch0, gamma ? table : nullptr, gamma ? pwl : nullptr);
+  AfterSwap();
+}
+
+void AfterSwap() {
   // PRESENT AT THE SWAP. The guest's present hook fires when the CPU submits the frame, ahead of the GPU thread
   // reaching this swap (Fable II: frames behind while walking, a whole menu behind in pause).
   g_hold_this_swap = RevealHold();
@@ -878,6 +919,54 @@ void Stop() {
                 g_draws_seen.load(), g_draws_bad_size.load(), st.draws, st.draw_failed, st.swaps, st.shader_loads,
                 st.shader_load_failed, g_world_entries, g_check_runs, g_check_bad);
   }
+}
+
+// [p3 draw] The front end's draw, on the guest thread at a DRAW packet it decoded: its register file (dirty part)
+// into the backend, then the draw exactly as LockstepDraw records the plugin's.
+void FrontEndDraw(const uint32_t* regs, uint64_t* dirty, const FeDrawInfo& d) {
+  if (!LockstepReady()) return;
+  FrontEndSync(regs, dirty);
+  auto code = [](int stage, uint32_t addr, uint32_t& dwords, bool inl, const uint8_t* inline_code,
+                 uint32_t inline_dwords) -> const uint32_t* {
+    if (inl) {
+      if (!inline_code) { ++g_nocode[stage][1]; return nullptr; }
+      dwords = inline_dwords;
+      return reinterpret_cast<const uint32_t*>(inline_code);
+    }
+    if (!addr || !dwords || dwords > 0x10000) { ++g_nocode[stage][3]; return nullptr; }
+    const uint8_t* p = Phys(addr);
+    thread_local std::vector<uint8_t> scratch[2];
+    std::vector<uint8_t>& buf = scratch[stage & 1];
+    if (buf.size() < size_t(dwords) * 4) buf.resize(size_t(dwords) * 4);
+    if (!p || !SafeCopyGuest(buf.data(), p, size_t(dwords) * 4)) { ++g_nocode[stage][2]; return nullptr; }
+    return reinterpret_cast<const uint32_t*>(buf.data());
+  };
+  backend::DrawRecord br;
+  br.draw_initiator = d.draw_initiator;
+  br.index_addr = d.index_addr;
+  br.index_size = d.index_size;
+  br.vs_addr = d.vs_addr; br.vs_dwords = d.vs_dwords;
+  br.ps_addr = d.ps_addr; br.ps_dwords = d.ps_dwords;
+  br.vs_code = code(0, d.vs_addr, br.vs_dwords, d.vs_inline, d.vs_code, d.vs_code_dwords);
+  br.ps_code = code(1, d.ps_addr, br.ps_dwords, d.ps_inline, d.ps_code, d.ps_code_dwords);
+  if (!backend::Draw(br)) ++(br.vs_code ? g_fail_withcode : g_fail_nocode);
+  g_draws_lockstep.fetch_add(1, std::memory_order_relaxed);
+}
+
+// [p3 draw] The front end's swap, on the guest thread at the XE_SWAP packet: the backend's swap from the front
+// end's file (fetch constant 0 from it; the gamma ramp arrives through the plugin's callback), then the same
+// hold / letterbox / present logic as the plugin path's.
+void FrontEndSwap(uint32_t fb, uint32_t w, uint32_t h, const uint32_t* regs, uint64_t* dirty) {
+  if (!g_backend_on || !g_lockstep || !LockstepReady()) return;
+  FrontEndSync(regs, dirty);
+  uint32_t fetch0[6];
+  for (uint32_t i = 0; i < 6; ++i) fetch0[i] = regs[0x4800 + i];
+  {
+    static uint32_t swaps = 0;
+    if ((++swaps % 30) == 0) SyncSwapPostEffect(false);
+  }
+  backend::Swap(fb, w, h, fetch0, nullptr, nullptr);
+  AfterSwap();
 }
 
 void SetFovK(double k) {

@@ -40,6 +40,9 @@ void FrameMarker(uint32_t r3);
 void BridgeDraw(uint32_t packet_addr, const uint32_t* regs, uint32_t reg_count);
 // From the bridge's swap callback: the bridge's own frame count, stamped on p3_bridge.bin records (format v3).
 void BridgeSwap();
+// [p3 draw] NG2_P3DRAW: the front end draws; the bridge asks so its plugin callbacks go compare-only.
+bool FrontEndDraws();
+void FrontEndCounts(uint64_t& draws, uint64_t& swaps);
 
 }  // namespace ng2::p2
 
