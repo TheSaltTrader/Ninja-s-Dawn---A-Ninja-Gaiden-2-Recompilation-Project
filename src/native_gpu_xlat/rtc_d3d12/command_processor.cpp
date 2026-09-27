@@ -157,6 +157,10 @@ static int g_ng2_2d_this_frame = 0;
 // texture (a solid fill - the shape NG2's full-screen fade-to-black takes).
 // Logged to gauge whether the fade is separable from the (textured) HUD.
 static int g_ng2_2d_solid_this_frame = 0;
+// [ng2-menu] 2D UI draws this frame whose quad is at least twice the 1280-px canvas wide: the Start menu's
+// scrolling mist video (two quads of 3839 px, measured 2026-09-27 on both paths). Nothing else is that wide,
+// so the count says "the pause/weapons menu is up" and the scene detector pillarboxes the frame (16:9).
+static int g_ng2_menu_mist_this_frame = 0;
 
 // Generated with `xb buildshaders`.
 namespace shaders {
@@ -2606,6 +2610,8 @@ void D3D12CommandProcessor::IssueSwap(uint32_t frontbuffer_ptr, uint32_t frontbu
     g_ng2_persp_this_frame = 0;
     g_ng2_2d_this_frame = 0;
     g_ng2_2d_solid_this_frame = 0;
+    const int cnt_mist = g_ng2_menu_mist_this_frame;  // [ng2-menu] the Start menu's mist quads
+    g_ng2_menu_mist_this_frame = 0;
     const double k = REXCVAR_GET(ng2_fov_k);
     const bool feature = k > 0.05 && k < 1.5 && std::fabs(k - 1.0) > 1e-3;
     auto rd_guest_be32 = [&](uint32_t va) -> uint32_t {
@@ -2640,7 +2646,9 @@ void D3D12CommandProcessor::IssueSwap(uint32_t frontbuffer_ptr, uint32_t frontbu
     // future work. See [[ng2-ultrawide-fov]].
     // A frame that draws the solid fade counts as ultrawide even with no world behind it (v1.0.25; the fade is
     // the only textureless 2D draw), so the fades that bracket a video or a scene change cover the full width.
-    const bool frame_gameplay = (has_world || cnt2d_solid > 0) && !pause_menu;
+    // [ng2-menu] A frame drawing the menu's mist is the Start menu: 16:9 like every other menu (user,
+    // 2026-09-27), whatever the world behind it does. The 10-frame leave hysteresis below still applies.
+    const bool frame_gameplay = (has_world || cnt2d_solid > 0) && !pause_menu && cnt_mist == 0;
     static bool s_uw_gameplay = false;
     static int s_uw_gp_streak = 0;
     static int s_uw_menu_streak = 0;
@@ -2669,11 +2677,11 @@ void D3D12CommandProcessor::IssueSwap(uint32_t frontbuffer_ptr, uint32_t frontbu
       // Ninpo cast or a cinematic is never missed), plus a periodic heartbeat.
       if (mode != s_uw_last_logged_mode) {
         s_uw_last_logged_mode = mode;
-        REXLOG_INFO("[ng2uw] CHANGE -> mode={} (3d={} 2d={} solid2d={} pause={} thr3d={})",
-                    mode, cnt3d, cnt2d, cnt2d_solid, pause_menu ? 1 : 0, s_uw_thr3d);
+        REXLOG_INFO("[ng2uw] CHANGE -> mode={} (3d={} 2d={} solid2d={} pause={} mist={} thr3d={})",
+                    mode, cnt3d, cnt2d, cnt2d_solid, pause_menu ? 1 : 0, cnt_mist, s_uw_thr3d);
       } else if ((s_uw_dbg++ % 60) == 0) {
-        REXLOG_INFO("[ng2uw] 3d={} 2d={} solid2d={} pause={} thr3d={} feature={} mode={}",
-                    cnt3d, cnt2d, cnt2d_solid, pause_menu ? 1 : 0, s_uw_thr3d, feature, mode);
+        REXLOG_INFO("[ng2uw] 3d={} 2d={} solid2d={} pause={} mist={} thr3d={} feature={} mode={}",
+                    cnt3d, cnt2d, cnt2d_solid, pause_menu ? 1 : 0, cnt_mist, s_uw_thr3d, feature, mode);
       }
     }
   }
@@ -2774,6 +2782,27 @@ void D3D12CommandProcessor::IssueSwap(uint32_t frontbuffer_ptr, uint32_t frontbu
         std::fclose(dd_file_);
         dd_file_ = nullptr;
         REXLOG_INFO("[dd] draw dump done after {} frames", dd_frame_);
+      }
+    }
+    // [dd] File-triggered dump (2026-09-27, pause-menu ultrawide diagnosis): dd_now.txt in the working
+    // directory, holding a frame count, starts a dump into dd_dump.txt from outside the process, on either
+    // path (the exe has no runtime lever for gpu_draw_dump_frames). Polled every 30 swaps, stat cost only.
+    if (!dd_file_) {
+      static uint32_t dd_poll = 0;
+      if ((++dd_poll % 30) == 0) {
+        if (FILE* tf = std::fopen("dd_now.txt", "r")) {
+          int n = 0;
+          if (std::fscanf(tf, "%d", &n) != 1) n = 0;
+          std::fclose(tf);
+          std::remove("dd_now.txt");
+          if (n > 0) {
+            dd_file_ = std::fopen("dd_dump.txt", "w");
+            dd_frames_left_ = dd_file_ ? uint32_t(n) : 0u;
+            dd_frame_ = 0;
+            REXLOG_INFO("[dd] file-triggered draw dump: {} frames to dd_dump.txt{}", n,
+                        dd_file_ ? "" : " (open failed)");
+          }
+        }
       }
     }
     const int32_t want = REXCVAR_GET(gpu_draw_dump_frames);
@@ -3418,6 +3447,20 @@ bool D3D12CommandProcessor::IssueDraw(xenos::PrimitiveType primitive_type, uint3
   if (dd_file_) {
     DrawDumpLine(vertex_shader, pixel_shader, primitive_processing_result, viewport_info, scissor,
                  normalized_depth_control);
+  }
+  // [ng2-menu] The Start menu's mist video: a depth-off, textured, 4-vertex quad at least twice the 1280-px
+  // canvas wide (its two quads span 3839 px; nothing else in the game's censuses is wider than the canvas).
+  // Counted per DRAW here - the constant-upload path below runs only when the vertex constants change, and
+  // the menu's quads share one ortho (leg ng2_069: 7 uploads for ~70 quads, the mist never reached it).
+  // Acted on at the swap: the frame is the menu -> ng2_uw_mode 2 (pillarbox), on both renderers.
+  {
+    const float fk = static_cast<float>(REXCVAR_GET(ng2_fov_k));
+    if (fk > 0.05f && fk < 1.5f && std::fabs(fk - 1.0f) > 1e-3f && !normalized_depth_control.z_enable &&
+        primitive_processing_result.host_draw_vertex_count == 4 && pixel_shader &&
+        !pixel_shader->GetTextureBindingsAfterTranslation().empty()) {
+      float mx0 = 0.0f, mx1 = 0.0f;
+      if (C8QuadSpan(vertex_shader, mx0, mx1) >= 0.0f && (mx1 - mx0) >= 2560.0f) ++g_ng2_menu_mist_this_frame;
+    }
   }
   ph(7);
   if (!UpdateBindings(vertex_shader, pixel_shader, root_signature, memexport_used)) {

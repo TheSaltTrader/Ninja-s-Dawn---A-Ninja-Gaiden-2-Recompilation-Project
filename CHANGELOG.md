@@ -30,6 +30,19 @@ backend handed over and the frames the plugin presented from them; the
 `[ngpu] PACK COUNTERS` line shows the pack replacing textures under the
 native path.
 
+### Fixed - Ultrawide: the Start menu is shown at 16:9
+
+On an ultrawide display the Start (weapons / items) menu's drifting red mist
+reached the edges of the screen on the native renderer, where the plugin
+path had kept it inside the 16:9 band. The mist is two scrolling pictures
+three times the width of the menu's own canvas, and on a wide screen their
+outer parts are what shows at the sides. The menu is now treated like every
+other menu in the game: a frame that draws the mist is shown pillarboxed at
+16:9, on both renderers, with the world behind it at its console field of
+view; leaving the menu returns the picture to the full width within a few
+frames. Detected from the draw itself, so it does not depend on the two game
+flags that v1.0.25 stopped using for this menu.
+
 ## v1.0.25 - 2026-09-26
 
 ### Fixed - the enhanced-textures indicator said the pack was idle while it was working
