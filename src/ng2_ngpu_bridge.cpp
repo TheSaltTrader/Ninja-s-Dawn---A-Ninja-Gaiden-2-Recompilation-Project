@@ -710,6 +710,31 @@ void OnSwap(uint32_t fb, uint32_t fb_w, uint32_t fb_h) {
   // PRESENT AT THE SWAP. The guest's present hook fires when the CPU submits the frame, ahead of the GPU thread
   // reaching this swap (Fable II: frames behind while walking, a whole menu behind in pause).
   g_hold_this_swap = RevealHold();
+  {
+    // The letterbox follows the frame on screen, not the detector (Fable II release check 2026-09-27: the held
+    // loading frame showed stretched to full width for 150-550 ms when the mode flipped to gameplay while the
+    // hold kept the 16:9 frame). PublishStatCvars (inside backend::Swap above) wrote the detector's mode; while
+    // holding, put the shown frame's mode back; when the hold releases, publish the detector's.
+    static int shown = -1;
+    static bool held_logged = false;
+    const int mode = int(FLAGS_ng2_uw_mode_storage_());
+    if (g_hold_this_swap && shown >= 0) {
+      if (shown != mode) {
+        rex::cvar::SetFlagByName("ng2_uw_mode", std::to_string(shown));
+        if (!held_logged) {
+          held_logged = true;
+          REXLOG_INFO("[ngpu] REVEAL: letterbox held at mode {} while the detector says {}", shown, mode);
+        }
+      }
+    } else {
+      if (shown >= 0 && shown != mode) {
+        rex::cvar::SetFlagByName("ng2_uw_mode", std::to_string(mode));
+        REXLOG_INFO("[ngpu] REVEAL: letterbox -> mode {}", mode);
+      }
+      shown = mode;
+      held_logged = false;
+    }
+  }
   if (!g_one_window && !g_hold_this_swap) render::RequestPresent();
   DirtyCoverageAtSwap();
   LogPeriodic();
