@@ -25,6 +25,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <string>
+#include <vector>
 
 #include <rex/cvar.h>
 #include <rex/logging.h>
@@ -252,6 +253,18 @@ bool LoadBackendDll() {
 // ---------------------------------------------------------------------------------------------------------------------
 // Guest memory helpers.
 // ---------------------------------------------------------------------------------------------------------------------
+// A guarded copy of guest bytes: false when a page is not mapped (SEH catches the access violation; the runtime's
+// own vectored handler runs first for the pages it backs by data providers, so those read normally). No C++ objects
+// in this frame - __try cannot unwind them.
+static bool SafeCopyGuest(void* dst, const void* src, size_t n) {
+  __try {
+    std::memcpy(dst, src, n);
+    return true;
+  } __except (EXCEPTION_EXECUTE_HANDLER) {
+    return false;
+  }
+}
+
 bool PageReadable(const void* p) {
   MEMORY_BASIC_INFORMATION mbi = {};
   if (!p || !VirtualQuery(p, &mbi, sizeof(mbi))) return false;
@@ -415,10 +428,16 @@ void LockstepDraw(const RexNgpuDraw* d) {
       dwords = inline_dwords;
       return reinterpret_cast<const uint32_t*>(inline_code);
     }
-    if (!addr || !dwords) { ++g_nocode[stage][3]; return nullptr; }
+    if (!addr || !dwords || dwords > 0x10000) { ++g_nocode[stage][3]; return nullptr; }
     const uint8_t* p = Phys(addr);
-    if (!(p && PageReadable(p) && PageReadable(p + dwords * 4 - 1))) { ++g_nocode[stage][2]; return nullptr; }
-    return reinterpret_cast<const uint32_t*>(p);
+    // Not VirtualQuery: two per stage, four per draw, ~120 us each once the runtime's watches have split the guest
+    // mapping into thousands of regions - 115 ms a frame at the Chapter 1 card (240 draws with their microcode at
+    // an address; stack samples 2026-09-27 04:35). A guarded copy fails the same way on an unmapped page.
+    thread_local std::vector<uint8_t> scratch[2];
+    std::vector<uint8_t>& buf = scratch[stage & 1];
+    if (buf.size() < size_t(dwords) * 4) buf.resize(size_t(dwords) * 4);
+    if (!p || !SafeCopyGuest(buf.data(), p, size_t(dwords) * 4)) { ++g_nocode[stage][2]; return nullptr; }
+    return reinterpret_cast<const uint32_t*>(buf.data());
   };
   const bool has_inline = d->size >= sizeof(RexNgpuDraw);
   backend::DrawRecord br;

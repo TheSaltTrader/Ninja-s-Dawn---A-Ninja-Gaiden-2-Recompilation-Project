@@ -4,6 +4,7 @@
 #include <cstdint>
 #include <rex/logging.h>
 namespace ng2::ngpu::xlat { bool PluginBool(const char*, bool); std::string PluginString(const char*, const char*); int32_t PluginInt(const char*, int32_t); double PluginDouble(const char*, double); }
+uint64_t g_ng2_ph[12] = {};   // NG2 PATCH: [draw phases] QPC ticks per phase (see IssueDraw), the Driver's shader loads [9] and swap [10]
 /**
  ******************************************************************************
  * Xenia : Xbox 360 Emulator Research Project                                 *
@@ -1864,6 +1865,16 @@ void D3D12CommandProcessor::GpuTimeCollect(bool all) {
                     double(d - last_draw) / 10000.0 / double(frames), double(sb - last_submit) / 10000.0 / double(frames));
       last_draw = d;
       last_submit = sb;
+      {  // NG2 PATCH: [draw phases]
+        LARGE_INTEGER fq;
+        QueryPerformanceFrequency(&fq);
+        const double k = 1000.0 / double(fq.QuadPart) / double(frames);
+        REXGPU_INFO("[ngpu] DRAW PHASES per frame (ms): begin {:.2f} prim+rt {:.2f} pipeline {:.2f} textures {:.2f} "
+                    "viewport {:.2f} ffstate {:.2f} sysconst {:.2f} bindings {:.2f} | shader loads {:.2f} swap {:.2f}",
+                    g_ng2_ph[0] * k, g_ng2_ph[2] * k, g_ng2_ph[3] * k, g_ng2_ph[4] * k, g_ng2_ph[5] * k, g_ng2_ph[6] * k,
+                    g_ng2_ph[7] * k, g_ng2_ph[8] * k, g_ng2_ph[9] * k, g_ng2_ph[10] * k);
+        for (auto& v : g_ng2_ph) v = 0;
+      }
     }
     if (frames) {
       REXGPU_INFO("[ngpu] BARRIERS per frame: {:.0f} batches, {:.0f} barriers ({:.0f} UAV); shared-memory buffer transitions: "
@@ -3079,6 +3090,8 @@ static void DrawFailReason(const char* what) {
   if (n == 1 || n % 500 == 0) REXGPU_ERROR("[diag] draw failed: {} ({} so far)", what, n);
 }
 
+// NG2 PATCH: [draw phases]
+static inline uint64_t Ng2PhNow() { LARGE_INTEGER t; QueryPerformanceCounter(&t); return uint64_t(t.QuadPart); }
 bool D3D12CommandProcessor::IssueDraw(xenos::PrimitiveType primitive_type, uint32_t index_count,
                                       IndexBufferInfo* index_buffer_info,
                                       bool major_mode_explicit) {
@@ -3230,6 +3243,10 @@ bool D3D12CommandProcessor::IssueDraw(xenos::PrimitiveType primitive_type, uint3
   bool memexport_used_pixel = pixel_shader && (pixel_shader->memexport_eM_written() != 0);
   bool memexport_used = memexport_used_vertex || memexport_used_pixel;
 
+  // NG2 PATCH: [draw phases] only while the GPU profile is on (gpu_time_mapped_): ~10 QPC reads per draw otherwise.
+  const bool ph_on = gpu_time_mapped_ != nullptr;
+  uint64_t ph_t = ph_on ? Ng2PhNow() : 0;
+  auto ph = [&](int i) { if (!ph_on) return; const uint64_t n = Ng2PhNow(); g_ng2_ph[i] += n - ph_t; ph_t = n; };
   if (!BeginSubmission(true)) {
     DrawFailReason("BeginSubmission");
     return false;
@@ -3237,6 +3254,7 @@ bool D3D12CommandProcessor::IssueDraw(xenos::PrimitiveType primitive_type, uint3
 
   // Process primitives.
   PrimitiveProcessor::ProcessingResult primitive_processing_result;
+  ph(0);
   if (!primitive_processor_->Process(primitive_processing_result)) {
     DrawFailReason("primitive processing");
     return false;
@@ -3299,6 +3317,7 @@ bool D3D12CommandProcessor::IssueDraw(xenos::PrimitiveType primitive_type, uint3
   }
   void* pipeline_handle;
   ID3D12RootSignature* root_signature;
+  ph(2);
   if (!pipeline_cache_->ConfigurePipeline(
           vertex_shader_translation, pixel_shader_translation, primitive_processing_result,
           normalized_depth_control, normalized_color_mask, bound_depth_and_color_render_target_bits,
@@ -3317,7 +3336,9 @@ bool D3D12CommandProcessor::IssueDraw(xenos::PrimitiveType primitive_type, uint3
       vertex_shader->GetUsedTextureMaskAfterTranslation() |
       (pixel_shader != nullptr ? pixel_shader->GetUsedTextureMaskAfterTranslation() : 0);
   rt_rebind_after_split_ = false;
+  ph(3);
   texture_cache_->RequestTextures(used_texture_mask);
+  ph(4);
   if (rt_rebind_after_split_) {
     // [split] A texture load ended the submission: the render targets bound
     // above belong to the closed one - bind them again in the new one.
@@ -3380,7 +3401,9 @@ bool D3D12CommandProcessor::IssueDraw(xenos::PrimitiveType primitive_type, uint3
   scissor.extent[1] *= draw_resolution_scale_y;
 
   // Update viewport, scissor, blend factor and stencil reference.
+  ph(5);
   UpdateFixedFunctionState(viewport_info, scissor, primitive_polygonal, normalized_depth_control);
+  ph(6);
 
   // Update system constants before uploading them.
   // TODO(Triang3l): With ROV, pass the disabled render target mask for safety.
@@ -3396,11 +3419,13 @@ bool D3D12CommandProcessor::IssueDraw(xenos::PrimitiveType primitive_type, uint3
     DrawDumpLine(vertex_shader, pixel_shader, primitive_processing_result, viewport_info, scissor,
                  normalized_depth_control);
   }
+  ph(7);
   if (!UpdateBindings(vertex_shader, pixel_shader, root_signature, memexport_used)) {
     uw_ppr_ = nullptr;
     DrawFailReason("UpdateBindings");
     return false;
   }
+  ph(8);   // NG2 PATCH: [draw phases] bindings
   uw_ppr_ = nullptr;
   // Must not call anything that can change the descriptor heap from now on!
 

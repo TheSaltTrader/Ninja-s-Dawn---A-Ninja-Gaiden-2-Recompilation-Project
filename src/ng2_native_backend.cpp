@@ -2,6 +2,9 @@
 #include "ng2_native_backend.h"
 
 #include <d3d12.h>
+#include <windows.h>
+
+extern uint64_t g_ng2_ph[12];   // NG2 PATCH: [draw phases] (vendored command_processor.cpp)
 
 #include <cstring>
 #include <memory>
@@ -78,7 +81,11 @@ class Driver {
     // No pointer cache: the pipeline cache hashes the microcode itself (as on every shader packet in the plugin); a
     // pointer into guest memory can hold different code later.
     ++stats_.shader_loads;
+    LARGE_INTEGER q0, q1;
+    QueryPerformanceCounter(&q0);
     rex::graphics::Shader* s = cp_->LoadShader(type, addr, code, dwords);
+    QueryPerformanceCounter(&q1);
+    g_ng2_ph[9] += uint64_t(q1.QuadPart - q0.QuadPart);   // NG2 PATCH: [draw phases]
     if (!s) ++stats_.shader_load_failed;
     last_code = code; last_dwords = dwords; last = s;
     return s;
@@ -134,7 +141,13 @@ class Driver {
       cp_->gamma_ramp_pwl_up_to_date_ = false;
     }
     ++stats_.swaps;
-    cp_->IssueSwap(fb, w, h);
+    {
+      LARGE_INTEGER q0, q1;
+      QueryPerformanceCounter(&q0);
+      cp_->IssueSwap(fb, w, h);
+      QueryPerformanceCounter(&q1);
+      g_ng2_ph[10] += uint64_t(q1.QuadPart - q0.QuadPart);   // NG2 PATCH: [draw phases]
+    }
     PublishStatCvars();
     ::ng2::ngpu::rtc::NoteSwapSubmission(cp_->LastQueuedSubmission());   // [async submit] the frame waits for it
   }
