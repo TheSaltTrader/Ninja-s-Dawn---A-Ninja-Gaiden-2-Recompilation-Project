@@ -439,9 +439,11 @@ belongs in rexglue-src's texture_cache.cpp and a v1.0.25. That is a public relea
 Necessary conditions: (a) `texture_pack_resolve_at_load` defaulting to true, (b) the increment sitting only in the
 superseded block. Neither is a string, so release binaries cannot show them, and BOTH engine trees begin with an
 import (rexglue-src 8cc841b 09-15; ng2-rexglue 0f621403 09-17, already `true`). The cvar's own description still
-says "Off by default." beside a default of `true` - the flip happened without touching the text, so a release with
-the default OFF did exist. What dates the flip is the USER'S OWN PLAY LOGS (`D:/Ninja Gaiden 2 Portable/logs`, 134
-logs, 2026-09-11 to 09-16; the running version appears only when the update checker logged "have vN"):
+says "Off by default." beside a default of `true`: SUGGESTIVE ONLY - it shows the text and the code disagree now,
+not that they ever agreed (a description can be wrong from birth); nothing below leans on it. What dates the flip
+is the USER'S OWN PLAY LOGS (`D:/Ninja Gaiden 2 Portable/logs`, 134 logs, 2026-09-11 to 09-16; the running version
+appears only when the update checker logged "have vN"). Every absence in this table was established by scanning
+EACH FULL LOG line by line (python over all 134 files, the same scan for both lines), not by a window or a sample:
 
 | evidence | what it shows |
 |---|---|
@@ -453,6 +455,9 @@ logs, 2026-09-11 to 09-16; the running version appears only when the update chec
 | manager: the resolve-at-load string first in v1.0.13 (09-12); the code's own dated comment: "once resolve-at-load carried the pack that path served nothing ... (2026-09-12)" | v1.0.13 LIKELY the first affected release; v1.0.13-v1.0.19 not verified by any run here |
 
 So the honest span: **verified v1.0.20 to v1.0.24 (the user's logs + the identical 09-22 binary); likely from v1.0.13
-(09-12); the old path last ran on 09-12 00:07.** The old block still exists in every build (turning
+(09-12); the old path last ran on 09-12 00:07.** The 09-12 boundary rests on two sources that agree to the day: the
+developer's dated comment in the engine source (about a warming-bar defect met in that session's own runs) and the
+runtime output on the user's disk. They are believed independent - the comment's subject is a dev-run defect, not
+these logs - but that independence is NOT verified here, so the boundary stays "likely", not "verified". The old block still exists in every build (turning
 `texture_pack_resolve_at_load` off would revive both it and the counter), which is why "the counter never counted
 resolve-at-load" is the accurate statement, not "the counter was removed".
