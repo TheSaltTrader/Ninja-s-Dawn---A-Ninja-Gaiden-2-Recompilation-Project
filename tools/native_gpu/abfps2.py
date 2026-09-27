@@ -72,6 +72,10 @@ def nearest(table, t, tol=3.0):
 
 def main():
     args = sys.argv[1:]
+    steady_from = 40.0
+    if args and args[0] == "--from":   # the summary window's start, seconds after the first swap (gameplay: ~80)
+        steady_from = float(args[1])
+        args = args[2:]
     if args and args[0] == "--latest":
         n = int(args[1]) if len(args) > 1 else 4
         root = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
@@ -94,15 +98,15 @@ def main():
                 t - t0, fps, swaps, p50, p99, worst, hitch,
                 ("%5.2f" % g) if g is not None else "  -  ",
                 ("%5.2f" % c[0]) if c else "  -  ", ("%5.2f" % c[1]) if c else "  -  "))
-        steady = [w for w in windows if w[0] - t0 >= 40.0]
+        steady = [w for w in windows if w[0] - t0 >= steady_from]
         if steady:
             fps = [w[1] for w in steady]
             p50 = [w[3] for w in steady]
             p99 = [w[4] for w in steady]
             worst = [w[5] for w in steady]
-            print("  from +40 s: n=%d  fps mean %.2f median %.2f min %.1f max %.1f spread %.1f | p50 ms median %.2f | "
+            print("  from +%.0f s: n=%d  fps mean %.2f median %.2f min %.1f max %.1f spread %.1f | p50 ms median %.2f | "
                   "p99 ms median %.2f max %.1f | worst ms max %.1f | hitches %d" % (
-                      len(fps), statistics.mean(fps), statistics.median(fps), min(fps), max(fps), max(fps) - min(fps),
+                      steady_from, len(fps), statistics.mean(fps), statistics.median(fps), min(fps), max(fps), max(fps) - min(fps),
                       statistics.median(p50), statistics.median(p99), max(p99), max(worst), sum(w[6] for w in steady)))
             gs = [v for k, v in gpu.items() if k - t0 >= 40.0]
             cs = [v for k, v in cpu.items() if k - t0 >= 40.0]
