@@ -53,6 +53,16 @@ std::atomic<uint32_t> g_discover_logged{0};
 std::atomic<uint64_t> g_enters{0}, g_exits{0}, g_mismatch{0}, g_overflow{0}, g_noread{0};
 thread_local Open t_stack[32];
 thread_local int t_depth = 0;
+// [p3 map] REGISTER-MAP DISCOVERY (NG2_P3MAP=<guest frame>:<max calls>, needs NG2_P2 on; ported from Fable's
+// fable2_p2_census.cpp, FABLE2_P3MAP): at the exit of each hooked call that wrote packets in that frame, the XDK
+// device object (kDevBytes) and the packets THAT call wrote, [cur_in, cur_out) up to 16 KB, go to p3_guest.bin
+// (format v2). tools/native_gpu/p3_flush.py decodes each call's packets and votes, per register the flush wrote,
+// the device word holding that value - the map from the device object to the register file, free of per-tile
+// transforms (NG2 does not tile). P3 stage 1 (Fable plan b9caa8a): a front end on the game thread.
+bool g_p3 = false;
+uint32_t g_p3_frame = 0, g_p3_max = 0, g_p3_recorded = 0;
+FILE* g_p3_guest = nullptr;
+constexpr uint32_t kDevBytes = 0x5000;
 
 bool SafeRead32(const uint8_t* p, uint32_t* out) {
   __try {
@@ -87,6 +97,15 @@ void Init() {
   if (const char* c = std::getenv("NG2_P2_CURSOR"); c && *c) g_cursor_off = uint32_t(std::strtoul(c, nullptr, 0));
   if (const char* c = std::getenv("NG2_P2_CURSOR2"); c && *c) g_cursor2_off = uint32_t(std::strtoul(c, nullptr, 0));
   g_discover = std::getenv("NG2_P2_DISCOVER") != nullptr;
+  if (const char* m = std::getenv("NG2_P3MAP"); m && *m) {
+    unsigned f = 0, n = 0;
+    if (std::sscanf(m, "%u:%u", &f, &n) == 2 && n) {
+      g_p3_frame = f;
+      g_p3_max = n;
+      g_p3 = true;
+      REXLOG_INFO("[p3] register-map discovery ON: guest frame {}, up to {} calls -> p3_guest.bin", f, n);
+    }
+  }
   g_recs.reserve(1u << 20);
   g_on = true;
   REXLOG_INFO("[p2] census ON: frames {}..{} (by the swap entry point), cursor device+0x{:X} and +0x{:X}{}", g_start,
@@ -225,6 +244,30 @@ void Exit(int hook) {
   if (!ReadGuest(dev + g_cursor2_off, &r.cur2_out)) r.cur2_out = 0;
   std::lock_guard<std::mutex> lock(g_mu);
   if (recording) g_recs.push_back(r);
+  // [p3 map] the device object at the exit of a call that wrote packets, in the discovery frame.
+  if (g_p3 && r.frame == g_p3_frame && r.cur_out != r.cur_in && r.cur_in && r.cur_out && g_p3_recorded < g_p3_max) {
+    auto* ks = rex::system::kernel_state();
+    const uint8_t* p = ks && ks->memory() ? ks->memory()->TranslateVirtual<const uint8_t*>(dev) : nullptr;
+    if (!g_p3_guest) g_p3_guest = std::fopen("p3_guest.bin", "wb");
+    if (g_p3_guest && p) {
+      const uint32_t hdr[5] = {uint32_t(o.hook), r.cur_in, r.cur_out, r.cur2_in, r.cur2_out};
+      std::fwrite(hdr, sizeof(hdr), 1, g_p3_guest);
+      std::fwrite(p, kDevBytes, 1, g_p3_guest);
+      uint32_t n = 0;
+      const uint8_t* q = nullptr;
+      if (r.cur_out > r.cur_in && r.cur_out - r.cur_in <= 16384u)
+        q = ks->memory()->TranslateVirtual<const uint8_t*>(r.cur_in);
+      if (q) n = r.cur_out - r.cur_in;
+      std::fwrite(&n, 4, 1, g_p3_guest);
+      if (n) std::fwrite(q, n, 1, g_p3_guest);
+      if (++g_p3_recorded == g_p3_max) {
+        std::fclose(g_p3_guest);
+        g_p3_guest = nullptr;
+        REXLOG_INFO("[p3] wrote p3_guest.bin: {} calls with the device object ({} bytes each)", g_p3_recorded,
+                    kDevBytes);
+      }
+    }
+  }
   // The last-writer map: every 64-byte block the call's cursor range covers (both fields), from the first frame.
   for (int pass = 0; pass < 2; ++pass) {
     const uint32_t a = pass ? r.cur2_in : r.cur_in, b = pass ? r.cur2_out : r.cur_out;
