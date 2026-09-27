@@ -265,3 +265,29 @@ one ~30 ms frame in one leg of EACH arm, so it has no direction at n=2. NG2's pl
 here, so **there is no speed bump to measure at the cap**; the native path's cost is ~1 ms GPU and 4.4-5.5
 ms CPU per frame, and what it can buy on this title is HEADROOM - which shows only when the GPU is made the
 limiter. Next pair: the same route at 3x internal resolution (draw_resolution_scale 3), both arms.
+
+### The headroom pair at 3x internal resolution (18:20-18:34): x3base1 / x3off1 / x3base2 / x3off2
+
+Same route, `NG2_TUNE=draw_resolution_scale_x=3;draw_resolution_scale_y=3` (the app's own line confirms
+"internal scale 3x3" in every leg), 180 s each, from +80 s, 19 windows, one 60-fps phase in all four:
+
+| leg | fps median | p50 ms | p99 ms median / max | worst ms | hitches | native GPU ms/frame | native CPU (submit) |
+|---|---|---|---|---|---|---|---|
+| x3base1 | 60.0 | 16.80 | 19.00 / 30.1 | 30.2 | 0 | - | - |
+| x3off1 | 60.0 | 16.60 | 19.00 / 30.2 | 30.6 | 0 | 3.96 (max 4.00) | 4.58 (0.52) |
+| x3base2 | 60.0 | 16.90 | 18.90 / 30.3 | 30.6 | 0 | - | - |
+| x3off2 | 60.0 | 16.60 | 19.00 / 30.6 | 39.9 | 1 | 4.02 (max 4.14) | 4.63 (0.76) |
+
+Offload legs 11.8 M and 11.9 M draws fed, 0 failed, 0 mismatches. Even at 3840x2160 internal neither arm
+is GPU-limited on this RTX 5090: the native backend's GPU work rises from ~1 ms to ~4 ms per frame and the
+game stays pinned at 60 with the same percentiles in both arms; one ~30 ms frame appears in every leg.
+
+**THE SPEED CONCLUSION, stated plainly for the user:** Fable II's "huge speed bump" (31 -> 60 in its town)
+came from Fable being CPU-bound on the plugin path. NG2's plugin path already holds 60 in every scene
+reached today (boot, title, attract, Chapter 1 combat at 1x and at 3x internal), so on this title and this
+hardware there is NO frame-rate gain to take from the native path at the cap; its cost is small (~1 ms GPU
+at 1x, ~4 ms at 3x, 4.4-5.5 ms CPU on the plugin GPU thread) and its picture matches to 0.0002-0.0010. What
+the native path gives NG2 is the same features on a native, optimisable layer with headroom to spare -
+the user's stated destination - not a higher number on the counter. A scene where the plugin path drops
+below 60 (later chapters via a save; the withdrawn "chapter 12 ~28 fps") is the only place a speed
+difference could still appear, and it has not been measured.
