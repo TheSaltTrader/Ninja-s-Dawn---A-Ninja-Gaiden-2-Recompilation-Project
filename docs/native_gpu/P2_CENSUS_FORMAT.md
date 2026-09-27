@@ -76,6 +76,15 @@ column is the tiling census Fable asked for: draws repeated per tile appear as t
    (gap up to 256 bytes past a range end). These are the direct writers the front end must replace by hooking the
    CALLERS, not the library.
 
+4. **The primary ring's own writer** - the library's kick-off writes the INDIRECT_BUFFER calls into the ring (and
+   the swap) through the ring's write pointer, not the device cursor; no hooked call ever writes the ring region.
+   With `--ring BASE:SIZE` (the plugin's `InitializeRingBuffer ptr ... -> size` line; the chain passes it) these
+   are the bucket `PRIMARY RING (library kick-off writer)`. NG2 Chapter 1: 6 per frame. A front end that submits
+   its own work makes them disappear by construction.
+
+With rules 1-4, NG2's Chapter 1 gameplay census reads 0 unattributed packets of 1,139,145 and 0 unattributed
+draws of 104,732 (census 4, 2026-09-27 10:42, `docs/native_gpu/p2/p2_census4_report.txt`).
+
 ## Reading it
 
 - Metric 1 at 0 with the hooks covering the whole library surface means every packet has a producer the front end
