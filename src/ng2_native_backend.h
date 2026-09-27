@@ -21,6 +21,10 @@ bool Init(ID3D12Device* device, ID3D12CommandQueue* queue);
 // the tail out and closes the files.
 void InitShaderStorage(const std::filesystem::path& cache_root, uint32_t title_id);
 void ShutdownShaderStorage();
+// The swap post effect (F10 Antialiasing: 0 none, 1 fxaa, 2 fxaa_extreme), set on the GPU thread; the plugin's
+// graphics system did this for the plugin's own command processor, nothing did it for this copy.
+void SetSwapPostEffect(int effect);
+int SwapPostEffect();
 bool Ready();
 
 // Register write, exactly as the PM4 parser would perform it (the command processor tracks dirty constants here).

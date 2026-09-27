@@ -159,6 +159,17 @@ class Driver {
   void ShutdownShaderStorage() {
     if (cp_ && cp_->pipeline_cache_) cp_->pipeline_cache_->ShutdownShaderStorage();
   }
+  void SetSwapPostEffect(int effect) {
+    if (!cp_) return;
+    using E = rex::graphics::CommandProcessor::SwapPostEffect;
+    const E e = effect == 2 ? E::kFxaaExtreme : (effect == 1 ? E::kFxaa : E::kNone);
+    // Directly, on the GPU thread (lockstep): the vendored SetDesiredSwapPostEffect posts to the worker loop this
+    // Driver replaces, so its CallInThread would never land.
+    cp_->swap_post_effect_desired_ = e;
+    cp_->swap_post_effect_actual_ = e;
+    swap_post_effect_ = effect;
+  }
+  int swap_post_effect_ = 0;
   // PUBLISHED VALUES (ported from the kit's native_gpu_backend.cpp, Fable 012fcf3): settings the backend WRITES
   // (REXCVAR_SET in the vendored code) land in this module's accessor storage, not in the runtime registry other
   // modules read by name. Under offload the plugin no longer computes them, so at each swap the changed ones are
@@ -226,6 +237,8 @@ void Swap(uint32_t fb, uint32_t w, uint32_t h, const uint32_t* fetch0, const uin
 void EndFrameNoSwap() { g_driver.EndFrameNoSwap(); }
 void InitShaderStorage(const std::filesystem::path& cache_root, uint32_t title_id) { g_driver.InitShaderStorage(cache_root, title_id); }
 void ShutdownShaderStorage() { g_driver.ShutdownShaderStorage(); }
+void SetSwapPostEffect(int effect) { g_driver.SetSwapPostEffect(effect); }
+int SwapPostEffect() { return g_driver.swap_post_effect_; }
 ID3D12Resource* GuestOutput(uint32_t& w, uint32_t& h) { w = g_output_w; h = g_output_h; return g_output; }
 bool GuestOutputIs8bpc() { return g_output_is_8bpc; }
 Stats GetStats() { return g_driver.stats_; }

@@ -23,6 +23,7 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
+#include <cctype>
 #include <cstring>
 #include <filesystem>
 #include <string>
@@ -428,6 +429,7 @@ bool LockstepReady() {
       REXLOG_INFO("[ngpu] BACKEND: no pipeline storage from the plugin ({}) - pipelines are created on demand this run",
                   g_get_storage ? "not initialised yet" : "no RexNgpuGetShaderStorage export");
     }
+    SyncSwapPostEffect(true);
   }
   REXLOG_INFO("[ngpu] LOCKSTEP (in-exe): {}", g_backend_on
                                                    ? "the plugin's draw callback feeds the transplanted backend directly"
@@ -632,10 +634,37 @@ void LogPeriodic() {
     uint64_t ps[4] = {};
     if (g_present_stats) g_present_stats(ps);
     REXLOG_INFO("[ngpu] ONE WINDOW: provider calls {} (held {}, no output {}, waits past {} ms {}); the plugin "
-                "presented {} through the runtime presenter (no output {}, size/format mismatch {}, refresh failed {})",
+                "presented {} through the runtime presenter (no output {}, size/format mismatch {}, refresh failed {}); "
+                "backend swap post effect {} (output 8bpc {})",
                 g_provider_calls, g_provider_held, g_provider_no_output, REXCVAR_GET(ngpu_present_wait_ms),
-                g_provider_waits_timed_out, ps[0], ps[1], ps[2], ps[3]);
+                g_provider_waits_timed_out, ps[0], ps[1], ps[2], ps[3],
+                backend::SwapPostEffect() == 2 ? "fxaa_extreme" : (backend::SwapPostEffect() == 1 ? "fxaa" : "none"),
+                backend::GuestOutputIs8bpc());
   }
+}
+
+// F10 ANTIALIASING on the native path: the plugin's graphics system sets its own command processor's swap post
+// effect from swap_post_effect (at SetupGuestGpu and through a change callback); nothing set the backend's, so FXAA
+// was always off under the native renderer (census 2026-09-27). The registry value, parsed as the plugin parses
+// it, goes to the backend when it comes up and again whenever it changes (checked every 30 swaps, GPU thread).
+int ParseSwapPostEffect(std::string s) {
+  for (char& c : s) {
+    c = char(std::tolower(static_cast<unsigned char>(c)));
+    if (c == '-') c = '_';
+  }
+  if (s == "fxaa") return 1;
+  if (s == "fxaa_extreme" || s == "extreme") return 2;
+  return 0;
+}
+void SyncSwapPostEffect(bool force) {
+  static int last = -1;
+  const std::string v = rex::cvar::GetFlagByName("swap_post_effect");
+  const int e = ParseSwapPostEffect(v);
+  if (!force && e == last) return;
+  last = e;
+  backend::SetSwapPostEffect(e);
+  REXLOG_INFO("[ngpu] BACKEND: swap post effect '{}' -> {} (F10 Antialiasing{})", v,
+              e == 2 ? "fxaa_extreme" : (e == 1 ? "fxaa" : "none"), force ? ", at start" : ", changed while running");
 }
 
 // ONE WINDOW: the plugin's IssueSwap calls this on the GPU thread right after OnSwap, for the frame to present.
@@ -672,6 +701,10 @@ void OnSwap(uint32_t fb, uint32_t fb_w, uint32_t fb_h) {
   static uint32_t pwl[128 * 3];
   const bool gamma = g_get_gamma && g_get_gamma(table, pwl);   // valid only during this callback
   LockstepSync(g_live_regs);
+  {
+    static uint32_t swaps = 0;
+    if ((++swaps % 30) == 0) SyncSwapPostEffect(false);   // the F10 row's live change reaches the backend
+  }
   backend::Swap(fb, fb_w, fb_h, fetch0, gamma ? table : nullptr, gamma ? pwl : nullptr);
   // PRESENT AT THE SWAP. The guest's present hook fires when the CPU submits the frame, ahead of the GPU thread
   // reaching this swap (Fable II: frames behind while walking, a whole menu behind in pause).
