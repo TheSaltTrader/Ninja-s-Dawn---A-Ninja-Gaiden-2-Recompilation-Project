@@ -104,12 +104,24 @@ def main():
             p50 = [w[3] for w in steady]
             p99 = [w[4] for w in steady]
             worst = [w[5] for w in steady]
-            print("  from +%.0f s: n=%d  fps mean %.2f median %.2f min %.1f max %.1f spread %.1f | p50 ms median %.2f | "
+            print("  from +%.0f s: n=%d  MEAN OF WINDOW RATES %.2f (not a frame rate when bimodal - see the phases) median %.2f min %.1f max %.1f spread %.1f | p50 ms median-of-window-p50s %.2f | "
                   "p99 ms median %.2f max %.1f | worst ms max %.1f | hitches %d" % (
                       steady_from, len(fps), statistics.mean(fps), statistics.median(fps), min(fps), max(fps), max(fps) - min(fps),
                       statistics.median(p50), statistics.median(p99), max(p99), max(worst), sum(w[6] for w in steady)))
-            gs = [v for k, v in gpu.items() if k - t0 >= 40.0]
-            cs = [v for k, v in cpu.items() if k - t0 >= 40.0]
+            # A MEAN OF WINDOW RATES over a bimodal sequence (title at 60, cutscene at 30) reads like a frame rate
+            # and is not one (claudecode-76, 2026-09-26: "42 fps and p50 33.2 ms cannot describe the same frames").
+            # So the phases are separated: windows at or above 45 fps and windows below, each with its own
+            # frame-time percentiles - and the mean above is explicitly the mean of window rates.
+            hi = [w for w in steady if w[1] >= 45.0]
+            lo = [w for w in steady if w[1] < 45.0]
+            for name, ws in (("windows >= 45 fps", hi), ("windows < 45 fps", lo)):
+                if ws:
+                    print("  %s: n=%d  fps median %.1f  p50 ms median %.2f  p99 ms median %.2f max %.1f  worst ms max %.1f  hitches %d"
+                          % (name, len(ws), statistics.median([w[1] for w in ws]), statistics.median([w[3] for w in ws]),
+                             statistics.median([w[4] for w in ws]), max(w[4] for w in ws), max(w[5] for w in ws),
+                             sum(w[6] for w in ws)))
+            gs = [v for k, v in gpu.items() if k - t0 >= steady_from]
+            cs = [v for k, v in cpu.items() if k - t0 >= steady_from]
             if gs:
                 print("  native backend from +40 s: GPU ms/frame median %.2f max %.2f" % (statistics.median(gs), max(gs)))
             if cs:

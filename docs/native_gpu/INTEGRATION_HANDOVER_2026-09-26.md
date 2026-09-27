@@ -201,3 +201,28 @@ transplanted backend, beside the plugin.
 
 Route trap: the chapter card does NOT wait for A here (it auto-proceeds), so a static-card diff has to
 be taken during "NOW LOADING" (the flower animates in one corner) or not at all.
+
+### Corrections to the two sections above (claudecode-76's review, 18:12)
+
+**The boot-sequence pair, read properly.** "fps mean 42.00" is the MEAN OF 5-SECOND WINDOW RATES over a
+bimodal sequence - 8 windows at 60 (title) and 13 at 30 (cutscene) in every leg - and the "p50 33.2 ms"
+is the median of the windows' own p50s. Two statistics over windows, not one frame distribution.
+Phase-separated (`abfps2.py` now prints this):
+
+| phase | leg | p50 ms | p99 ms (median / max) | worst ms | hitches |
+|---|---|---|---|---|---|
+| 60 fps (n=8) | base1 / off1 / base2 / off2 | 16.75 / 16.70 / 16.80 / 16.70 | 19.00/19.2 / 18.90/19.1 / 18.95/19.1 / 19.05/19.3 | 19.8 / 19.5 / 19.7 / 19.7 | 0 / 0 / 0 / 0 |
+| 30 fps (n=13) | base1 / off1 / base2 / off2 | 33.30 / 33.30 / 33.40 / 33.30 | 35.70/36.5 / 35.60/36.2 / 35.60/36.6 / 35.60/36.1 | 36.6 / 36.5 / 37.1 / 36.6 | 1 / 3 / 0 / 0 |
+
+So: the sequence is pinned at the game's own 60 and 30, and the offload legs sit on the same frame-time
+distribution as the plugin-alone legs at every percentile - no headroom visible, no cost visible. A mean
+over a bimodal run is not a frame rate; it is not quoted again.
+
+**The picture numbers, labelled properly.** The "floor" of 0.025 / 0.08 is CROSS-INSTANT (the same
+window 2.3 s apart): it is the animation term, not noise. The signal is SAME-INSTANT lockstep. The capture
+path's own same-image floor is 0.0000 (a static frame re-captured), so 0.0002-0.0010 on the pause screen is
+a real, tiny difference (first suspect: the at-most-one-frame present offset between the plugin's presenter
+and the native window). The claim that holds: the native-vs-plugin difference is 25-125x smaller than one
+frame of the plugin's own animation, so no observer could attribute it to the renderer rather than to the
+animation. A same-instant plugin-vs-plugin pair cannot exist (one plugin window); Fable's cross-RUN floor at
+a paused scene is the honest substitute and needs a scene NG2 can hold still - open.

@@ -69,7 +69,7 @@ LEDGER = [
     ("sdk: ring dump on bad packet",        "plugin",  b"RINGDUMP",            "command_processor.cpp"),
     ("sdk: clear_memory_page_state path",   "plugin",  b"clear_memory_page_state", "NG2 is the only title on it"),
     ("sdk: upload copy pool present",       "plugin",  b"shared_memory_upload_threads", "the POOL, not the fix"),
-    ("sdk: upload copy pool RACE FIX",      None,      None,                   "no string exists - ancestry + 240 s run"),
+    ("sdk: upload copy pool RACE FIX",      None,      None,                   "no string exists; MEASURED behaviourally 2026-09-26: 9 legs of 150-220 s on the fork pair with clear_memory_page_state on, 0 freezes (the unfixed pool froze 2/2 at ~13 swaps)"),
     ("sdk: db16cyc -> rex_spin_yield",      "generated", b"rex_spin_yield",    "inlined; only the generated source shows it"),
     # 2 guest hooks (exe strings) - RenderSize names live only in the TOML
     ("hook: ng2PatchChapter12",             "exe",     b"ng2PatchChapter12",   "0x82834C78"),
@@ -79,8 +79,8 @@ LEDGER = [
     ("hook: ng2PatchRenderSize1",           "hooks",   b"ng2PatchRenderSize1", "TOML only"),
     ("hook: ng2PatchRenderSize2",           "hooks",   b"ng2PatchRenderSize2", "TOML only"),
     # 1.4 60 fps
-    ("60fps: guest fps at 60, correct speed", None,    None,                   "behavioural - deferred"),
-    ("60fps: no rate above 60 offered",     None,      None,                   "lodestone census + README"),
+    ("60fps: guest fps at 60, correct speed", None,    None,                   "behavioural; MEASURED 2026-09-26: title 60.0 in every leg, four-leg pair identical to the plugin-alone baseline; Chapter 1 gameplay pair in the handover"),
+    ("60fps: no rate above 60 offered",     None,      None,                   "lodestone census (green on the alt branch 2026-09-26, fps clamped, vsync forced) + README; not a binary string"),
     # 6 the native backend (the transplant): the exe's side, and the DLL when present
     ("native: exe binds the RexNgpu ABI",   "exe",     b"RexNgpuSetDrawCallback", "ng2_ngpu_bridge.cpp"),
     ("native: exe presenter half",          "exe",     b"[ngpu-window]",       "ng2_ngpu_window.cpp"),

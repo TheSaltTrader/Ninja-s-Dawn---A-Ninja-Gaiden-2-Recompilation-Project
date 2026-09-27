@@ -213,3 +213,15 @@ path the new layer takes.
 | alt worktree `out/build/win-amd64-Release` (09-17 DLLs) | 17 present, 7 MISSING: plugin lacks ng2_fov_k, ng2_uw_mode, NG2_UW_NOPAUSE, solid2d, texpack_mip, shared_memory_upload_threads; runtime lacks ng2_uw_mode. Those DLLs predate ultrawide and the pool fix and are NOT a deliverable; the census names exactly what the v1.0.22 gate missed | 2026-09-26 |
 | integrated build (alt worktree run folder, 2026-09-26 18:07: ng2.exe with the transplant, the shipped v1.0.24 SDK pair restored beside it, ngpu_backend.dll cc620728) | 33 present, 0 missing, 3 unmeasured (pool race fix, two 60 fps behavioural rows), 0 unreadable, of 36 rows; the DLL carries ng2_fov_k, ng2_uw_mode, solid2d, [texpack], texpack_mip and the settings boundary. `--compare` against the release: nothing lost in either SDK DLL; the exe gained the vendored strings | 2026-09-26 |
 | fork SDK pair (D:/ng2_frameinterp/ng2-rexglue/out/win-amd64/Release, plugin md5 353c79e21479, runtime e0c0217b745b) | by string: all five RexNgpu exports, `pointers reset`, RINGDUMP, solid2d, ng2_uw_mode (both), [texpack], texpack_mip, video_mode_explicit, watchdog - every plugin/runtime row of this ledger | 2026-09-26 |
+
+## 7. The three rows the census cannot measure by string, and what measures them
+
+They stay UNMEASURED in the census output on purpose - a string census must not
+claim what it cannot read - but each has a measurement of its own kind, so
+"3 unmeasured" is not furniture:
+
+| row | why no string | measured by | result 2026-09-26 |
+|---|---|---|---|
+| upload copy pool RACE FIX | the fix added no log text | a run on the fork pair with `clear_memory_page_state` on (NG2's tuning) long enough for the unfixed pool's freeze (2/2 at ~13 swaps, ~5 s) | 9 legs of 150-220 s (lockstep1-3, menu1, pause1-2, base1-2, off1-2), 0 freezes; the swap counter watched throughout |
+| guest fps at 60, correct speed | a rate, not a string | `[swap] guest fps` windows, phases separated (title vs cutscene vs gameplay), beside a plugin-alone baseline | title phase 60.0 in every leg; boot-sequence pair identical to baseline; Chapter 1 gameplay pair in the handover's timing section |
+| no rate above 60 offered | a UI/README property | `tools/lodestone_census.py` (ACCOUNTING + DOCUMENTED sweeps; `fps` clamped, `vsync` forced) | green on the alt branch at 17:23 |
