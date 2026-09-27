@@ -49,19 +49,26 @@ arrival in Chapter 1 that was a single 1.2-second frame (572 textures, 413 of
 them from the pack), and every later streaming point cost 300-900 ms.
 
 The pack's work now happens on worker threads: the file is read and the
-resources are created off the rendering thread, which swaps the enhanced
-texture in a frame or two later - the game's own texture shows until then,
-at native resolution. Measured on the same route, twice per arm: the arrival
-frame 1230/1221 ms before, 456/472 ms after; the later streaming frames
-873/631/474/290 ms before, 82/63/85/37 ms after; the time the rendering thread
-spent inside texture loads over the whole route 4.3/3.8 s before, 0.7/0.4 s
-after. What remains of the arrival frame is the game's own texture creation,
-which is the next target.
+resources are created off the rendering thread - mostly taken from a pool
+the worker fills ahead of time for the shapes the pack holds - and the
+enhanced texture is swapped in a frame or two later; the game's own texture
+shows until then, at native resolution. The worker also stays off the GPU
+device while the game itself is creating textures in a burst, because any
+concurrent creation doubled the game's own creation cost.
 
-Two settings for the curious (Advanced): `texture_pack_async` (on) and
-`texture_pack_apply_per_frame` (24, the replacements a frame swaps in).
-The `[hitch]` and `[swap]` log lines now say how much of a slow frame went
-into texture creation, texture loading and pack reads.
+Measured on the same route, the shipped build twice against the new one: the
+arrival frame 1230/1221 ms before, 286 ms after; the later streaming frames
+873/631/474/290 ms before, 20/69/78/36 ms after; the time the rendering
+thread spent inside texture loads over the whole route 4.3/3.8 s before,
+0.4 s after; 5-second windows with a frame over 100 ms, 7/9 before, 2 after.
+What remains of the arrival frame is the game's own creation of 542
+textures (132 ms) plus their decode (118 ms).
+
+Settings for the curious (Advanced): `texture_pack_async` (on),
+`texture_pack_apply_per_frame` (24, the replacements a frame swaps in) and
+`texture_pack_spare_mb` (256, video memory for the pre-created pool). The
+`[hitch]` and `[swap]` log lines now say how much of a slow frame went into
+texture creation, texture loading and pack reads.
 
 ## v1.0.24 - 2026-09-22
 
