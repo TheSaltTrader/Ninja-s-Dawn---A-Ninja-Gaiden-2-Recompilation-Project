@@ -33,6 +33,7 @@ static_assert(sizeof(Rec) == 28, "record layout is the file format");
 struct Open {
   uint16_t hook;
   uint32_t cur_in, cur2_in;
+  uint32_t args[8];   // r3..r10 at entry (source census)
 };
 
 bool g_on = false;
@@ -111,6 +112,23 @@ std::atomic<uint64_t> g_fe_kicks{0};
 std::atomic<uint64_t> g_fe_stop_unfilled_ring{0}, g_fe_stop_unfilled_ib{0}, g_fe_stop_short_ring{0}, g_fe_stop_short_ib{0}, g_fe_ib_unreadable{0}, g_fe_ib_deep{0};
 std::atomic<int> g_fe_stop_logged{0};
 std::atomic<uint64_t> g_fe_ring_resets{0}, g_fe_resyncs{0};
+// [p3 src] SOURCE CENSUS (NG2_P3SRC=<guest frame>): every hooked call's r3-r10 plus 256 bytes behind each
+// pointer-like argument, and every draw the front end decodes in that frame with its register file and the IB
+// packet that led to it - joined offline (tools/native_gpu/p3_sources.py) to find each per-draw register's source.
+bool g_src = false;
+uint32_t g_src_frame = 0, g_src_calls = 0, g_src_draws = 0;
+FILE* g_src_f = nullptr;
+FILE* g_src_fe_f = nullptr;
+std::mutex g_src_mu;
+thread_local uint32_t t_fe_issuer = 0;   // the INDIRECT_BUFFER packet's address the current decode was entered through
+bool SafeCopy(uint8_t* dst, const uint8_t* src, uint32_t n) {
+  __try {
+    std::memcpy(dst, src, n);
+    return true;
+  } __except (EXCEPTION_EXECUTE_HANDLER) {
+    return false;
+  }
+}
 uint32_t g_fe_stuck_pos = 0xFFFFFFFFu, g_fe_stuck_n = 0;
 
 // Decodes [body, body + n) whose first byte lives at guest physical phys_base; returns the bytes consumed (a packet
@@ -208,9 +226,12 @@ uint32_t FeDecode(const uint8_t* body, uint32_t n, uint32_t phys_base) {
         const uint32_t ib = be(i + 1) & 0x1FFFFFFFu, ibn = be(i + 2) & 0xFFFFF;
         const uint8_t* src = ks->memory()->TranslatePhysical<const uint8_t*>(ib);
         if (src && ibn) {
+          const uint32_t saved_issuer = t_fe_issuer;
+          t_fe_issuer = (phys_base + i * 4) & 0x1FFFFFFFu;   // this IB packet
           ++t_fe_depth;
           FeDecode(src, ibn * 4, ib);
           --t_fe_depth;
+          t_fe_issuer = saved_issuer;
         } else {
           g_fe_ib_unreadable.fetch_add(1, std::memory_order_relaxed);
         }
@@ -218,6 +239,17 @@ uint32_t FeDecode(const uint8_t* body, uint32_t n, uint32_t phys_base) {
         g_fe_draws.fetch_add(1, std::memory_order_relaxed);
         const uint32_t addr = (phys_base + i * 4) & 0x1FFFFFFFu;
         const uint32_t ord = g_fe_ord[addr]++;
+        if (g_src && g_frame.load(std::memory_order_relaxed) == g_src_frame) {   // [p3 src] every draw of the frame
+          std::lock_guard<std::mutex> lock(g_src_mu);
+          if (!g_src_fe_f) g_src_fe_f = std::fopen("p3_fe.bin", "wb");
+          if (g_src_fe_f && g_src_draws < 20000) {
+            const uint32_t hdr[4] = {addr, t_fe_issuer, ord, g_fe_frame};
+            std::fwrite(hdr, sizeof(hdr), 1, g_src_fe_f);
+            std::fwrite(g_fe_regs + 0x2000, 4, 0x400, g_src_fe_f);
+            std::fwrite(g_fe_regs + 0x4000, 4, 0x928, g_src_fe_f);
+            ++g_src_draws;
+          }
+        }
         if (((addr >> 2) % g_fe_every) == 0) {   // sampled BY ADDRESS, so every execution of it is snapshotted
           auto* s = new FeSnap;
           s->frame = g_fe_frame;
@@ -355,6 +387,11 @@ void Init() {
       REXLOG_INFO("[p3] register-map discovery ON: guest frame {}, up to {} calls -> p3_guest.bin", f, n);
     }
   }
+  if (const char* m = std::getenv("NG2_P3SRC"); m && *m) {
+    g_src_frame = uint32_t(std::strtoul(m, nullptr, 0));
+    g_src = true;
+    REXLOG_INFO("[p3src] source census ON: guest frame {} -> p3_src.bin (calls: args + samples) and p3_fe.bin (draws)", g_src_frame);
+  }
   if (const char* m = std::getenv("NG2_P3FE"); m && *m) {
     g_fe_every = std::max<uint32_t>(1, uint32_t(std::strtoul(m, nullptr, 0)));
     g_fe = true;
@@ -433,6 +470,12 @@ void FeReport(const char* why) {
 
 void Write() {
   if (g_fe) FeReport("census window end");
+  if (g_src) {
+    std::lock_guard<std::mutex> lock2(g_src_mu);
+    if (g_src_f) { std::fclose(g_src_f); g_src_f = nullptr; }
+    if (g_src_fe_f) { std::fclose(g_src_fe_f); g_src_fe_f = nullptr; }
+    REXLOG_INFO("[p3src] wrote p3_src.bin ({} calls) and p3_fe.bin ({} draws) for guest frame {}", g_src_calls, g_src_draws, g_src_frame);
+  }
   if (g_written) return;
   g_written = true;
   std::vector<Rec> recs;
@@ -473,7 +516,7 @@ void Write() {
 
 }  // namespace
 
-void Enter(int hook, uint32_t r3, bool lib) {
+void Enter(int hook, uint32_t r3, bool lib, const uint32_t* args8) {
   Init();
   if (!g_on) return;
   uint32_t dev = g_device.load(std::memory_order_relaxed);
@@ -501,6 +544,7 @@ void Enter(int hook, uint32_t r3, bool lib) {
   }
   Open& o = t_stack[t_depth++];
   o.hook = uint16_t(hook);
+  if (args8) std::memcpy(o.args, args8, sizeof(o.args)); else std::memset(o.args, 0, sizeof(o.args));
   if (!ReadGuest(dev + g_cursor_off, &o.cur_in)) { o.cur_in = 0; g_noread.fetch_add(1, std::memory_order_relaxed); }
   if (g_fe) FeAdvance(o.cur_in);
   if (!ReadGuest(dev + g_cursor2_off, &o.cur2_in)) o.cur2_in = 0;
@@ -537,6 +581,32 @@ void Exit(int hook) {
   // every exit would apply them twice (and count their draws twice).
   std::lock_guard<std::mutex> lock(g_mu);
   if (recording) g_recs.push_back(r);
+  // [p3 src] the call's arguments and what they point at, in the census frame.
+  if (g_src && r.frame == g_src_frame && g_src_calls < 6000) {
+    std::lock_guard<std::mutex> lock2(g_src_mu);
+    if (!g_src_f) g_src_f = std::fopen("p3_src.bin", "wb");
+    if (g_src_f) {
+      auto* ks = rex::system::kernel_state();
+      static uint8_t sample[8][256];
+      uint32_t which[8], n = 0;
+      for (uint32_t k = 0; k < 8; ++k) {
+        const uint32_t a = o.args[k];
+        const bool ptr_like = (a >= 0x40000000u && a < 0x90000000u) || (a >= 0xA0000000u && a < 0xE1000000u);
+        if (!ptr_like || !ks || !ks->memory()) continue;
+        const uint8_t* p = ks->memory()->TranslateVirtual<const uint8_t*>(a & ~3u);
+        if (p && SafeCopy(sample[n], p, 256)) which[n++] = k;
+      }
+      const uint32_t hdr[13] = {uint32_t(o.hook), r.tid, r.cur_in, r.cur_out, o.args[0], o.args[1], o.args[2], o.args[3],
+                                o.args[4], o.args[5], o.args[6], o.args[7], n};
+      std::fwrite(hdr, sizeof(hdr), 1, g_src_f);
+      for (uint32_t s = 0; s < n; ++s) {
+        const uint32_t sh[2] = {which[s], o.args[which[s]] & ~3u};
+        std::fwrite(sh, sizeof(sh), 1, g_src_f);
+        std::fwrite(sample[s], 1, 256, g_src_f);
+      }
+      ++g_src_calls;
+    }
+  }
   // [p3 map] the device object at the exit of a call that wrote packets, in the discovery frame.
   if (g_p3 && r.frame == g_p3_frame && r.cur_out != r.cur_in && r.cur_in && r.cur_out && g_p3_recorded < g_p3_max) {
     auto* ks = rex::system::kernel_state();

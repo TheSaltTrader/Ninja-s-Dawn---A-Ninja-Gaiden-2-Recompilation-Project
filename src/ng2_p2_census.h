@@ -25,7 +25,7 @@ namespace ng2::p2 {
 // kEntries); r3 = the first argument (the device for library entry points, `lib` true), which is how the device
 // is learned at the FIRST library call - the library writes its persistent packet templates (NG2: the 24-draw
 // block sub_8373B060 emits once) at device creation, long before the first swap.
-void Enter(int hook, uint32_t r3, bool lib);
+void Enter(int hook, uint32_t r3, bool lib, const uint32_t* args8 = nullptr);   // args8: r3..r10 at entry
 // From the injected call before each `return;` of the same function.
 void Exit(int hook);
 // From the frame marker hook (the swap entry point), once per guest frame; r3 = the device.
