@@ -50,6 +50,16 @@ and the other GPU rows are decided when the renderer starts and cannot be
 rebuilt underneath a running game; those rows now carry a red "restart
 required" note beside the value (the note existed but was never drawn).
 
+A census of every row on the screen (tools/f10_census.py: each row, the
+setting it edits, the value the game hands the renderer at launch and while
+running, and where the renderer reads it) found two more: "Dither the
+output" and "Extra sharpness" were read by the presenter once at start-up, so
+changing them in-game did nothing until a restart - the game now hands the
+presenter its new configuration directly; and "Fuzzy alpha test" reaches
+only shaders compiled after the change, so it now carries the restart note.
+Everything else on the screen reaches what it should, live or at launch as
+labelled.
+
 ### Improved - Far less stutter when a scene streams in with the texture pack on
 
 When a scene loads, the game asks for hundreds of textures in one frame. With

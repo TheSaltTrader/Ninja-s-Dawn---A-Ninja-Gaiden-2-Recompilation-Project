@@ -121,3 +121,23 @@ frames land in the front end; they are before play. On this GPU a budget of 4096
   session from its start (ng2_125.log tuning lines: draw_resolution_scale_x/y = 2, swap_post_effect = fxaa_extreme),
   so what they saw at 22:14 WAS 2x + FXAA. Whether 2x is visibly different from 1x on this title is checked by the
   scale1/scale2 legs (title screen, eye_zoom at native pixels), see 4.5.
+
+### 4.5 F10 census: does every row reach the GPU? (user, 00:1x: "verify all the F10 enhancements are wired in")
+
+`tools/f10_census.py` (full output in `docs/F10_CENSUS_2026-09-27.txt`): each of the 25 RowStart rows -> the
+Ng2Settings fields it edits -> the cvars the exe derives (startup tuning in ng2_tuning.h, live push in
+ApplyLiveSettings) -> the SDK/exe definition, lifecycle, read sites with their enclosing function (an init-time read
+= restart needed) -> the user's session log's `Tuning:` lines as startup evidence. The registry accepts live writes
+to kRequiresRestart flags (only kInitOnly is refused after finalisation; callbacks still fire), so every verdict
+depends on the CONSUMER re-reading.
+
+| verdict | rows |
+|---|---|
+| live, as labelled | Keep aspect ratio (present_letterbox, per paint), Ultrawide (ng2_fov_k per swap), Keyboard and mouse (mnk_mode), Folder / Use the upscaled textures (texture_pack_path, hot), Skip intro videos (ng2_video_mode, exe), Fullscreen / pointer (window) |
+| restart by design, now tagged | Supersampling (draw_resolution_scale at texture-cache creation), Accurate depth (render-target cache Initialize), Anisotropic (new samplers only), Texture cache limits, Internal render size, Monitor / Resolution / Frame rate, Dump while playing, Fuzzy alpha test (new shaders only; tag added) |
+| WAS BROKEN, fixed tonight | Antialiasing (swap_post_effect read once at SetupGuestGpu + kRequiresRestart -> hot-reload + change callback in the plugin); Dither and Extra sharpness (presenter builds its paint config once in InitializeCommonSurfaceIndependent -> the exe now pushes a new config through SetGuestOutputPaintConfigFromUIThread; the CAS sharpness was also missing from the startup tuning list) |
+| cannot do anything in this build | Sharpening (present_effect): the shipped runtime is built with FidelityFX off, so the effect enum holds bilinear only (the settings comment already says the row "offers bilinear and nothing else") |
+| census artefact | On-screen readouts / hud_menu_bars: read inside ng2_menu.cpp itself (the menu's own bars), which the census excludes from "outside the menu" |
+
+Both games share graphics_system.cpp and presenter.cpp, so the Antialiasing, Dither and Extra sharpness holes
+apply to Fable II's F10 too; sent to the Fable session at the user's direction.

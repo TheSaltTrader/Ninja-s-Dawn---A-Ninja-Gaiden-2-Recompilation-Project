@@ -120,6 +120,9 @@ struct Ng2Tuning {
 
     out.push_back({"present_dither", s.present_dither ? "true" : "false",
                    "dither the 10bpc output down to 8bpc"});
+    out.push_back({"present_cas_additional_sharpness", std::to_string(s.cas_sharpness),
+                   "the presenter reads it once at init; the F10 census (2026-09-27) found it "
+                   "was never in the startup list"});
     out.push_back({"present_letterbox", s.letterbox ? "true" : "false",
                    "keep the guest aspect ratio instead of stretching"});
 
