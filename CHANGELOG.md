@@ -40,6 +40,16 @@ A frame that draws the game's fade-to-black now counts as ultrawide even when
 no world is behind it, so the fades that bracket a video or a scene change
 cover the full width instead of the 16:9 band.
 
+### Fixed - Antialiasing now changes immediately from the settings screen, and the rows that need a restart say so
+
+The Antialiasing row said the change applies at once, and the game did push
+it, but the GPU plugin read the value once at startup and refused changes
+after that - so a new setting only showed up on the next launch. The plugin
+now takes the change on the next frame. Supersampling, anisotropic filtering
+and the other GPU rows are decided when the renderer starts and cannot be
+rebuilt underneath a running game; those rows now carry a red "restart
+required" note beside the value (the note existed but was never drawn).
+
 ### Improved - Far less stutter when a scene streams in with the texture pack on
 
 When a scene loads, the game asks for hundreds of textures in one frame. With

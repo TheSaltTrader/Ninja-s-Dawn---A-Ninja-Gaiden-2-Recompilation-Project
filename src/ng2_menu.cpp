@@ -406,7 +406,7 @@ bool DrawSettings(Ng2Settings& s, const PageOptions& opts) {
           }
           changed = true;
         }
-        if (!live) RestartTag();
+        RestartTag();  // always: the row is restart-bound whether or not it is editable (2026-09-27)
       }
     }
 
@@ -427,7 +427,7 @@ bool DrawSettings(Ng2Settings& s, const PageOptions& opts) {
         changed = true;
       }
     }
-    if (!live) RestartTag();
+    RestartTag();  // always: the row is restart-bound whether or not it is editable (2026-09-27)
 
     // Say it here rather than letting the window silently come up smaller: a
     // size the screen cannot show is the difference between "4K" meaning
@@ -461,7 +461,7 @@ bool DrawSettings(Ng2Settings& s, const PageOptions& opts) {
       s.fps = kFpsValues[fps_index];
       changed = true;
     }
-    if (!live) RestartTag();
+    RestartTag();  // always: the row is restart-bound whether or not it is editable (2026-09-27)
     // The "above 60 the game runs faster, not smoother" line that used to sit
     // here is gone with the options it described. A warning under a setting is
     // not a substitute for not offering it.
@@ -536,7 +536,7 @@ bool DrawSettings(Ng2Settings& s, const PageOptions& opts) {
       s.internal_720p = size_index == 1;
       changed = true;
     }
-    if (!live) RestartTag();
+    RestartTag();  // always: the row is restart-bound whether or not it is editable (2026-09-27)
 
     RowStart("Supersampling",
              "Renders the game's own framebuffer at a multiple of its size and "
@@ -559,7 +559,7 @@ bool DrawSettings(Ng2Settings& s, const PageOptions& opts) {
       s.resolution_scale = scale_index + 1;
       changed = true;
     }
-    if (!live) RestartTag();
+    RestartTag();  // always: the row is restart-bound whether or not it is editable (2026-09-27)
     ImGui::EndDisabled();
 
     // Not restart-bound: the plugin applies this post-process per swap, so it
@@ -590,7 +590,7 @@ bool DrawSettings(Ng2Settings& s, const PageOptions& opts) {
              "Worth trying if shadows shimmer or surfaces flicker where they "
              "meet.");
     changed |= ImGui::Checkbox("##accdepth", &s.accurate_depth);
-    if (!live) RestartTag();
+    RestartTag();  // always: the row is restart-bound whether or not it is editable (2026-09-27)
     ImGui::EndDisabled();
 
     RowStart("Fuzzy alpha test",
@@ -730,7 +730,7 @@ bool DrawSettings(Ng2Settings& s, const PageOptions& opts) {
       s.texture_cache_mb = kCacheMb[cache_index];
       changed = true;
     }
-    if (!live) RestartTag();
+    RestartTag();  // always: the row is restart-bound whether or not it is editable (2026-09-27)
 
     RowStart("Anisotropic filtering",
              "Forces a filtering level on every texture the game samples. "
@@ -741,7 +741,7 @@ bool DrawSettings(Ng2Settings& s, const PageOptions& opts) {
       s.anisotropic = aniso_index - 1;
       changed = true;
     }
-    if (!live) RestartTag();
+    RestartTag();  // always: the row is restart-bound whether or not it is editable (2026-09-27)
     ImGui::EndDisabled();
 
     RowStart("Skip intro videos",

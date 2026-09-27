@@ -92,3 +92,32 @@ weapons menu (3d=515-522 in the v1.0.20 timeline while paused) keeps the frame u
 switches and the fade in and out of the menu covers the width; the v1.0.19-v1.0.24 behaviour is one environment
 variable away (NG2_UW_PAUSE_16_9=1) if the menu itself should look different than expected. The user's morning
 session is the picture test.
+
+### 4.3 The stage pre-cache goes GPU-ready (user direction relayed at 23:58; ng2_016, 00:02)
+
+Today's StageWarm only read a stage's pack files into the OS page cache. Now, at a stage change, the stage list
+(stages/chNN.txt) becomes prebuild jobs behind the textures' own jobs: the worker reads each header, keeps within
+`texture_pack_prebuild_mb` (1536), builds both resources and reads the file; the drain records the copy and the mip
+pass under the apply cap and keeps the finished resource keyed by file id + content hash; a streamed texture whose
+content matches swaps to it with no read, no creation, no upload, no mip pass (rexglue-v1025 texpack_prebuild).
+
+ng2_016 (v1025g): stage 1 lists 3,106 files; 1,836 built GPU-ready in 4.4 s during the front end (1,524 MB), 1,270
+skipped by the budget (the list is a set in id order, so the cut is arbitrary - a usage-ordered list would cover
+the burst first). Arrival burst: 251 of the 413 replacements took a prebuilt resource, 162 missed; the arrival
+frame 286 -> 212 ms (load CPU inside it 118 -> 65 ms, creates 132 -> 115 ms), the second burst 170 -> 132 ms, the
+route's pack reads on the worker 1428 -> 559 ms. Hitch count rose (11 -> 38) because the prebuild's own drain
+frames land in the front end; they are before play. On this GPU a budget of 4096 MB would cover the whole stage.
+
+### 4.4 "Do supersampling / antialiasing apply on the fly?" (user, 00:1x)
+
+- Antialiasing (`swap_post_effect`): the F10 row said "not restart-bound, the plugin applies it per swap" and the
+  exe's ApplyLiveSettings pushed the cvar, but the plugin read it ONCE at graphics-system init and declared it
+  kRequiresRestart (graphics_system.cpp) - a live change never reached the command processor. Fixed in the plugin:
+  hot-reload lifecycle + a change callback into SetDesiredSwapPostEffect (rexglue-v1025 fxaa_live).
+- Supersampling (`draw_resolution_scale_x/y`): restart-bound by design - the scale is baked into the texture and
+  render-target caches at creation. The menu's "restart required" tag was gated on `!live`, which was always false,
+  so it was never drawn on any of the 8 restart-bound rows. Fixed in the exe (ng2_menu.cpp): the tag is drawn.
+- The user's saved values (resolution_scale=2, antialias=fxaa_extreme, anisotropic=4) were active in their 22:14
+  session from its start (ng2_125.log tuning lines: draw_resolution_scale_x/y = 2, swap_post_effect = fxaa_extreme),
+  so what they saw at 22:14 WAS 2x + FXAA. Whether 2x is visibly different from 1x on this title is checked by the
+  scale1/scale2 legs (title screen, eye_zoom at native pixels), see 4.5.
