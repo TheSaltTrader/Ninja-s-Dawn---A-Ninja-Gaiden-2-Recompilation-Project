@@ -308,3 +308,32 @@ Pass criteria, stated before the run:
 - texture pack under offload (ledger 1.1): `[texpack] '<dir>': N hashed files indexed` from the DLL's texture
   cache and non-zero replacement counts in gameplay; no `[texpack]` error lines.
 - everything else unchanged: 0 failed draws, 0 self-check mismatches, no stall.
+
+### The carry legs, verdicts so far (18:52-19:02; carry1 / carry2 / carry3; DLL cc620728, offload, the user's settings)
+
+**Ultrawide presenter half: CARRIED under offload.** `FOV: ultrawide=true -> ng2_fov_k=0.7407`, the DLL's copy read
+0.740741, `[ngpu] LOCKSTEP (dll)` reported `uw mode 2` through the front end and `uw mode 1` from gameplay on,
+`[ngpu-window] presenting ... (uw mode 2, viewport 2560x1440 at 440,0)` = a correct pillarbox for mode 2, and the
+gameplay frame on the native window (3440x1440 here) fills the 2.39:1 width with correct proportions and the HUD
+in the centred 16:9 band, the game's own window black. One defect of the window found and to fix: in FULLSCREEN
+the window used EnumDisplayMonitors index 0 (the leftmost monitor, 3440x1440) instead of mirroring the game's
+fullscreen rectangle on the primary (3840x1600); windowed mode mirrors correctly. Fix: mirror the game window's
+rect in fullscreen too (then the native window also covers the black game window, which the product wants).
+
+**Texture pack under offload: NOT CARRIED (so far).** The DLL's texture cache takes the pack path
+(`[texpack] pack path changed to 'D:/.../textures/pack' - reloading every texture`), builds replacement mip chains
+and records the stage list (`stage 1 now lists 2865 textures`), but the settings overlay (F10, read in combat)
+says "Enhanced textures: ON - nothing on this screen is in the pack yet" = 0 replaced, video memory 2.1 GB, and the
+log runs `[texpack] N texture loads left alone: memory written by the GPU (render targets, not art)` to 34,000 in
+two minutes - EVERY load. The pack lookup is gated at texture_cache.cpp:2658 on
+`shared_memory().AnyPageGpuWritten(base, size)`, and under the DLL that answers true for everything. The one
+site that can do that is command_processor.cpp:3647, `RangeWrittenByGpu(0, kBufferSize)` - the memexport
+fallback when a memexporting draw's ranges cannot be bounded ("stream constants can be invalid or dynamic") -
+upstream Xenia behaviour, present in the plugin too, where the pack nevertheless works (v1.0.24 daily play).
+Hypothesis 1, REFUTED by its control (carry3): the DLL's XXH3 upload skip leaves marked pages un-uploaded so the
+bits are never cleared - with `ngpu_backend_upload_skip=false` the counter still ran to 19,000 and no index line
+appeared. Next (queued): carry4 with hoist / fast_valid / async_submit / upload_skip ALL off, and packbase = the
+plugin alone with the same pack as the control (does it log `hashed files indexed`, how many `left alone`). If
+carry4 still replaces nothing, the difference is in the memexport range computation under the transplant
+(`memexport_ranges_` empty where the plugin's are not), which is a DLL / vendored-code fix, not a setting.
+Fable never saw this: Fable has no texture pack, so the gate never mattered there.
