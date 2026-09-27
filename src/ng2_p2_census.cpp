@@ -84,6 +84,7 @@ struct FeSnap { uint32_t r2[0x400]; uint32_t r4[0x928]; };
 std::unordered_map<uint32_t, FeSnap*> g_fe_snaps;
 std::atomic<uint64_t> g_fe_calls{0}, g_fe_skipped{0}, g_fe_draws{0}, g_fe_compared{0}, g_fe_unmatched{0};
 std::atomic<uint64_t> g_fe_seen{0};   // bridge draws that reached BridgeDraw (matched or not)
+std::atomic<uint32_t> g_bridge_frame{0};   // the bridge's swap count, stamped on p3_bridge.bin records
 uint32_t g_fe_mis[0x5000];
 std::atomic<uint64_t> g_fe_ops[128];
 std::mutex g_fe_mu;
@@ -158,6 +159,33 @@ void FeDecode(const uint8_t* body, uint32_t n, uint32_t phys_base) {
       i += 1 + cnt;
     }
   }
+}
+
+// [p3 fe] The front end advances at every hook event on the thread: the bytes the cursor moved over since the
+// previous event, [hwm + 4, cur + 4) (the cursor names the last dword written), decoded in cursor order. An outer
+// call's bytes written before an inner call are decoded at the inner call's ENTRY, so nesting never reorders
+// writes; the outermost function of NG2's render thread never returns during play, which is why "decode at the
+// outermost exit" saw 76 calls in 3,000 frames (leg ng2_073). A backward jump or a gap over 64 KB is a buffer
+// switch: skipped, the mark reset.
+thread_local uint32_t t_fe_hwm = 0;
+void FeAdvance(uint32_t cur) {
+  if (!g_fe || !cur) return;
+  if (!t_fe_hwm) { t_fe_hwm = cur; return; }
+  if (cur == t_fe_hwm) return;
+  if (cur < t_fe_hwm || cur - t_fe_hwm > 65536u) {
+    g_fe_skipped.fetch_add(1, std::memory_order_relaxed);
+    t_fe_hwm = cur;
+    return;
+  }
+  auto* ks = rex::system::kernel_state();
+  const uint8_t* q = ks && ks->memory() ? ks->memory()->TranslateVirtual<const uint8_t*>(t_fe_hwm + 4) : nullptr;
+  if (q) {
+    FeDecode(q, cur - t_fe_hwm, t_fe_hwm + 4);
+    g_fe_calls.fetch_add(1, std::memory_order_relaxed);
+  } else {
+    g_fe_skipped.fetch_add(1, std::memory_order_relaxed);
+  }
+  t_fe_hwm = cur;
 }
 
 bool SafeRead32(const uint8_t* p, uint32_t* out) {
@@ -335,6 +363,7 @@ void Enter(int hook, uint32_t r3, bool lib) {
   Open& o = t_stack[t_depth++];
   o.hook = uint16_t(hook);
   if (!ReadGuest(dev + g_cursor_off, &o.cur_in)) { o.cur_in = 0; g_noread.fetch_add(1, std::memory_order_relaxed); }
+  if (g_fe) FeAdvance(o.cur_in);
   if (!ReadGuest(dev + g_cursor2_off, &o.cur2_in)) o.cur2_in = 0;
 }
 
@@ -362,27 +391,11 @@ void Exit(int hook) {
   r.cur_in = o.cur_in;
   r.cur2_in = o.cur2_in;
   if (!ReadGuest(dev + g_cursor_off, &r.cur_out)) r.cur_out = 0;
+  if (g_fe) FeAdvance(r.cur_out);
   if (!ReadGuest(dev + g_cursor2_off, &r.cur2_out)) r.cur2_out = 0;
   // [p3 fe] decode what this call wrote into the front end's register file (every call, from the device on).
   // Only at the OUTERMOST exit on this thread: an outer call's range contains its inner calls' bytes, so decoding at
   // every exit would apply them twice (and count their draws twice).
-  // NG2's cursor holds the address of the LAST dword written (measured, leg ng2_072: 1044 of 1048 ranges decode
-  // to exactly one dword past [cur_in, cur_out) once the foreign first dword is skipped), so the call's own
-  // bytes are [cur_in + 4, cur_out + 4).
-  if (g_fe && t_depth == 0 && r.cur_out > r.cur_in && r.cur_in) {
-    const uint32_t len = r.cur_out - r.cur_in;
-    auto* ks = rex::system::kernel_state();
-    const uint8_t* q = (len <= 65536u && ks && ks->memory()) ? ks->memory()->TranslateVirtual<const uint8_t*>(r.cur_in + 4)
-                                                             : nullptr;
-    if (q) {
-      FeDecode(q, len, r.cur_in + 4);
-      g_fe_calls.fetch_add(1, std::memory_order_relaxed);
-    } else {
-      g_fe_skipped.fetch_add(1, std::memory_order_relaxed);
-    }
-  } else if (g_fe && t_depth == 0 && r.cur_out != r.cur_in) {
-    g_fe_skipped.fetch_add(1, std::memory_order_relaxed);   // a range that crossed a buffer switch
-  }
   std::lock_guard<std::mutex> lock(g_mu);
   if (recording) g_recs.push_back(r);
   // [p3 map] the device object at the exit of a call that wrote packets, in the discovery frame.
@@ -489,6 +502,8 @@ void BridgeDraw(uint32_t packet_addr, const uint32_t* regs, uint32_t reg_count) 
   if (!g_p3_bridge_f) g_p3_bridge_f = std::fopen("p3_bridge.bin", "wb");
   if (!g_p3_bridge_f) return;
   std::fwrite(&packet_addr, 4, 1, g_p3_bridge_f);
+  const uint32_t bf = g_bridge_frame.load(std::memory_order_relaxed);   // format v3: the frame stamp
+  std::fwrite(&bf, 4, 1, g_p3_bridge_f);
   std::fwrite(regs + 0x2000, 4, 0x400, g_p3_bridge_f);
   std::fwrite(regs + 0x4000, 4, 0x928, g_p3_bridge_f);
   if (++g_p3_bridge % 64 == 0) std::fflush(g_p3_bridge_f);
@@ -498,6 +513,8 @@ void BridgeDraw(uint32_t packet_addr, const uint32_t* regs, uint32_t reg_count) 
     REXLOG_INFO("[p3] wrote p3_bridge.bin: {} bridge draws inside recorded call ranges", g_p3_bridge);
   }
 }
+
+void BridgeSwap() { g_bridge_frame.fetch_add(1, std::memory_order_relaxed); }
 
 }  // namespace ng2::p2
 

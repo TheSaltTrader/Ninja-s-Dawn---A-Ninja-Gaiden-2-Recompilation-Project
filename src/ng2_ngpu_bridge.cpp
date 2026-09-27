@@ -712,6 +712,7 @@ void OnSwap(uint32_t fb, uint32_t fb_w, uint32_t fb_h) {
     static uint32_t swaps = 0;
     if ((++swaps % 30) == 0) SyncSwapPostEffect(false);   // the F10 row's live change reaches the backend
   }
+  ng2::p2::BridgeSwap();   // [p3] the frame stamp for p3_bridge.bin
   backend::Swap(fb, fb_w, fb_h, fetch0, gamma ? table : nullptr, gamma ? pwl : nullptr);
   // PRESENT AT THE SWAP. The guest's present hook fires when the CPU submits the frame, ahead of the GPU thread
   // reaching this swap (Fable II: frames behind while walking, a whole menu behind in pause).

@@ -38,6 +38,8 @@ void FrameMarker(uint32_t r3);
 // NG2_P3FE=<N>: the guest-thread front end decodes each call's packets into its own register file and every Nth
 // draw is compared with the bridge's file at that packet ([p3fe] log lines). Called from the bridge's OnDraw.
 void BridgeDraw(uint32_t packet_addr, const uint32_t* regs, uint32_t reg_count);
+// From the bridge's swap callback: the bridge's own frame count, stamped on p3_bridge.bin records (format v3).
+void BridgeSwap();
 
 }  // namespace ng2::p2
 
