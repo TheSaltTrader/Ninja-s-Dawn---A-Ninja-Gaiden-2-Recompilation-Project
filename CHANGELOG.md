@@ -40,6 +40,25 @@ A frame that draws the game's fade-to-black now counts as ultrawide even when
 no world is behind it, so the fades that bracket a video or a scene change
 cover the full width instead of the 16:9 band.
 
+### Improved - The game's own textures are prepared at a chapter load, with or without the pack
+
+Even with the enhanced textures off, a scene streaming in made the game
+create hundreds of textures on the rendering thread in one frame (542 on
+arrival in Chapter 1: a 145 ms frame). The game now remembers, per chapter,
+the shapes of the textures it created, and at the next load of that chapter
+a worker prepares them ahead of time (within `texture_precreate_mb`, 512 by
+default), while the game itself is not creating anything; the streaming
+burst then takes ready-made textures. Measured on the same route with the
+pack off: the arrival frame 145 ms -> 38 ms (the 542 creations 102 ms ->
+2 ms), the whole route's worst frame 145 -> 72 ms. The first visit to a
+chapter records; every visit after that benefits.
+
+With the pack on, the stage pre-cache now goes further than reading files:
+the pack's textures for the stage are built ready for the GPU during the
+load (within `texture_pack_prebuild_mb`, 1536 by default), so a texture
+whose content matches swaps to the finished one with no read, no creation
+and no upload in play.
+
 ### Fixed - Antialiasing now changes immediately from the settings screen, and the rows that need a restart say so
 
 The Antialiasing row said the change applies at once, and the game did push

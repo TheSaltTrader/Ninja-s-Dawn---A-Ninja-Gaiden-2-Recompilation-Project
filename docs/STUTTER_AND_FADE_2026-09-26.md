@@ -141,3 +141,18 @@ depends on the CONSUMER re-reading.
 
 Both games share graphics_system.cpp and presenter.cpp, so the Antialiasing, Dither and Extra sharpness holes
 apply to Fable II's F10 too; sent to the Fable session at the user's direction.
+
+### 4.6 The game's own textures pre-created at a chapter load (user, 00:0x; ng2_017 / ng2_018, 00:37-00:43)
+
+Pack OFF, same route, plugin v1025h (4B3D8F32). The first visit records the chapter's resource descriptions
+(cache/texture_shapes/ch01.txt: 144 shapes, 2,618 bytes); the second visit pre-creates them on the worker within
+texture_precreate_mb (512): 1,178 resources planned, 1,030 textures took a ready-made resource by +70 s.
+
+| leg | arrival frame (572 textures) | its 542 creations | route worst | windows > 100 ms | hitches |
+|---|---|---|---|---|---|
+| packoff1 (records) | 145 ms | 102 ms | 145 ms | 1 | 6 |
+| packoff2 (pre-created) | **38 ms** | **1.6 ms** | 72 ms | 0 | 3 |
+
+The 72 ms frame left on the route is a 28-texture frame at the chapter-card-to-scene cut with 0 creations and 0
+load time in every leg tonight (sync and async alike); it is not a texture-creation cost and is the next thing to
+name.
