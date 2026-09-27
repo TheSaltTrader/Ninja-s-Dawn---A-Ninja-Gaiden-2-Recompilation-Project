@@ -461,3 +461,15 @@ runtime output on the user's disk. They are believed independent - the comment's
 these logs - but that independence is NOT verified here, so the boundary stays "likely", not "verified". The old block still exists in every build (turning
 `texture_pack_resolve_at_load` off would revive both it and the counter), which is why "the counter never counted
 resolve-at-load" is the accurate statement, not "the counter was removed".
+
+### Known gap (01:00, from the Fable session): every vendored accessor copy is a STARTUP SNAPSHOT
+
+`FLAGS_*_storage_()` in the vendored backend (in-exe copy and the DLL) is `static s = PluginInt(...)`: read from the
+plugin registry once at first use. ng2_uw_mode and ng2_fov_k were handled by hand (SetSetting / PresentMode, see the
+two-homes notes above), but every other cvar the exe writes LIVE is frozen on the native path: texture_pack_chapter
+(so no stage change, no warm, no StageNote list, no prebuild on the native path - the "warmed stage" lines in the
+native legs came from the PLUGIN's own copy), texture_dump, texture_dump_path, texture_pack_path, vsync. The release
+(plugin) path is unaffected: its REXCVAR_GET reads the live registry. Fable's fix: throttled re-reads in
+xlat_support (RefreshInt/Bool/String, 250 ms); take it from the kit when this work resumes, do not fork it. The
+v1.0.25 plugin-side work (async pack, prebuild, pre-create, hold, FXAA callback) lives in rexglue-v1025 and is NOT
+in the vendored copy here yet - porting it is part of resuming the native path.
