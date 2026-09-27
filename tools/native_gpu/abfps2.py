@@ -123,10 +123,10 @@ def main():
             gs = [v for k, v in gpu.items() if k - t0 >= steady_from]
             cs = [v for k, v in cpu.items() if k - t0 >= steady_from]
             if gs:
-                print("  native backend from +40 s: GPU ms/frame median %.2f max %.2f" % (statistics.median(gs), max(gs)))
+                print("  native backend from +%.0f s: GPU ms/frame median %.2f max %.2f" % (steady_from, statistics.median(gs), max(gs)))
             if cs:
-                print("  native backend from +40 s: plugin GPU thread CPU ms/frame median %.2f max %.2f, submit thread median %.2f"
-                      % (statistics.median([c[0] for c in cs]), max(c[0] for c in cs), statistics.median([c[1] for c in cs])))
+                print("  native backend from +%.0f s: plugin GPU thread CPU ms/frame median %.2f max %.2f, submit thread median %.2f"
+                      % (steady_from, statistics.median([c[0] for c in cs]), max(c[0] for c in cs), statistics.median([c[1] for c in cs])))
 
 
 if __name__ == "__main__":
