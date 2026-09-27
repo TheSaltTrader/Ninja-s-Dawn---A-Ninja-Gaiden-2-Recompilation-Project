@@ -23,6 +23,46 @@ The 5-second `[swap]` line in the log also carries the two counters
 (`texpack registry replaced N original M`), so a log says what the indicator
 would show.
 
+### Fixed - Ultrawide: the pause menu no longer flips between full width and 16:9, and the fade back into the game covers the screen
+
+Opening the pause / weapons menu switched the picture to 16:9, and on the way
+back the fade played inside the 16:9 band before the sides snapped in. Worse,
+the switch was not steady: the two game flags that signalled "paused" toggle
+about once a second while the menu is open, so the screen swung between full
+width and pillarbox for as long as the menu stayed up (measured in every
+release since v1.0.19, which introduced those flags). The menu is now treated
+like any other 2D screen over the game - drawn in its 16:9 band over the
+ultrawide world, with nothing switching underneath it - so the darkening fade
+in and out of the menu covers the whole screen. Set NG2_UW_PAUSE_16_9=1 in the
+environment for the old behaviour.
+
+A frame that draws the game's fade-to-black now counts as ultrawide even when
+no world is behind it, so the fades that bracket a video or a scene change
+cover the full width instead of the 16:9 band.
+
+### Improved - Far less stutter when a scene streams in with the texture pack on
+
+When a scene loads, the game asks for hundreds of textures in one frame. With
+the enhanced-textures pack on, every one of them also had its pack file read
+and its GPU resources created on the rendering thread, inside that frame. On
+arrival in Chapter 1 that was a single 1.2-second frame (572 textures, 413 of
+them from the pack), and every later streaming point cost 300-900 ms.
+
+The pack's work now happens on worker threads: the file is read and the
+resources are created off the rendering thread, which swaps the enhanced
+texture in a frame or two later - the game's own texture shows until then,
+at native resolution. Measured on the same route, twice per arm: the arrival
+frame 1230/1221 ms before, 456/472 ms after; the later streaming frames
+873/631/474/290 ms before, 82/63/85/37 ms after; the time the rendering thread
+spent inside texture loads over the whole route 4.3/3.8 s before, 0.7/0.4 s
+after. What remains of the arrival frame is the game's own texture creation,
+which is the next target.
+
+Two settings for the curious (Advanced): `texture_pack_async` (on) and
+`texture_pack_apply_per_frame` (24, the replacements a frame swaps in).
+The `[hitch]` and `[swap]` log lines now say how much of a slow frame went
+into texture creation, texture loading and pack reads.
+
 ## v1.0.24 - 2026-09-22
 
 ### Changed - Installing from a disc image now leaves the setup screen ready
