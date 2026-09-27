@@ -23,7 +23,6 @@
 #include <rex/cvar.h>
 #include <rex/filesystem.h>
 #include <rex/logging.h>
-#include <rex/ui/presenter.h>
 #include <rex/ui/window.h>
 
 #include "ng2_platform.h"
@@ -682,6 +681,7 @@ bool DrawSettings(Ng2Settings& s, const PageOptions& opts) {
                "filter's own amount.");
       ImGui::SetNextItemWidth(240.0f);
       changed |= ImGui::SliderFloat("##cassharp", &s.cas_sharpness, 0.0f, 1.0f, "%.2f");
+      RestartTag();  // the presenter reads the CAS sharpness once at init (F10 census, 2026-09-27)
     }
 
     ImGui::BeginDisabled(false);  // restart-bound, but always editable: the change is saved now and applied on the next launch (RestartTag says so), and ApplyLiveSettings never pushes these live
@@ -774,6 +774,7 @@ bool DrawSettings(Ng2Settings& s, const PageOptions& opts) {
 
     RowStart("Dither the output", "Hides colour banding on 8-bit displays.");
     changed |= ImGui::Checkbox("##dither", &s.present_dither);
+    RestartTag();  // the presenter reads present_dither once at init (F10 census, 2026-09-27)
 
     ImGui::EndTable();
   }
@@ -886,18 +887,10 @@ void ApplyLiveSettings(const Ng2Settings& s, rex::ui::Window* window) {
   SetCvar("present_dither", s.present_dither ? "true" : "false");
   SetCvar("present_letterbox", s.letterbox ? "true" : "false");
   // The presenter reads present_effect / present_dither / the CAS sharpness
-  // from the cvars ONCE, when it initialises (F10 census, 2026-09-27); the
-  // cvar writes above are for the next launch. For this one, hand the
-  // presenter a new paint config through its live setter. The effect stays
-  // whatever the presenter has (bilinear in this build: FidelityFX is off, so
-  // the effect enum has no other value); dither and sharpness change now.
-  if (window != nullptr && window->presenter() != nullptr) {
-    rex::ui::Presenter* presenter = window->presenter();
-    rex::ui::Presenter::GuestOutputPaintConfig cfg = presenter->GetGuestOutputPaintConfigFromUIThread();
-    cfg.SetDither(s.present_dither);
-    cfg.SetCasAdditionalSharpness(s.cas_sharpness);
-    presenter->SetGuestOutputPaintConfigFromUIThread(cfg);
-  }
+  // from the cvars ONCE, when it initialises (F10 census, 2026-09-27), and the
+  // executable has no public route to its live setter (Window::presenter() is
+  // protected), so the writes above are for the next launch; the two rows say
+  // "restart required".
   // Unconditional, not from the setting: vsync off is a game-speed change on this
   // title, the row is no longer offered, and this live path must not be able to
   // reintroduce it from a stale value.

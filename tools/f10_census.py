@@ -176,9 +176,6 @@ for r in rows:
         if defs and not reads:
             print("      NO READ SITE -> defined but never consulted")
             findings.append("%s: cvar %s is defined but never read" % (r["label"], cvar))
-        if cvar in ("present_dither", "present_cas_additional_sharpness") and "SetGuestOutputPaintConfigFromUIThread" in menu:
-            print("      live     exe pushes a new paint config through Presenter::SetGuestOutputPaintConfigFromUIThread")
-            init_only = False
         if init_only and "live" in how and not r["tag"]:
             findings.append("%s: %s is read at init only, but the row pushes it live with no restart tag" % (r["label"], cvar))
         if init_only and "immediately" in r["claims"]:

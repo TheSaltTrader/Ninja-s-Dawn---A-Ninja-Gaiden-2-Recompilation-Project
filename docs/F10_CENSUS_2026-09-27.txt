@@ -93,15 +93,13 @@ Sharpening  fields=present_effect  tag=restart  text claims=-
       defined  src/ui/presenter.cpp (kRequiresRestart)
       read     src/ui/presenter.cpp:BuildGuestOutputPaintConfigFromCVar [init]
 
-Extra sharpness  fields=cas_sharpness  tag=-  text claims=-
+Extra sharpness  fields=cas_sharpness  tag=restart  text claims=-
    present_cas_additional_sharpness   via live (ApplyLiveSettings)         NOT pushed at startup
       defined  src/ui/presenter.cpp (kRequiresRestart)
       read     src/ui/presenter.cpp:BuildGuestOutputPaintConfigFromCVar [init]
-      live     exe pushes a new paint config through Presenter::SetGuestOutputPaintConfigFromUIThread
    present_cas_additional_sharpness   via startup tuning                   NOT pushed at startup
       defined  src/ui/presenter.cpp (kRequiresRestart)
       read     src/ui/presenter.cpp:BuildGuestOutputPaintConfigFromCVar [init]
-      live     exe pushes a new paint config through Presenter::SetGuestOutputPaintConfigFromUIThread
 
 Texture cache  fields=hardware_detected,texture_cache_mb,texture_scale  tag=restart  text claims=-
    texture_cache_memory_limit_hard    via startup tuning                   pushed at startup = 8192
@@ -122,15 +120,13 @@ Skip intro videos  fields=video_mode  tag=-  text claims=-
       defined  exe:src/patch_hooks.cpp (default lifecycle)
       read     exe:src/patch_hooks.cpp:ng2PatchSkipVideos [use]
 
-Dither the output  fields=present_dither  tag=-  text claims=-
+Dither the output  fields=present_dither  tag=restart  text claims=restart
    present_dither                     via live (ApplyLiveSettings)         pushed at startup = false
       defined  src/ui/presenter.cpp (kRequiresRestart)
       read     src/ui/presenter.cpp:BuildGuestOutputPaintConfigFromCVar [init]
-      live     exe pushes a new paint config through Presenter::SetGuestOutputPaintConfigFromUIThread
    present_dither                     via startup tuning                   pushed at startup = false
       defined  src/ui/presenter.cpp (kRequiresRestart)
       read     src/ui/presenter.cpp:BuildGuestOutputPaintConfigFromCVar [init]
-      live     exe pushes a new paint config through Presenter::SetGuestOutputPaintConfigFromUIThread
 
 Folder  fields=texture_path  tag=-  text claims=-
    texture_pack_path                  via live (ApplyLiveSettings)         pushed at startup = D:/Ninja

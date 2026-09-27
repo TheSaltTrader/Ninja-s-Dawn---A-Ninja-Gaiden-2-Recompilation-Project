@@ -53,10 +53,11 @@ required" note beside the value (the note existed but was never drawn).
 A census of every row on the screen (tools/f10_census.py: each row, the
 setting it edits, the value the game hands the renderer at launch and while
 running, and where the renderer reads it) found two more: "Dither the
-output" and "Extra sharpness" were read by the presenter once at start-up, so
-changing them in-game did nothing until a restart - the game now hands the
-presenter its new configuration directly; and "Fuzzy alpha test" reaches
-only shaders compiled after the change, so it now carries the restart note.
+output" and "Extra sharpness" are read by the presenter once at start-up, so
+changing them in-game does nothing until a restart - both rows now carry the
+restart note (and the sharpness value is now handed over at launch, which it
+never was); and "Fuzzy alpha test" reaches only shaders compiled after the
+change, so it carries the note too.
 Everything else on the screen reaches what it should, live or at launch as
 labelled.
 
