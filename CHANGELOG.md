@@ -3,6 +3,26 @@
 Versions are cut with `tools/make_release.py`, which refuses to package a
 version that has no section here.
 
+## v1.0.25 - 2026-09-26
+
+### Fixed - the enhanced-textures indicator said the pack was idle while it was working
+
+With the texture pack on, the settings menu's status line read "Enhanced
+textures: ON - nothing on this screen is in the pack yet" and the on-screen
+notice "0 enhanced loaded" - in every release from v1.0.20 to v1.0.24 as
+played, and most likely since v1.0.13 - while the pack was in fact replacing
+textures on screen (a trace on the Chapter 1 route counted 752 replacements
+against an indicator of 0). The counter behind both lines was incremented
+only on an older replacement path that the pack's normal path (resolving
+each texture by its content as it loads) never takes. The counter now counts
+that path, so the status line reads "ON and in use" and the notice shows the
+number of enhanced textures loaded. The pack itself was never affected: the
+textures on screen were the enhanced ones all along.
+
+The 5-second `[swap]` line in the log also carries the two counters
+(`texpack registry replaced N original M`), so a log says what the indicator
+would show.
+
 ## v1.0.24 - 2026-09-22
 
 ### Changed - Installing from a disc image now leaves the setup screen ready
