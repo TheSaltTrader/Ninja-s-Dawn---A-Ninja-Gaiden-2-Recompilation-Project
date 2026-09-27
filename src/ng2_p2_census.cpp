@@ -84,8 +84,15 @@ bool g_fe = false;
 uint32_t g_fe_every = 64;
 uint32_t g_fe_regs[0x5000];
 uint32_t g_fe_src[0x5000];   // for LOAD_ALU_CONSTANT-loaded registers: the guest physical address it came from (0 = packet)
-struct FeSnap { uint32_t r2[0x400]; uint32_t r4[0x928]; uint32_t src4[0x928]; };
-std::unordered_map<uint32_t, std::deque<FeSnap*>> g_fe_snaps;   // FIFO per packet address (replays, frames)
+struct FeSnap { uint32_t frame; uint32_t r2[0x400]; uint32_t r4[0x928]; uint32_t src4[0x928]; };
+// Keyed by (packet address, execution ordinal within the frame): both sides count an address's executions since
+// their own last swap, so a snapshot is paired with the same execution whatever either side did before the
+// other registered (a per-address FIFO kept the bridge's pre-registration executions at its front for good).
+std::unordered_map<uint64_t, std::deque<FeSnap*>> g_fe_snaps;
+uint32_t g_fe_frame = 0;                              // XE_SWAP packets the front end decoded
+std::unordered_map<uint32_t, uint32_t> g_fe_ord;      // front end: address -> executions this frame (guest thread)
+std::unordered_map<uint32_t, uint32_t> g_br_ord;      // bridge: the same, reset at BridgeSwap (GPU thread)
+std::atomic<uint64_t> g_fe_expired{0};
 std::atomic<uint64_t> g_fe_calls{0}, g_fe_skipped{0}, g_fe_draws{0}, g_fe_compared{0}, g_fe_unmatched{0};
 std::atomic<uint64_t> g_fe_seen{0};   // bridge draws that reached BridgeDraw (matched or not)
 std::atomic<uint32_t> g_bridge_frame{0};   // the bridge's swap count, stamped on p3_bridge.bin records
@@ -154,6 +161,7 @@ uint32_t FeDecode(const uint8_t* body, uint32_t n, uint32_t phys_base) {
     } else {
       const uint32_t op = (h >> 8) & 0x7F, cnt = ((h >> 16) & 0x3FFF) + 1;
       g_fe_ops[op].fetch_add(1, std::memory_order_relaxed);
+      if (op == 0x64) { ++g_fe_frame; g_fe_ord.clear(); }   // XE_SWAP: a new frame for the ordinals
       // Predicated tiling, as the GPU (and the plugin) apply it: SET_BIN_MASK/SELECT LO/HI keep the bin state; a
       // predicated packet (header bit 0) runs only when mask & select overlap. (NG2 never tiles; kept for parity.)
       if ((op == 0x50 || op == 0x51) && i + 2 < w) {
@@ -209,8 +217,10 @@ uint32_t FeDecode(const uint8_t* body, uint32_t n, uint32_t phys_base) {
       } else if (op == 0x22 || op == 0x36) {                         // DRAW_INDX / DRAW_INDX_2
         g_fe_draws.fetch_add(1, std::memory_order_relaxed);
         const uint32_t addr = (phys_base + i * 4) & 0x1FFFFFFFu;
+        const uint32_t ord = g_fe_ord[addr]++;
         if (((addr >> 2) % g_fe_every) == 0) {   // sampled BY ADDRESS, so every execution of it is snapshotted
           auto* s = new FeSnap;
+          s->frame = g_fe_frame;
           std::memcpy(s->r2, g_fe_regs + 0x2000, sizeof(s->r2));
           std::memcpy(s->r4, g_fe_regs + 0x4000, sizeof(s->r4));
           std::memcpy(s->src4, g_fe_src + 0x4000, sizeof(s->src4));
@@ -219,9 +229,9 @@ uint32_t FeDecode(const uint8_t* body, uint32_t n, uint32_t phys_base) {
             for (auto& kv : g_fe_snaps) for (auto* p : kv.second) delete p;
             g_fe_snaps.clear();
           }
-          auto& q = g_fe_snaps[addr];
+          auto& q = g_fe_snaps[(uint64_t(addr) << 32) | ord];
           q.push_back(s);
-          if (q.size() > 64) { delete q.front(); q.pop_front(); }
+          if (q.size() > 8) { delete q.front(); q.pop_front(); }
         }
       }
       i += 1 + cnt;
@@ -412,13 +422,13 @@ void FeReport(const char* why) {
   REXLOG_INFO("[p3fe] {} ({}): bridge draws seen {}, compared {}, without a snapshot {}; front end {} kicks / {} decode windows, "
               "skipped {}, saw {} draws, predicated skips {}, {} snapshots pending; constant mismatches {} from memory loads "
               "({} whose source now holds the bridge value), {} from packets; {} registers ever differ (21F9-21FC excluded), "
-              "worst:{} | early stops: unfilled ring {} ib {}, short ring {} ib {}, ib unreadable {}, ib too deep {}; ring resets {}, resyncs {} | type-3 ops:{}",
+              "worst:{} | early stops: unfilled ring {} ib {}, short ring {} ib {}, ib unreadable {}, ib too deep {}; ring resets {}, resyncs {}, expired snapshots {}, fe frames {} | type-3 ops:{}",
               why, g_fe_kick_mode.load() ? "kick mode" : "cursor mode", g_fe_seen.load(), g_fe_compared.load(),
               g_fe_unmatched.load(), g_fe_kicks.load(), g_fe_calls.load(), g_fe_skipped.load(), g_fe_draws.load(),
               g_fe_predicated_skips.load(), pending, g_fe_mis_memsrc, g_fe_mis_memsrc_now_bridge, g_fe_mis_packet,
               regs_bad, s2, g_fe_stop_unfilled_ring.load(), g_fe_stop_unfilled_ib.load(), g_fe_stop_short_ring.load(),
               g_fe_stop_short_ib.load(), g_fe_ib_unreadable.load(), g_fe_ib_deep.load(), g_fe_ring_resets.load(),
-              g_fe_resyncs.load(), ops);
+              g_fe_resyncs.load(), g_fe_expired.load(), g_fe_frame, ops);
 }
 
 void Write() {
@@ -584,12 +594,19 @@ void BridgeDraw(uint32_t packet_addr, const uint32_t* regs, uint32_t reg_count) 
   if (g_fe && regs && reg_count >= 0x4928) {
     if (g_fe_seen.fetch_add(1, std::memory_order_relaxed) % 20000 == 19999) FeReport("every 20000 bridge draws");
     FeSnap* s = nullptr;
+    const uint32_t a = packet_addr & 0x1FFFFFFFu;
+    const uint32_t ord = g_br_ord[a]++;
     {
       std::lock_guard<std::mutex> lock(g_fe_mu);
-      auto it = g_fe_snaps.find(packet_addr & 0x1FFFFFFFu);
-      if (it != g_fe_snaps.end() && !it->second.empty()) {
-        s = it->second.front();   // executions arrive in the same order the front end decoded them
-        it->second.pop_front();
+      auto it = g_fe_snaps.find((uint64_t(a) << 32) | ord);
+      if (it != g_fe_snaps.end()) {
+        while (!it->second.empty() && it->second.front()->frame + 3 < g_fe_frame) {   // stale: expired
+          delete it->second.front();
+          it->second.pop_front();
+          g_fe_expired.fetch_add(1, std::memory_order_relaxed);
+        }
+        if (!it->second.empty()) { s = it->second.front(); it->second.pop_front(); }
+        if (it->second.empty()) g_fe_snaps.erase(it);
       }
     }
     if (!s) {
@@ -662,7 +679,10 @@ void BridgeDraw(uint32_t packet_addr, const uint32_t* regs, uint32_t reg_count) 
   }
 }
 
-void BridgeSwap() { g_bridge_frame.fetch_add(1, std::memory_order_relaxed); }
+void BridgeSwap() {
+  g_bridge_frame.fetch_add(1, std::memory_order_relaxed);
+  g_br_ord.clear();   // the bridge's per-address execution ordinals restart with its frame
+}
 
 }  // namespace ng2::p2
 
