@@ -381,8 +381,11 @@ Two readings above were wrong, and both were the instrument, not the pack:
 | ng2_032 trace_off1: DLL cc620728 under offload, all optimisations ON | 19:17:57 | 752 | 752 | 729 | 263 | 0 | 19:18:39 | 48000 |
 | ng2_033 trace_base1: plugin drawing + DLL in LOCKSTEP (not `-Baseline`; both caches trace), same route | 19:20:37 | 1490 | 745 | 722 | 524 | 0 | 19:21:19 | 47000 |
 
-Both homes replace the same population on the same route: 752 vs 745 distinct ids, 729 vs 722 distinct pack
-files. CORRECTION (19:33): ng2_033 was NOT the plugin alone - the launcher's `-Baseline` switch was not passed, so
+Both homes replace the same population on the same route - DIFFED, not counted (19:52, ng2_039 = a true
+plugin-alone trace, `-Baseline` + FABLE2_TEXPACK_TRACE=1, same route): the plugin replaced 751 ids, ALL 751 among
+the DLL's 752 (one id only the DLL leg met; none only the plugin met); pack files 728 of 729 shared; content hashes
+729 of 730 shared; Jaccard 0.999 on each. The earlier sentence here rested on counts alone (752 vs 745), which the
+manager rightly called a weaker grade. CORRECTION (19:33): ng2_033 was NOT the plugin alone - the launcher's `-Baseline` switch was not passed, so
 it ran the plugin drawing WITH the DLL in lockstep (`Tuning: ngpu_backend = true`, `LOCKSTEP (dll)` in its log),
 and both texture caches traced in the same process: 1490 = 745 ids x two homes, each logging every id ONCE. The
 sentence that first stood here ("the plugin resolves each id twice") was wrong. A true plugin-alone leg (pair1,
@@ -430,3 +433,26 @@ only on the plugin path; under offload the `PACK COUNTERS` line is the instrumen
 
 **Pending for main (NOT this branch):** the shipped v1.0.24 indicator has the same hole; the one-line counter fix
 belongs in rexglue-src's texture_cache.cpp and a v1.0.25. That is a public release and the user's call.
+
+### Since when has the indicator lied? (19:55; the manager's question)
+
+Necessary conditions: (a) `texture_pack_resolve_at_load` defaulting to true, (b) the increment sitting only in the
+superseded block. Neither is a string, so release binaries cannot show them, and BOTH engine trees begin with an
+import (rexglue-src 8cc841b 09-15; ng2-rexglue 0f621403 09-17, already `true`). The cvar's own description still
+says "Off by default." beside a default of `true` - the flip happened without touching the text, so a release with
+the default OFF did exist. What dates the flip is the USER'S OWN PLAY LOGS (`D:/Ninja Gaiden 2 Portable/logs`, 134
+logs, 2026-09-11 to 09-16; the running version appears only when the update checker logged "have vN"):
+
+| evidence | what it shows |
+|---|---|
+| ng2_003/004/006 (09-11 23:34 to 09-12 00:07), pack on | the OLD block ran (`N replacements, M ms total`): the counter was alive - v1.0.11/12 era (v1.0.12 released 09-12) |
+| ng2_007/008 (09-13) and the 37 logs reporting `have v1.0.16` (09-13/14), pack on in 2 | index built, NO replacement line of either kind (no texture replaced in those sessions) - inconclusive |
+| 38 logs reporting `have v1.0.20` (09-14 to 09-16); ng2_062.1/087/089/090/091/106/107/111/114-117/122-124 | `upscaled textures resolved at load` in 4+ sessions and ZERO old-path lines: resolve-at-load ON, the counter dead - v1.0.20 VERIFIED affected by the user's own runs |
+| ng2_121-124 (`have v1.0.21`, 09-16 19:46-21:11) | resolve-at-load lines, zero old-path: v1.0.21 affected as run |
+| manager: Releases/v1.0.22-24 one identical plugin (sha256 2e4ec3f1...), 09-22, and my reading of the same source | v1.0.22-24 VERIFIED |
+| manager: the resolve-at-load string first in v1.0.13 (09-12); the code's own dated comment: "once resolve-at-load carried the pack that path served nothing ... (2026-09-12)" | v1.0.13 LIKELY the first affected release; v1.0.13-v1.0.19 not verified by any run here |
+
+So the honest span: **verified v1.0.20 to v1.0.24 (the user's logs + the identical 09-22 binary); likely from v1.0.13
+(09-12); the old path last ran on 09-12 00:07.** The old block still exists in every build (turning
+`texture_pack_resolve_at_load` off would revive both it and the counter), which is why "the counter never counted
+resolve-at-load" is the accurate statement, not "the counter was removed".
