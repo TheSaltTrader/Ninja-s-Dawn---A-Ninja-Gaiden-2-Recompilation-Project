@@ -196,6 +196,7 @@ namespace {
 Driver g_driver;
 ID3D12Resource* g_output = nullptr;
 uint32_t g_output_w = 0, g_output_h = 0;
+bool g_output_is_8bpc = false;
 }  // namespace
 
 bool Init(ID3D12Device* device, ID3D12CommandQueue* queue) { return g_driver.Ready() || g_driver.Init(device, queue); }
@@ -205,6 +206,7 @@ bool Draw(const DrawRecord& d) { return g_driver.Draw(d); }
 void Swap(uint32_t fb, uint32_t w, uint32_t h, const uint32_t* fetch0, const uint32_t* table, const uint32_t* pwl) { g_driver.Swap(fb, w, h, fetch0, table, pwl); }
 void EndFrameNoSwap() { g_driver.EndFrameNoSwap(); }
 ID3D12Resource* GuestOutput(uint32_t& w, uint32_t& h) { w = g_output_w; h = g_output_h; return g_output; }
+bool GuestOutputIs8bpc() { return g_output_is_8bpc; }
 Stats GetStats() { return g_driver.stats_; }
 Readiness GetReadiness() { return g_driver.GetReadiness(); }
 
@@ -247,6 +249,8 @@ bool NativeRefreshGuestOutput(uint32_t frontbuffer_width, uint32_t frontbuffer_h
   }
   bool is_8bpc = false;
   ::rex::ui::ngpu_d3d12::D3D12Presenter::D3D12GuestOutputRefreshContext ctx(is_8bpc, g_output);
-  return refresher(ctx);
+  const bool ok = refresher(ctx);
+  g_output_is_8bpc = is_8bpc;   // ONE WINDOW: the plugin passes it to the runtime presenter with the copy
+  return ok;
 }
 }  // namespace ng2::ngpu::rtc

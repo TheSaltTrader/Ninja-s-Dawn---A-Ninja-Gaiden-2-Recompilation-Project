@@ -40,6 +40,7 @@ void EndFrameNoSwap();
 
 // The latest gamma-applied guest output (R10G10B10A2, PIXEL_SHADER_RESOURCE) and its size; nullptr before the first.
 ID3D12Resource* GuestOutput(uint32_t& width, uint32_t& height);
+bool GuestOutputIs8bpc();   // what the last refresh told the presenter context (gamma table, no FXAA)
 
 struct Stats { uint64_t draws = 0, draw_failed = 0, swaps = 0, shader_loads = 0, shader_load_failed = 0; };
 Stats GetStats();

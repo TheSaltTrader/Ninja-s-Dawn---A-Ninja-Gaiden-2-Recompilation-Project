@@ -77,6 +77,12 @@ REXCVAR_DEFINE_BOOL(ngpu_backend_upload_skip, true, "GPU",
 REXCVAR_DEFINE_BOOL(ngpu_reveal_hold, true, "GPU",
                     "After a load (chapter card -> gameplay) keep showing the last frame until the stage is "
                     "complete: no draw skipped for a compiling pipeline, none compiling, a steady draw count");
+REXCVAR_DEFINE_BOOL(ngpu_one_window, true, "GPU",
+                    "Present the native backend's frame in the game's own window through the runtime presenter (needs "
+                    "the plugin's RexNgpuSetOutputProvider and gpu_offload_to_native); off = the separate native window");
+REXCVAR_DEFINE_INT32(ngpu_present_wait_ms, 4, "GPU",
+                     "One window: how long a swap waits for the backend's submit thread before it presents whatever "
+                     "frame is on the queue (ms)");
 REXCVAR_DEFINE_INT32(ngpu_reveal_hold_frames, 6, "GPU", "Consecutive complete swaps that end the reveal hold");
 REXCVAR_DEFINE_INT32(ngpu_reveal_hold_max_ms, 2500, "GPU", "The reveal hold never lasts longer than this (ms)");
 REXCVAR_DEFINE_INT32(ngpu_backend_selfcheck_every, 1024, "GPU",
@@ -127,6 +133,10 @@ using SetSwapFn = void (*)(SwapFn);
 using DirtyFn = uint64_t* (*)(uint32_t* word_count);
 using GammaFn = bool (*)(uint32_t* table_256, uint32_t* pwl_rgb);
 using RevealFn = void (*)();
+using OutputFn = int (*)(ID3D12Resource**, uint32_t*, uint32_t*, int*);   // ONE WINDOW (fork f6fc6d4c)
+using SetOutputFn = void (*)(OutputFn);
+using GetDeviceFn = int (*)(ID3D12Device**, ID3D12CommandQueue**);
+using PresentStatsFn = void (*)(uint64_t*);
 
 constexpr uint32_t kRegisterFileCount = 0x5000;   // >= the plugin's RegisterFile::kRegisterCount (0x4928 forwarded)
 constexpr uint32_t kForwardedEnd = 0x4928;
@@ -138,6 +148,12 @@ SetDrawFn g_set_draw = nullptr;
 SetSwapFn g_set_swap = nullptr;
 GammaFn g_get_gamma = nullptr;
 RevealFn g_reveal_plugin = nullptr;
+SetOutputFn g_set_output = nullptr;
+GetDeviceFn g_get_device = nullptr;
+PresentStatsFn g_present_stats = nullptr;
+bool g_one_window = false;       // ONE WINDOW: the backend on the plugin's device, its frames through the presenter
+bool g_hold_this_swap = false;   // the reveal hold's verdict at the last swap; the provider reads it
+uint64_t g_provider_calls = 0, g_provider_held = 0, g_provider_waits_timed_out = 0, g_provider_no_output = 0;
 uint64_t* g_dirty = nullptr;
 uint32_t g_dirty_words = 0;
 
@@ -365,11 +381,20 @@ void DirtyCoverageAtSwap() {
 // The in-exe backend, brought up on the native window's device the first time a draw arrives.
 bool LockstepReady() {
   if (g_backend_on) return true;
-  if (!render::Ready()) return false;
+  ID3D12Device* device = nullptr;
+  ID3D12CommandQueue* queue = nullptr;
+  if (g_one_window) {
+    // The plugin's device and direct queue, valid once its SetupContext has run (before its first draw callback).
+    if (!g_get_device || !g_get_device(&device, &queue) || !device || !queue) return false;
+  } else {
+    if (!render::Ready()) return false;
+    device = render::Device();
+    queue = render::Queue();
+  }
   static bool tried = false;
   if (tried) return false;
   tried = true;
-  g_backend_on = backend::Init(render::Device(), render::Queue());
+  g_backend_on = backend::Init(device, queue);
   g_lockstep = g_backend_on;
   REXLOG_INFO("[ngpu] LOCKSTEP (in-exe): {}", g_backend_on
                                                    ? "the plugin's draw callback feeds the transplanted backend directly"
@@ -564,6 +589,33 @@ void LogPeriodic() {
               g_nocode[1][0], g_nocode[1][1], g_nocode[1][2], g_nocode[1][3],
               ws.presented, ws.requests, ws.skipped_no_output, ws.waits_timed_out, ws.last_mode);
   LogPackHomes();
+  if (g_one_window) {
+    uint64_t ps[4] = {};
+    if (g_present_stats) g_present_stats(ps);
+    REXLOG_INFO("[ngpu] ONE WINDOW: provider calls {} (held {}, no output {}, waits past {} ms {}); the plugin "
+                "presented {} through the runtime presenter (no output {}, size/format mismatch {}, refresh failed {})",
+                g_provider_calls, g_provider_held, g_provider_no_output, REXCVAR_GET(ngpu_present_wait_ms),
+                g_provider_waits_timed_out, ps[0], ps[1], ps[2], ps[3]);
+  }
+}
+
+// ONE WINDOW: the plugin's IssueSwap calls this on the GPU thread right after OnSwap, for the frame to present.
+// The backend's swap submission must be on the direct queue before the plugin enqueues its copy: wait for the
+// submit thread (bounded); past the bound the copy still lands between two whole submissions, so it shows either
+// this frame or the previous one, never a partial frame. 0 = leave the previous image on screen (reveal hold).
+int ProvideOutput(ID3D12Resource** resource, uint32_t* width, uint32_t* height, int* is_8bpc) {
+  ++g_provider_calls;
+  if (!g_backend_on || g_use_dll) return 0;
+  if (g_hold_this_swap) { ++g_provider_held; return 0; }
+  if (!rtc::WaitSwapSubmitted(uint32_t(std::max(0, REXCVAR_GET(ngpu_present_wait_ms))))) ++g_provider_waits_timed_out;
+  uint32_t w = 0, h = 0;
+  ID3D12Resource* out = backend::GuestOutput(w, h);
+  if (!out || !w || !h) { ++g_provider_no_output; return 0; }
+  *resource = out;
+  *width = w;
+  *height = h;
+  *is_8bpc = backend::GuestOutputIs8bpc() ? 1 : 0;
+  return 1;
 }
 
 void OnSwap(uint32_t fb, uint32_t fb_w, uint32_t fb_h) {
@@ -584,7 +636,8 @@ void OnSwap(uint32_t fb, uint32_t fb_w, uint32_t fb_h) {
   backend::Swap(fb, fb_w, fb_h, fetch0, gamma ? table : nullptr, gamma ? pwl : nullptr);
   // PRESENT AT THE SWAP. The guest's present hook fires when the CPU submits the frame, ahead of the GPU thread
   // reaching this swap (Fable II: frames behind while walking, a whole menu behind in pause).
-  if (!RevealHold()) render::RequestPresent();
+  g_hold_this_swap = RevealHold();
+  if (!g_one_window && !g_hold_this_swap) render::RequestPresent();
   DirtyCoverageAtSwap();
   LogPeriodic();
 }
@@ -605,6 +658,9 @@ void Start(const render::WindowSpec& window) {
   g_set_swap = Bind<SetSwapFn>(m, "RexNgpuSetSwapCallback");
   g_get_gamma = Bind<GammaFn>(m, "RexNgpuGetGammaRamp");
   g_reveal_plugin = Bind<RevealFn>(m, "RexNgpuRevealAfterLoad");
+  g_set_output = Bind<SetOutputFn>(m, "RexNgpuSetOutputProvider");   // ONE WINDOW (fork f6fc6d4c)
+  g_get_device = Bind<GetDeviceFn>(m, "RexNgpuGetDevice");
+  g_present_stats = Bind<PresentStatsFn>(m, "RexNgpuPresentStats");
   if (auto dirty_fn = Bind<DirtyFn>(m, "RexNgpuDirtyRegs")) {
     g_dirty = dirty_fn(&g_dirty_words);
     if (g_dirty && g_dirty_words * 64 < kForwardedEnd) g_dirty = nullptr;
@@ -625,12 +681,29 @@ void Start(const render::WindowSpec& window) {
   REXLOG_INFO("[ngpu] plugin gpu_offload_to_native = '{}' ({})", offload,
               (offload == "true" || offload == "1") ? "the native backend is the ONLY GPU; the plugin's window stays black"
                                                     : "lockstep beside the plugin: both render, compare the windows");
-  if (!render::Start(window)) {
-    REXLOG_INFO("[ngpu] the native window / device did not come up - native path stays off");
-    return;
+  const bool offload_on = offload == "true" || offload == "1";
+  g_one_window = REXCVAR_GET(ngpu_one_window) && offload_on && g_set_output && g_get_device;
+  if (g_one_window) {
+    // No native window: the in-exe backend comes up on the plugin's device at its first draw (LockstepReady) and
+    // the plugin's IssueSwap copies its frames into the runtime presenter (ultrawide fill / pillarbox, letterbox,
+    // the F10 and HUD overlays and the input all stay the game window's).
+    REXLOG_INFO("[ngpu] ONE WINDOW: the backend runs on the plugin's device; its frames go to the game's own window "
+                "through the runtime presenter (present wait {} ms)", REXCVAR_GET(ngpu_present_wait_ms));
+    g_set_output(&ProvideOutput);
+  } else {
+    if (REXCVAR_GET(ngpu_one_window) && offload_on)
+      REXLOG_INFO("[ngpu] one-window mode unavailable: this plugin lacks RexNgpuSetOutputProvider / RexNgpuGetDevice "
+                  "- the native window presents");
+    if (!render::Start(window)) {
+      REXLOG_INFO("[ngpu] the native window / device did not come up - native path stays off");
+      return;
+    }
   }
-  // The DLL first, when asked for and present; the in-exe copy otherwise.
-  if (REXCVAR_GET(ngpu_backend_dll) && LoadBackendDll()) {
+  // The DLL first, when asked for and present; the in-exe copy otherwise. Not in one-window mode: the DLL is
+  // started at Start, before the plugin's device exists, and it has no is_8bpc / provider ABI.
+  if (g_one_window && REXCVAR_GET(ngpu_backend_dll))
+    REXLOG_INFO("[ngpu] ngpu_backend_dll ignored in one-window mode - the in-exe copy of the backend runs");
+  if (!g_one_window && REXCVAR_GET(ngpu_backend_dll) && LoadBackendDll()) {
     NgpuBackendOptions o = {};
     g_dll.DefaultOptions(&o);
     o.size = sizeof(o);
@@ -675,6 +748,8 @@ void Stop() {
   // The plugin holds raw pointers into this module: clear them before anything here goes away.
   if (g_set_draw) g_set_draw(nullptr);
   if (g_set_swap) g_set_swap(nullptr);
+  if (g_set_output) g_set_output(nullptr);
+  g_set_output = nullptr;
   g_set_draw = nullptr;
   g_set_swap = nullptr;
   render::Stop();
