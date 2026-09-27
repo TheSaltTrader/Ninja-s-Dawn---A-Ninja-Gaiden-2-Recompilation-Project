@@ -42,6 +42,8 @@ void BridgeDraw(uint32_t packet_addr, const uint32_t* regs, uint32_t reg_count);
 void BridgeSwap();
 // [p3 draw] NG2_P3DRAW: the front end draws; the bridge asks so its plugin callbacks go compare-only.
 bool FrontEndDraws();
+// NG2_NATIVE_FE=1: the front end without the census (called by the bridge once the plugin callbacks exist).
+bool StartNativeFrontEnd();
 void FrontEndCounts(uint64_t& draws, uint64_t& swaps);
 
 }  // namespace ng2::p2

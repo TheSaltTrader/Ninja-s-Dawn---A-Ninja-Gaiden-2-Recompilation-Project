@@ -147,6 +147,7 @@ void P5Note(uint32_t kind, uint32_t addr, uint32_t value);
 // bridge's FrontEndDraw with its own register file; at XE_SWAP the bridge's FrontEndSwap. All on the guest
 // thread; the plugin's callbacks are compare-only then.
 bool g_p3draw = false;
+bool g_fe_compare = true;   // per-address ordinals and snapshots for the plugin compare; off in production
 uint32_t g_fe_vs = 0, g_fe_vs_dwords = 0, g_fe_ps = 0, g_fe_ps_dwords = 0;
 bool g_fe_vs_inline = false, g_fe_ps_inline = false;
 std::vector<uint8_t> g_fe_imm_vs, g_fe_imm_ps;
@@ -416,7 +417,7 @@ uint32_t FeDecode(const uint8_t* body, uint32_t n, uint32_t phys_base) {
           g_fe_draws_issued.fetch_add(1, std::memory_order_relaxed);
         }
         const uint32_t addr = (phys_base + i * 4) & 0x1FFFFFFFu;
-        const uint32_t ord = g_fe_ord[addr]++;
+        const uint32_t ord = g_fe_compare ? g_fe_ord[addr]++ : 0;
         if (g_src && g_frame.load(std::memory_order_relaxed) == g_src_frame) {   // [p3 src] every draw of the frame
           std::lock_guard<std::mutex> lock(g_src_mu);
           if (!g_src_fe_f) g_src_fe_f = std::fopen("p3_fe.bin", "wb");
@@ -428,7 +429,7 @@ uint32_t FeDecode(const uint8_t* body, uint32_t n, uint32_t phys_base) {
             ++g_src_draws;
           }
         }
-        if (((addr >> 2) % g_fe_every) == 0) {   // sampled BY ADDRESS, so every execution of it is snapshotted
+        if (g_fe_compare && ((addr >> 2) % g_fe_every) == 0) {   // sampled BY ADDRESS, so every execution of it is snapshotted
           auto* s = new FeSnap;
           s->frame = g_fe_frame;
           std::memcpy(s->r2, g_fe_regs + 0x2000, sizeof(s->r2));
@@ -990,6 +991,35 @@ void BridgeSwap() {
 }
 
 bool FrontEndDraws() { return g_p3draw; }
+
+// PRODUCTION SWITCH (NG2_NATIVE_FE=1): the native front end without the census - the kick callback drives it,
+// it draws on the guest thread, and the plugin's command processor only executes its side effects.
+bool StartNativeFrontEnd() {
+  const char* e = std::getenv("NG2_NATIVE_FE");
+  if (!e || !*e || *e == '0') return false;
+  if (g_fe && g_p5exec) return true;   // the census path already started it
+  HMODULE m = GetModuleHandleA("rexgpu-xenos.dll");
+  using SetKickFn = void (*)(void (*)(uint32_t, uint32_t, uint32_t));
+  auto kick = m ? reinterpret_cast<SetKickFn>(GetProcAddress(m, "RexNgpuSetKickCallback")) : nullptr;
+  auto setx = m ? reinterpret_cast<void (*)(int)>(GetProcAddress(m, "RexNgpuSetExecMode")) : nullptr;
+  auto push = m ? reinterpret_cast<PushFn>(GetProcAddress(m, "RexNgpuPushSideEffects")) : nullptr;
+  if (!kick || !setx || !push) {
+    REXLOG_INFO("[native] NG2_NATIVE_FE refused: the plugin lacks {}", !kick ? "RexNgpuSetKickCallback"
+                : !setx ? "RexNgpuSetExecMode" : "RexNgpuPushSideEffects");
+    return false;
+  }
+  g_fe_compare = false;
+  g_p3draw = true;
+  g_push = push;
+  g_p5exec = true;
+  g_fe = true;
+  kick(&FeKick);
+  g_fe_kick_mode = true;
+  setx(1);
+  REXLOG_INFO("[native] NATIVE FRONT END ON: the game's kicks are decoded on its own thread, drawn there, and the "
+              "plugin only executes the side effects (fences, interrupts, the swap)");
+  return true;
+}
 void FrontEndCounts(uint64_t& draws, uint64_t& swaps) { draws = g_fe_draws_issued.load(); swaps = g_fe_swaps_issued.load(); }
 
 }  // namespace ng2::p2

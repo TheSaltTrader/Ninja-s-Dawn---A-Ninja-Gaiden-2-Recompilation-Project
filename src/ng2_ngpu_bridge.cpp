@@ -887,6 +887,7 @@ void Start(const render::WindowSpec& window) {
   std::memset(g_dirty_outside, 0, sizeof(g_dirty_outside));
   g_set_swap(&OnSwap);
   g_set_draw(&OnDraw);
+  ng2::p2::StartNativeFrontEnd();   // NG2_NATIVE_FE=1: the native front end drives the backend
   REXLOG_INFO("[ngpu] lockstep consumer installed (record {} bytes; backend: {})", sizeof(RexNgpuDraw),
               g_use_dll ? "ngpu_backend.dll" : "in-exe copy, initialised at the first draw");
 }
