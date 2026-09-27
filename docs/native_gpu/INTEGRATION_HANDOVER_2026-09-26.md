@@ -228,11 +228,19 @@ frame of the plugin's own animation, so no observer could attribute it to the re
 animation. A same-instant plugin-vs-plugin pair cannot exist (one plugin window); Fable's cross-RUN floor at
 a paused scene is the honest substitute and needs a scene NG2 can hold still - open.
 
-**Page-state coherency, a number to test against (from Fable II via claudecode-76, 18:15).** Fable's
-`nocleanpg` A/B (same plugin, same offload, one cvar; n=1 per arm, unscreened for third-party GPU load):
-plugin GPU thread CPU 15.99 -> 13.80 ms median (ranges 14.95-16.93 vs 13.23-14.64, no overlap), stutters
-37 -> 6, worst frame 85.9 -> 54.5 ms. NOT transferable as a default: on NG2 `clear_memory_page_state` is a
-coherency REQUIREMENT (`ng2_tuning.h`: without it Team Ninja titles lose character models; the pool race only
-became reachable through it). It says roughly what NG2 pays for that coherency. An NG2 A/B of it must be
-judged on the PICTURE (character models present, `windiff2` pairs) before any millisecond is read, and only
-once the native backend's own coherency under offload is understood. Pin stays true.
+**Page-state coherency, a number to test against (from Fable II via claudecode-76, 18:15, corrected 18:17).**
+Fable's `nocleanpg` A/B, same plugin, same offload, one cvar, screened for third-party GPU load, TWO rounds:
+plugin GPU thread CPU OFF 13.23-14.06 vs ON 15.99-16.22 ms/frame (round 1), OFF 14.04-14.97 vs ON 15.73-16.27
+(round 2) - separated in both, about 2 ms, with the mechanism beside it: uploads 1.3 vs ~7 GB per 5 s in
+both rounds. A stutter/worst-frame figure first sent with it was WITHDRAWN by its sender (third-party GPU
+interference in the contaminated windows, not the cvar) and is not recorded here. NOT transferable as a
+default: on NG2 `clear_memory_page_state` is a coherency REQUIREMENT (`ng2_tuning.h`: without it Team Ninja
+titles lose character models; the pool race only became reachable through it). It says roughly what NG2 pays
+for that coherency. An NG2 A/B of it must be judged on the PICTURE (character models present, `windiff2`
+pairs) before any millisecond is read, and only once the native backend's own coherency under offload is
+understood. Pin stays true.
+
+**Per-draw cost, an observation (claudecode-76, 18:17), not a defect claim:** the same vendored layer runs
+Fable II's town at ~14.0 ms CPU for ~3,400 draws (4.12 us/draw; GPU 11.8 ms) and NG2's Chapter 1 at ~4.8 ms
+for ~2,700 draws (1.78 us/draw; GPU ~1.05 ms). Draws are not fungible across titles (scene, state changes,
+resolution, texture loads), but NG2 should not expect to inherit Fable's CPU cost from the layer itself.
