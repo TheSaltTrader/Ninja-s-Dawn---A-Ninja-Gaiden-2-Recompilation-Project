@@ -4,6 +4,7 @@
 // keeps the first argument samples; a census goes to the log every 10 s
 // ([ngpu] lines). Enabled by the ngpu_trace cvar (default off: the hooks
 // cost one load and one compare each when off).
+#include "ng2_p2_census.h"
 #include <rex/cvar.h>
 #include <rex/logging.h>
 #include <rex/ppc/context.h>
@@ -204,6 +205,9 @@ void FrameEnd() {
 
 inline void Trace(int i, PPCRegister& r3, PPCRegister& r4, PPCRegister& r5, PPCRegister& r6,
                   PPCRegister& r7, PPCRegister& r8, PPCRegister& r9, PPCRegister& r10) {
+  // P2 attribution census (ng2_p2_census.cpp): its own switch (NG2_P2), independent of ngpu_trace.
+  if (kFrameMarkerAddr && kEntries[i].addr == kFrameMarkerAddr) ng2::p2::FrameMarker(r3.u32);
+  ng2::p2::Enter(i, r3.u32);
   if (!REXCVAR_GET(ngpu_trace)) return;
   g_count[i].fetch_add(1, std::memory_order_relaxed);
   int ns = g_nsamples[i].load(std::memory_order_relaxed);
