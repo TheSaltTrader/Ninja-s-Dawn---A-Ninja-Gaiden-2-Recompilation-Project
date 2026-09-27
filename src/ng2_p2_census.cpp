@@ -9,6 +9,7 @@
 #include <cstring>
 #include <mutex>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 #include <rex/logging.h>
@@ -41,6 +42,13 @@ std::atomic<uint32_t> g_device{0};
 std::mutex g_mu;
 std::vector<Rec> g_recs;
 bool g_written = false;
+// LAST WRITER per 64-byte block of physical memory, kept from the first frame on (not only the packet window):
+// the game records small command buffers once and replays them every frame through INDIRECT_BUFFER (Chapter 1:
+// 1128 of 1759 draws per frame from a 184-byte buffer recorded before any 60-frame window), so a packet's
+// producer is the last hooked call that wrote its address, whenever that was.
+struct Writer { uint32_t frame; uint16_t hook; uint16_t pad; };
+std::unordered_map<uint32_t, Writer> g_blocks;   // key = physical address >> 6
+uint32_t g_discover_hi_logged = 0;
 std::atomic<uint32_t> g_discover_logged{0};
 std::atomic<uint64_t> g_enters{0}, g_exits{0}, g_mismatch{0}, g_overflow{0}, g_noread{0};
 thread_local Open t_stack[32];
@@ -104,6 +112,17 @@ void Discover(int hook, uint32_t dev) {
   const bool ok2 = ReadGuest(dev + g_cursor2_off, &v2);
   std::snprintf(line + k, sizeof(line) - k, " | +0x%X=%08X%s", g_cursor2_off, v2, ok2 ? "" : "(unreadable)");
   REXLOG_INFO("{}", line);
+  if (n < 8) {
+    // The second cursor candidates: the +0x3400 area (Fable's +0x3484 copy) - 64 words, for finding NG2's field.
+    char hi[800];
+    int m = std::snprintf(hi, sizeof(hi), "[p2] discover hook %d dev+0x3400:", hook);
+    for (uint32_t i = 0; i < 64 && m > 0 && m < int(sizeof(hi)) - 12; ++i) {
+      uint32_t v = 0;
+      const bool ok = ReadGuest(dev + 0x3400 + i * 4, &v);
+      m += std::snprintf(hi + m, sizeof(hi) - m, ok ? " %08X" : " ????????", v);
+    }
+    REXLOG_INFO("{}", hi);
+  }
 }
 
 void Write() {
@@ -119,15 +138,30 @@ void Write() {
     REXLOG_INFO("[p2] COULD NOT OPEN p2_guest.bin - {} records lost", recs.size());
     return;
   }
-  const uint32_t header[8] = {0x3250474E /* 'NGP2' */, 1, uint32_t(sizeof(Rec)), g_start, g_count, g_cursor_off,
+  const uint32_t header[8] = {0x3250474E /* 'NGP2' */, 2, uint32_t(sizeof(Rec)), g_start, g_count, g_cursor_off,
                               g_cursor2_off, uint32_t(recs.size())};
   std::fwrite(header, sizeof(header), 1, f);
   std::fwrite(recs.data(), sizeof(Rec), recs.size(), f);
+  // Section 2 (format version 2): the LAST WRITER of every 64-byte block any hooked call wrote since the first
+  // frame - {u32 block (physical >> 6), u32 frame, u16 hook, u16 0}, after a {u32 'BLK1', u32 count} header.
+  std::vector<uint32_t> blocks;
+  {
+    std::lock_guard<std::mutex> lock(g_mu);
+    blocks.reserve(g_blocks.size() * 3);
+    for (const auto& kv : g_blocks) {
+      blocks.push_back(kv.first);
+      blocks.push_back(kv.second.frame);
+      blocks.push_back(uint32_t(kv.second.hook));
+    }
+  }
+  const uint32_t bhdr[2] = {0x314B4C42u /* 'BLK1' */, uint32_t(blocks.size() / 3)};
+  std::fwrite(bhdr, sizeof(bhdr), 1, f);
+  std::fwrite(blocks.data(), sizeof(uint32_t), blocks.size(), f);
   std::fclose(f);
   REXLOG_INFO("[p2] wrote p2_guest.bin: {} call ranges for frames {}..{} (enters {}, exits {}, nesting mismatches {}, "
-              "stack overflows {}, unreadable cursors {})",
+              "stack overflows {}, unreadable cursors {}); LAST WRITER map {} blocks of 64 bytes since frame 1",
               recs.size(), g_start, g_start + g_count - 1, g_enters.load(), g_exits.load(), g_mismatch.load(),
-              g_overflow.load(), g_noread.load());
+              g_overflow.load(), g_noread.load(), blocks.size() / 3);
 }
 
 }  // namespace
@@ -139,8 +173,8 @@ void Enter(int hook, uint32_t r3) {
   if (!dev) return;
   (void)r3;   // the device comes from the frame marker; r3 is not the device for every hooked site
   if (g_discover) Discover(hook, dev);
-  if (!Recording()) return;
-  g_enters.fetch_add(1, std::memory_order_relaxed);
+  // Every call from the first frame on feeds the last-writer map; the per-call records only inside the window.
+  if (Recording()) g_enters.fetch_add(1, std::memory_order_relaxed);
   if (t_depth >= 32) {
     g_overflow.fetch_add(1, std::memory_order_relaxed);
     return;
@@ -164,8 +198,9 @@ void Exit(int hook) {
   uint16_t flags = i != t_depth - 1 ? 1 : 0;
   Open o = t_stack[i];
   t_depth = i;
-  g_exits.fetch_add(1, std::memory_order_relaxed);
-  if (!Recording() || !dev) return;
+  if (!dev) return;
+  const bool recording = Recording();
+  if (recording) g_exits.fetch_add(1, std::memory_order_relaxed);
   Rec r;
   r.frame = g_frame.load(std::memory_order_relaxed);
   r.tid = GetCurrentThreadId();
@@ -176,7 +211,15 @@ void Exit(int hook) {
   if (!ReadGuest(dev + g_cursor_off, &r.cur_out)) r.cur_out = 0;
   if (!ReadGuest(dev + g_cursor2_off, &r.cur2_out)) r.cur2_out = 0;
   std::lock_guard<std::mutex> lock(g_mu);
-  g_recs.push_back(r);
+  if (recording) g_recs.push_back(r);
+  // The last-writer map: every 64-byte block the call's cursor range covers (both fields), from the first frame.
+  for (int pass = 0; pass < 2; ++pass) {
+    const uint32_t a = pass ? r.cur2_in : r.cur_in, b = pass ? r.cur2_out : r.cur_out;
+    if (!a || !b || a == b) continue;
+    const uint32_t lo = a & 0x1FFFFFFFu, hi = b & 0x1FFFFFFFu;
+    if (hi < lo || hi - lo > (1u << 22)) continue;   // a wrap or a nonsense range (>4 MB): not from this call
+    for (uint32_t blk = lo >> 6; blk <= ((hi - 1) >> 6); ++blk) g_blocks[blk] = Writer{r.frame, o.hook, 0};
+  }
 }
 
 void FrameMarker(uint32_t r3) {

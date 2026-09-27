@@ -32,6 +32,8 @@ ap.add_argument("--frames", type=int, default=0, help="report at most this many 
 ap.add_argument("--top", type=int, default=12)
 ap.add_argument("--field", choices=("auto", "cur", "cur2"), default="auto",
                 help="which cursor field's ranges attribute (auto: the one that attributes more)")
+ap.add_argument("--window", type=int, default=1,
+                help="also look this many frames BACK for the producing call (the parser runs behind the guest)")
 args = ap.parse_args()
 
 PHYS = 0x1FFFFFFF
@@ -75,6 +77,16 @@ for i in range(n):
         by_field[field] += 1
 for f in ranges:
     ranges[f].sort()
+# format version 2: the LAST WRITER of every 64-byte block any hooked call wrote since the first frame
+blocks = {}
+pos = 32 + n * rec_size
+if ver >= 2 and pos + 8 <= len(g):
+    bmagic, bcount = struct.unpack_from("<2I", g, pos)
+    if bmagic == 0x314B4C42:
+        for i in range(bcount):
+            blk, bframe, bhook = struct.unpack_from("<3I", g, pos + 8 + i * 12)
+            blocks[blk] = (bframe, bhook)
+via_blocks = collections.Counter()   # hook -> packets attributed through the map (written before the window)
 
 # ---- packets ----------------------------------------------------------------------------------------------------
 p = open(args.packets, "rb").read()
@@ -88,7 +100,7 @@ for i in range(16, len(p), 16):
 
 def find(frame, addr, field):
     """The hook whose range holds addr in frame, or the neighbouring frames; None if none."""
-    for f in (frame, frame - 1, frame + 1):
+    for f in [frame] + [frame - k for k in range(1, args.window + 1)] + [frame + 1]:
         rs = ranges.get(f)
         if not rs:
             continue
@@ -101,6 +113,12 @@ def find(frame, addr, field):
                 continue
             if lo <= addr < hi:
                 return hook
+    # No call in the window wrote it: the last hooked writer of its block, whenever that was (a command buffer the
+    # game recorded once and replays every frame).
+    w = blocks.get(addr >> 6)
+    if w is not None:
+        via_blocks[w[1]] += 1
+        return w[1]
     return None
 
 
@@ -167,6 +185,10 @@ print("P2 CENSUS: %d frames (%d..%d), %d call ranges (%s field %s: %d usable, %s
 print("METRIC 1  unattributed packets: %d of %d (%.1f%%)   unattributed draws: %d of %d (%.1f%%)" %
       (un, npk, 100.0 * un / max(1, npk), und, ndr, 100.0 * und / max(1, ndr)))
 print("METRIC 2  draws not issued by a native front end: n/a (no front end yet; the bridge draws them all)")
+if blocks:
+    vb = sum(via_blocks.values())
+    print("          attributed through the last-writer map (buffers recorded before the window and replayed): %d "
+          "packets, top: %s" % (vb, ", ".join("%s=%d" % (hooks[h][0], v) for h, v in via_blocks.most_common(4))))
 print()
 print("by producer (whole run): packets  draws  producer")
 for h, v in tot.most_common(args.top + 1):

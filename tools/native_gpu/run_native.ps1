@@ -71,7 +71,14 @@ $lock = ""
 if (Test-Path $lockPath) { $lock = Get-Content $lockPath -Raw }
 if ($lock -and -not ($lock -match "game=none")) { Die "the machine is claimed: $lock" }
 $until = (Get-Date).AddSeconds($Seconds + 120).ToString("HH:mm")
-"session=run_native.ps1 game=ng2 until=$until note=native $Tag (offload=$($Offload.IsPresent)), kills only its own PID" | Out-File -Encoding ascii $lockPath
+$claim = "session=run_native.ps1 game=ng2 until=$until note=native $Tag (offload=$($Offload.IsPresent)), kills only its own PID"
+$claim | Out-File -Encoding ascii $lockPath
+# Lock race 10:11 (both games ran for ~40 s): two scripts saw the lock free and both wrote. Re-read after a
+# settle; if the line is not this claim, someone else won - leave their line alone and refuse.
+Start-Sleep -Seconds 3
+$again = ""
+if (Test-Path $lockPath) { $again = (Get-Content $lockPath -Raw).Trim() }
+if ($again -ne $claim) { Die "lost the lock race to: $again" }
 
 $pid_started = 0
 $settingsPath = Join-Path $bin "ng2_settings.cfg"
@@ -186,5 +193,11 @@ finally {
     Remove-Item $settingsBackup -ErrorAction SilentlyContinue
     Write-Host "settings file restored"
   }
-  "session=run_native.ps1 game=none until=now note=machine-free (native $Tag done)" | Out-File -Encoding ascii $lockPath
+  $lockNow = ""
+  if (Test-Path $lockPath) { $lockNow = (Get-Content $lockPath -Raw).Trim() }
+  if (-not $lockNow -or $lockNow.StartsWith("session=run_native.ps1") -or $lockNow.StartsWith("session=claudecode-0ea6")) {
+    "session=run_native.ps1 game=none until=now note=machine-free (native $Tag done)" | Out-File -Encoding ascii $lockPath
+  } else {
+    Write-Host "lock is not mine at release, left alone: $lockNow"
+  }
 }
