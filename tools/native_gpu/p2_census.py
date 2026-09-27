@@ -124,15 +124,10 @@ def find(frame, addr, field):
                 continue
             if lo <= addr < hi:
                 return hook
-    # No call in the window wrote it: the last hooked writer of its block, whenever that was (a command buffer the
-    # game recorded once and replays every frame).
-    w = blocks.get(addr >> 6)
-    if w is not None:
-        via_blocks[w[1]] += 1
-        return w[1]
     # ENGINE INLINE: written by the caller right after a hooked call returned (NG2 Chapter 1: 32 DRAW_INDX per
     # frame sit exactly 56 bytes past the end of a sub_8373BD50 range - the state flush before a draw - with the
-    # draw packet built by engine code). Named after that call, in its own bucket (hook + INLINE).
+    # draw packet built by engine code). Named after that call, in its own bucket (hook + INLINE). Checked before
+    # the block map: the map's 64-byte blocks would otherwise absorb the inline tail into the call itself.
     for f in (frame, frame - 1, frame + 1):
         ends = range_ends.get(f)
         if not ends:
@@ -140,6 +135,12 @@ def find(frame, addr, field):
         k = bisect.bisect_right(ends[0], addr)
         if k and addr - ends[0][k - 1] <= INLINE_GAP:
             return INLINE + ends[1][k - 1]
+    # No call in the window wrote it: the last hooked writer of its block, whenever that was (a command buffer the
+    # game recorded once and replays every frame).
+    w = blocks.get(addr >> 6)
+    if w is not None:
+        via_blocks[w[1]] += 1
+        return w[1]
     return None
 
 
