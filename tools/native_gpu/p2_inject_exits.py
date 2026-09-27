@@ -45,7 +45,7 @@ for path in sorted(glob.glob(os.path.join(root, "generated", "default", "ng2_rec
             if i < 0:
                 continue
             found.add(a)
-            j = t.find("\n}\n", i)
+            j = t.find("\n}\n", i) + 1   # keep the newline that ends the body's last statement
             body = t[i:j]
             if "ng2_p2_exit(" in body:
                 continue
