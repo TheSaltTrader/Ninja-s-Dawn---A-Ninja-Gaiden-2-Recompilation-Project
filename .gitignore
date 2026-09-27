@@ -38,3 +38,4 @@ docs/texpack/*.png
 # third-party AI upscaler engine + models (Real-ESRGAN ncnn-vulkan; shipped in the release zip, not in git)
 tools/upscaler/
 docs/native_gpu/p2/*.bin
+docs/native_gpu/p3/*.bin
