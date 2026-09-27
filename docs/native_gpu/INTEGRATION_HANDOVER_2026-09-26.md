@@ -291,3 +291,20 @@ the native path gives NG2 is the same features on a native, optimisable layer wi
 the user's stated destination - not a higher number on the counter. A scene where the plugin path drops
 below 60 (later chapters via a save; the withdrawn "chapter 12 ~28 fps") is the only place a speed
 difference could still appear, and it has not been measured.
+
+### The last carry leg, pre-registered (18:40; runs after the Fable session's 25-minute slot)
+
+The user's own configuration, from the portable install's settings: fullscreen 3840x1600 on monitor 0 (2.4:1),
+`ultrawide=1`, texture pack on at 2x (AI, `D:/Ninja Gaiden 2 Portable/textures`, 24,868 .tex under pack/, no
+stages/ lists so no warm bar), under OFFLOAD, into Chapter 1 by the pad script. These settings have no NG2_*
+environment override (only WIDTH/HEIGHT/FPS/SCALE/FULLSCREEN/GAME/DLC/NO_SETUP/IMPORT_SAVE do), so the launcher's
+new `-Settings` patches `ng2_settings.cfg` for the run and restores it.
+
+Pass criteria, stated before the run:
+- ultrawide presenter half (ledger 1.2): `[ngpu] LOCKSTEP (dll)` reports `uw mode 1 fov_k 0.74` in gameplay
+  (k = 1.7778/2.4), `[ngpu-window] presenting ... (uw mode 1, viewport 3840x1600 at 0,0)`, and the native
+  window's picture at 3840x1600 shows correct proportions with the HUD as a centred 16:9 band; the game's own
+  window black. Menus / the pause screen: mode 2, a pillarboxed 16:9 viewport.
+- texture pack under offload (ledger 1.1): `[texpack] '<dir>': N hashed files indexed` from the DLL's texture
+  cache and non-zero replacement counts in gameplay; no `[texpack]` error lines.
+- everything else unchanged: 0 failed draws, 0 self-check mismatches, no stall.

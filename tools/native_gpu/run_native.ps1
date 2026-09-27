@@ -34,7 +34,11 @@ param(
   [int]$DiffAt = 0,
   [int]$DiffPairs = 2,
   # The BASELINE arm of a timing pair: the same fork pair, NO native path (NG2_NATIVE_GPU unset). One thing differs.
-  [switch]$Baseline
+  [switch]$Baseline,
+  # Settings-file overrides for ONE run ("ultrawide=1;texture_pack=1;texture_path=D:\pack"): the settings that have
+  # no NG2_* environment override. ng2_settings.cfg is backed up and put back in the restore step, so a scripted leg
+  # never changes what the player last saved. The game rewrites the file on exit; the restore wins.
+  [string]$Settings = ""
 )
 $ErrorActionPreference = "Stop"
 $root = Split-Path -Parent (Split-Path -Parent (Split-Path -Parent $MyInvocation.MyCommand.Path))
@@ -70,7 +74,27 @@ $until = (Get-Date).AddSeconds($Seconds + 120).ToString("HH:mm")
 "session=run_native.ps1 game=ng2 until=$until note=native $Tag (offload=$($Offload.IsPresent)), kills only its own PID" | Out-File -Encoding ascii $lockPath
 
 $pid_started = 0
+$settingsPath = Join-Path $bin "ng2_settings.cfg"
+$settingsBackup = $settingsPath + ".before_" + $Tag + "_" + $stamp
 try {
+  # 1b. Settings overrides for this run (backed up; restored below).
+  if ($Settings -and (Test-Path $settingsPath)) {
+    Copy-Item $settingsPath $settingsBackup -Force
+    $lines = @(Get-Content $settingsPath)
+    foreach ($item in ($Settings -split ";")) {
+      if (-not $item.Contains("=")) { continue }
+      $k = $item.Substring(0, $item.IndexOf("=")).Trim()
+      $v = $item.Substring($item.IndexOf("=") + 1)
+      $hit = $false
+      for ($i = 0; $i -lt $lines.Count; $i++) {
+        if ($lines[$i] -match ("^" + [regex]::Escape($k) + "=")) { $lines[$i] = "$k=$v"; $hit = $true }
+      }
+      if (-not $hit) { $lines += "$k=$v" }
+      Write-Host "settings override for this run: $k=$v"
+    }
+    Set-Content -Path $settingsPath -Value $lines -Encoding ascii
+  }
+
   # 2. Stage the pair.
   New-Item -ItemType Directory -Force $backupDlls | Out-Null
   Copy-Item (Join-Path $bin "rexgpu-xenos.dll") $backupDlls -Force
@@ -156,6 +180,11 @@ finally {
   if (Test-Path (Join-Path $saveBackup "user")) {
     robocopy (Join-Path $saveBackup "user") (Join-Path $bin "user") /MIR /NFL /NDL /NJH /NJS | Out-Null
     Write-Host "saves restored from $saveBackup (robocopy $LASTEXITCODE)"
+  }
+  if (Test-Path $settingsBackup) {
+    Copy-Item $settingsBackup $settingsPath -Force
+    Remove-Item $settingsBackup -ErrorAction SilentlyContinue
+    Write-Host "settings file restored"
   }
   "session=run_native.ps1 game=none until=now note=machine-free (native $Tag done)" | Out-File -Encoding ascii $lockPath
 }
