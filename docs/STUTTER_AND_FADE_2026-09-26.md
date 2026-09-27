@@ -176,3 +176,11 @@ at +40 s: identical edge softness - the logo is a low-resolution 2D texture, so 
 detail to it. The plugin logs nothing about the scale beyond the tuning line. A pair of 95-s legs capturing the 3D
 shop cinematic at +75 s (scale1b / scale2b) follows the Fable window; until then "2x is visibly different from 1x
 on this title" is UNMEASURED, not confirmed.
+
+Update (01:17): scale1b / scale2b reached the 3D city panorama, but the two captures at +88 s and +91 s show different
+camera moments (the cinematic's segments drift by seconds with load times), so they are not comparable. The 1x
+capture at native pixels is visibly upscale-soft (720p -> 1600p); whether 2x is sharper on this title remains
+UNMEASURED tonight. The method that would settle it: a paused frame (Start in gameplay freezes the world) captured
+in both arms at the same spot, or a save that loads into a static view - both need the pause route that the
+scripted cinematics blocked. The plugin does apply the value: draw_resolution_scale_x/y = 2 in the tuning lines and
+GetConfigDrawResolutionScale reads it at texture-cache creation, the same path Xenia's resolution scaling uses.
