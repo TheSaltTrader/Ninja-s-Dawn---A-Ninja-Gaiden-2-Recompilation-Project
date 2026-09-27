@@ -202,6 +202,9 @@ struct Ng2Settings {
   // and z-fighting come from. Grouped as one switch because they are two halves
   // of the same behaviour and no useful configuration turns on only one.
   bool accurate_depth = false;
+  // The native renderer (v1.1.0): the plugin parses the console's command stream and the copy of its D3D12 backend
+  // built into this program draws every frame, in this window (ng2_ngpu_bridge.cpp). Off = the v1.0.25 plugin path.
+  bool native_renderer = true;
 
   // Dismiss the in-engine cinematic at the start of a chapter.
   //
@@ -402,6 +405,7 @@ struct Ng2Settings {
         << "cas_sharpness=" << cas_sharpness << "\n"
         << "fuzzy_alpha=" << (fuzzy_alpha ? 1 : 0) << "\n"
         << "accurate_depth=" << (accurate_depth ? 1 : 0) << "\n"
+        << "native_renderer=" << (native_renderer ? 1 : 0) << "\n"
         << "skip_cinematics=" << (skip_cinematics ? 1 : 0) << "\n"
         << "iso_path=" << iso_path << "\n"
         << "keyboard_control=" << (keyboard_control ? 1 : 0) << "\n"
@@ -477,6 +481,7 @@ struct Ng2Settings {
     else if (k == "antialias") antialias = v;
     else if (k == "fuzzy_alpha") fuzzy_alpha = Truthy(v);
     else if (k == "accurate_depth") accurate_depth = Truthy(v);
+    else if (k == "native_renderer") native_renderer = Truthy(v);
     else if (k == "skip_cinematics") skip_cinematics = Truthy(v);
     else if (k == "hud_enabled") hud_enabled = Truthy(v);
     else if (k == "hud_fps") hud_fps = Truthy(v);

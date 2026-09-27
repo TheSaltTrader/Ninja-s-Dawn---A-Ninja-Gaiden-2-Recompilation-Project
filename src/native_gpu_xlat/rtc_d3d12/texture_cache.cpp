@@ -1,9 +1,9 @@
-// VENDORED from rexglue-src 23ace0b:src/graphics/d3d12/texture_cache.cpp - systematic renames only (see vendor_rtc_d3d12.py / ORIGIN.txt):
-// namespaces d3d12 -> ngpu_d3d12, plugin headers -> rtc_d3d12/facade.h, cvars -> plugin registry reads (2 bool, 2 string, 6 int).
+// VENDORED from rexglue-src ng2 fork f6fc6d4c:src/graphics/d3d12/texture_cache.cpp - systematic renames only (see vendor_rtc_d3d12.py / ORIGIN.txt):
+// namespaces d3d12 -> ngpu_d3d12, plugin headers -> rtc_d3d12/facade.h, cvars -> plugin registry reads (4 bool, 2 string, 10 int).
 #include <string>
 #include <cstdint>
 #include <rex/logging.h>
-namespace ng2::ngpu::xlat { bool PluginBool(const char*, bool); std::string PluginString(const char*, const char*); int32_t PluginInt(const char*, int32_t); double PluginDouble(const char*, double); }
+namespace ng2::ngpu::xlat { bool PluginBool(const char*, bool); std::string PluginString(const char*, const char*); int32_t PluginInt(const char*, int32_t); double PluginDouble(const char*, double); void RefreshInt(const char*, int32_t&); void RefreshBool(const char*, bool&); void RefreshString(const char*, std::string&); }
 /**
  ******************************************************************************
  * Xenia : Xbox 360 Emulator Research Project                                 *
@@ -17,6 +17,11 @@ namespace ng2::ngpu::xlat { bool PluginBool(const char*, bool); std::string Plug
 
 #include <filesystem>
 #include <thread>
+#include <condition_variable>
+#include <deque>
+#include <atomic>
+#include <dxgi1_4.h>
+#include <wrl/client.h>
 #include <algorithm>
 #include <string>
 #include <mutex>
@@ -62,8 +67,8 @@ namespace texpack_shaders {
 // arrived through the tuning file at the next launch, and a player who ticked
 // "dump", walked the level and came back found nothing written and no way to
 // tell why.
-bool& FLAGS_texture_dump_storage_() { static bool s = ::ng2::ngpu::xlat::PluginBool("texture_dump", false); return s; }
-std::string& FLAGS_texture_dump_path_storage_() { static std::string s = ::ng2::ngpu::xlat::PluginString("texture_dump_path", ""); return s; }
+bool& FLAGS_texture_dump_storage_() { static bool s = ::ng2::ngpu::xlat::PluginBool("texture_dump", false); ::ng2::ngpu::xlat::RefreshBool("texture_dump", s); return s; }   // NATIVE PATCH: [live cvars] the app writes this while the game runs
+std::string& FLAGS_texture_dump_path_storage_() { static std::string s = ::ng2::ngpu::xlat::PluginString("texture_dump_path", ""); ::ng2::ngpu::xlat::RefreshString("texture_dump_path", s); return s; }   // NATIVE PATCH: [live cvars] the app writes this while the game runs
 bool& FLAGS_texture_pack_resolve_at_load_storage_() { static bool s = ::ng2::ngpu::xlat::PluginBool("texture_pack_resolve_at_load", true); return s; }
 // Live counts, for the on-screen indicator. These are cvars because the app
 // and the GPU plugin are separate DLLs with a one-way link, and the registry is
@@ -74,7 +79,7 @@ int32_t& FLAGS_texture_pack_original_storage_() { static int32_t s = ::ng2::ngpu
 
 // Which chapter is loading, written by the app from the file the game opens
 // for it. 0 means "not in a chapter", which is the state during boot and menus.
-int32_t& FLAGS_texture_pack_chapter_storage_() { static int32_t s = ::ng2::ngpu::xlat::PluginInt("texture_pack_chapter", 0); return s; }
+int32_t& FLAGS_texture_pack_chapter_storage_() { static int32_t s = ::ng2::ngpu::xlat::PluginInt("texture_pack_chapter", 0); ::ng2::ngpu::xlat::RefreshInt("texture_pack_chapter", s); return s; }   // NATIVE PATCH: [live cvars] the app writes this while the game runs
 
 // Warming progress, published for the app to draw and to hold input on.
 //
@@ -84,9 +89,15 @@ int32_t& FLAGS_texture_pack_chapter_storage_() { static int32_t s = ::ng2::ngpu:
 // a stage is still being read.
 int32_t& FLAGS_texture_warm_total_storage_() { static int32_t s = ::ng2::ngpu::xlat::PluginInt("texture_warm_total", 0); return s; }
 int32_t& FLAGS_texture_warm_done_storage_() { static int32_t s = ::ng2::ngpu::xlat::PluginInt("texture_warm_done", 0); return s; }
+bool& FLAGS_texture_pack_async_storage_() { static bool s = ::ng2::ngpu::xlat::PluginBool("texture_pack_async", true); return s; }
+bool& FLAGS_texture_precreate_storage_() { static bool s = ::ng2::ngpu::xlat::PluginBool("texture_precreate", true); return s; }
+int32_t& FLAGS_texture_precreate_mb_storage_() { static int32_t s = ::ng2::ngpu::xlat::PluginInt("texture_precreate_mb", 512); return s; }
+int32_t& FLAGS_texture_pack_prebuild_mb_storage_() { static int32_t s = ::ng2::ngpu::xlat::PluginInt("texture_pack_prebuild_mb", 1536); return s; }
+int32_t& FLAGS_texture_pack_spare_mb_storage_() { static int32_t s = ::ng2::ngpu::xlat::PluginInt("texture_pack_spare_mb", 256); return s; }
+int32_t& FLAGS_texture_pack_apply_per_frame_storage_() { static int32_t s = ::ng2::ngpu::xlat::PluginInt("texture_pack_apply_per_frame", 24); return s; }
 int32_t& FLAGS_texture_pack_upload_budget_mb_storage_() { static int32_t s = ::ng2::ngpu::xlat::PluginInt("texture_pack_upload_budget_mb", 0); return s; }
 
-std::string& FLAGS_texture_pack_path_storage_() { static std::string s = ::ng2::ngpu::xlat::PluginString("texture_pack_path", ""); return s; }
+std::string& FLAGS_texture_pack_path_storage_() { static std::string s = ::ng2::ngpu::xlat::PluginString("texture_pack_path", ""); ::ng2::ngpu::xlat::RefreshString("texture_pack_path", s); return s; }   // NATIVE PATCH: [live cvars] the app writes this while the game runs
 
 
 // Generated with `xb buildshaders`.
@@ -389,6 +400,8 @@ static int g_texpack_legacy = 0;               // <id>.tex files, ignored
 static std::unordered_map<uint32_t, std::vector<uint64_t>> g_texpack_by_hash;
 // shape -> one (file id, hash) of that shape: sizing before content is known.
 static std::unordered_map<uint64_t, std::pair<uint64_t, uint32_t>> g_texpack_by_shape;
+// [texpack-async] shape -> files of that shape in the pack: seeds the spare pool.
+static std::unordered_map<uint64_t, uint32_t> g_texpack_shape_count;
 // runtime id -> the (file id, hash) it was served from, so the stage list
 // names files that exist rather than addresses that will not recur.
 static std::unordered_map<uint64_t, std::pair<uint64_t, uint32_t>> g_texpack_file_of;
@@ -410,6 +423,7 @@ static void TexturePackIndexBuild(const std::string& dir) {
   g_texpack_index.clear();
   g_texpack_by_hash.clear();
   g_texpack_by_shape.clear();
+  g_texpack_shape_count.clear();
   g_texpack_index_dir = dir;
   g_texpack_legacy = 0;
   int hashed = 0;
@@ -425,6 +439,7 @@ static void TexturePackIndexBuild(const std::string& dir) {
       g_texpack_index[id].push_back(hash);
       g_texpack_by_hash[hash].push_back(id);
       g_texpack_by_shape.emplace(TexturePackShape(id), std::make_pair(id, hash));
+      ++g_texpack_shape_count[TexturePackShape(id)];
       ++hashed;
     } else if (stem.size() == 16) {
       ++g_texpack_legacy;
@@ -981,7 +996,44 @@ D3D12TextureCache::D3D12TextureCache(const RegisterFile& register_file,
       command_processor_(command_processor),
       bindless_resources_used_(bindless_resources_used) {}
 
+namespace {
+void TexpackAsyncShutdown();  // [texpack-async] defined with the pack worker below
+void TexpackPrebuildStage(const std::string& pack_dir, int chapter, ID3D12Device* device,
+                          D3D12_HEAP_FLAGS heap_flags);  // [texpack-prebuild] same block
+void TexbaseStageChange(int chapter, ID3D12Device* device, D3D12_HEAP_FLAGS heap_flags);  // [texbase-precreate]
+void TexbaseFlush();
+// The plugin's gpu_offload_to_native (read once: the plugin makes it kInitOnly).
+static bool TexpackOffloaded() {
+  // NATIVE PATCH: this copy IS the native backend - it runs the stage machinery whatever the plugin's switch says.
+  return false;
+}
+// [texpack-prebuild] The VRAM the prebuild may hold on this adapter: 30% of the local video-memory budget (DXGI
+// QueryVideoMemoryInfo), clamped to 512 MB..4 GB, on top of the texture_pack_prebuild_mb cap - so a 4 GB card
+// keeps ~1.2 GB of pack textures resident ahead of the draws and a 24 GB card the full cap (Fable II's rule,
+// p_pbbudget 2026-09-27, taken for the lower-end machines the user named).
+static uint64_t TexpackVramBudgetBytes(ID3D12Device* device) {
+  static uint64_t budget = 0;
+  if (budget || !device) return budget;
+  uint64_t local = 0;
+  Microsoft::WRL::ComPtr<IDXGIFactory4> factory;
+  if (SUCCEEDED(CreateDXGIFactory1(IID_PPV_ARGS(&factory)))) {
+    Microsoft::WRL::ComPtr<IDXGIAdapter3> adapter;
+    if (SUCCEEDED(factory->EnumAdapterByLuid(device->GetAdapterLuid(), IID_PPV_ARGS(&adapter)))) {
+      DXGI_QUERY_VIDEO_MEMORY_INFO info = {};
+      if (SUCCEEDED(adapter->QueryVideoMemoryInfo(0, DXGI_MEMORY_SEGMENT_GROUP_LOCAL, &info))) local = info.Budget;
+    }
+  }
+  budget = std::clamp<uint64_t>(local / 10 * 3, 512ull << 20, 4096ull << 20);
+  REXLOG_INFO("[texpack] PREBUILD VRAM budget {} MB (30% of the {} MB local video-memory budget, clamped 512-4096; "
+              "texture_pack_prebuild_mb caps it at {} MB)",
+              budget >> 20, local >> 20, std::max(0, REXCVAR_GET(texture_pack_prebuild_mb)));
+  return budget;
+}
+static std::atomic<uint64_t> g_tpa_vram_budget{0};
+}  // namespace
+
 D3D12TextureCache::~D3D12TextureCache() {
+  TexpackAsyncShutdown();  // [texpack-async] join the workers before any texture dies
   // While the texture descriptor cache still exists (referenced by
   // ~D3D12Texture), destroy all textures.
   DestroyAllTextures(true);
@@ -1293,6 +1345,7 @@ void D3D12TextureCache::BeginSubmission(uint64_t new_submission_index) {
   // many as it covers. The command processor reset the deferred command list
   // just before calling this, so the copies land in this submission.
   g_texpack_budget_left = int64_t(REXCVAR_GET(texture_pack_upload_budget_mb)) << 20;
+  TexpackAsyncDrain();  // [texpack-async] worker results first, then the budget's leftovers
   {
     std::vector<void*> pending;
     {
@@ -1320,11 +1373,19 @@ void D3D12TextureCache::BeginSubmission(uint64_t new_submission_index) {
   // Checked per submission rather than hooked, for the same reason the pack
   // path is: this is the one place that runs on the GPU thread every frame and
   // already reads its cvars here.
+  //
+  // Not under gpu_offload_to_native: this cache then loads nothing (the native backend's own copy of it does, on
+  // the same device), so the stage machinery would write EMPTY shape and stage lists over the files that copy
+  // writes and pre-create textures nobody draws here (ONE WINDOW, 2026-09-27).
   {
     static int last_chapter = 0;
-    const int chapter = REXCVAR_GET(texture_pack_chapter);
+    const int chapter = TexpackOffloaded() ? last_chapter : REXCVAR_GET(texture_pack_chapter);
     if (chapter != last_chapter) {
       last_chapter = chapter;
+      // [texbase-precreate] Independent of the pack: write the chapter just
+      // left, then pre-create the shapes recorded for the chapter coming.
+      TexbaseStageChange(chapter, command_processor_.GetD3D12Provider().GetDevice(),
+                         command_processor_.GetD3D12Provider().GetHeapFlagCreateNotZeroed());
       const std::string pack = rex::cvar::Query<std::string>("texture_pack_path");
       if (!pack.empty()) {
         {
@@ -1332,6 +1393,9 @@ void D3D12TextureCache::BeginSubmission(uint64_t new_submission_index) {
           StageFlush(pack);
         }
         StageWarm(pack, chapter);
+        if (REXCVAR_GET(texture_pack_async))   // [texpack-prebuild] GPU-ready, not just page-cached
+          TexpackPrebuildStage(pack, chapter, command_processor_.GetD3D12Provider().GetDevice(),
+                               command_processor_.GetD3D12Provider().GetHeapFlagCreateNotZeroed());
       }
     }
   }
@@ -2192,6 +2256,697 @@ ID3D12Resource* D3D12TextureCache::RequestSwapTexture(D3D12_SHADER_RESOURCE_VIEW
   return texture_resource;
 }
 
+// [texpack-async] ---------------------------------------------------------------
+// The pack worker. A job carries everything the worker needs and nothing it
+// must not touch: the texture POINTER travels only as an identity to look up
+// in the live registry when the result comes back on the render thread.
+namespace {
+void TexpackHoldWait();     // defined after the pack worker's spare pool, used by the base pool above it
+void TexpackWorkerMain();
+struct TexpackJob {
+  void* texture = nullptr;  // identity only; cast inside the cache (the class is private to it)
+  uint32_t base_page = 0;   // the key stays with the texture (a protected type); the guest pointer needs this
+  uint32_t hash = 0;
+  std::string path;
+  uint32_t w = 0, h = 0, levels = 1;
+  std::string dir;
+  uint64_t file_id = 0;
+  ID3D12Device* device = nullptr;
+  D3D12_HEAP_FLAGS heap_flags = D3D12_HEAP_FLAG_NONE;
+  bool prebuild = false;    // [texpack-prebuild] no texture yet: the result is kept by file id + hash
+  int stage = 0;
+};
+struct TexpackDone {
+  TexpackJob job;
+  Microsoft::WRL::ComPtr<ID3D12Resource> res;
+  Microsoft::WRL::ComPtr<ID3D12Resource> upload;
+  D3D12_PLACED_SUBRESOURCE_FOOTPRINT fp = {};
+  bool ok = false;
+  uint64_t read_us = 0;
+};
+std::mutex g_tpa_mutex;
+std::condition_variable g_tpa_cv;
+std::deque<TexpackJob> g_tpa_jobs;
+std::deque<TexpackDone> g_tpa_done;
+std::vector<std::thread> g_tpa_threads;
+bool g_tpa_stop = false;
+std::atomic<uint32_t> g_tpa_in_flight{0};
+// The spare pool (under g_tpa_mutex): resources created ahead of time by shape.
+struct TexpackSpare {
+  uint32_t w = 0, h = 0;
+  Microsoft::WRL::ComPtr<ID3D12Resource> res;
+  Microsoft::WRL::ComPtr<ID3D12Resource> upload;
+  D3D12_PLACED_SUBRESOURCE_FOOTPRINT fp = {};
+  UINT rows = 0;
+  uint64_t bytes = 0;
+};
+struct TexpackSeedShape { uint64_t sample_id = 0; uint32_t count = 0; };
+inline uint64_t TexpackShapeKey(uint32_t w, uint32_t h) { return (uint64_t(w) << 32) | h; }
+std::vector<TexpackSpare> g_tpa_spares;
+std::unordered_map<uint64_t, uint32_t> g_tpa_want;   // shape key -> spares wanted
+std::unordered_map<uint64_t, uint32_t> g_tpa_have;   // shape key -> spares held
+uint64_t g_tpa_spare_bytes = 0;
+uint64_t g_tpa_spare_budget = 0;
+ID3D12Device* g_tpa_device = nullptr;
+D3D12_HEAP_FLAGS g_tpa_heap_flags = D3D12_HEAP_FLAG_NONE;
+std::vector<TexpackSeedShape> g_tpa_seed;             // handed to the worker once per pack
+bool g_tpa_seed_pending = false;
+std::string g_tpa_seed_dir;
+std::atomic<uint32_t> g_tpa_spares_used{0}, g_tpa_spares_missed{0};
+// [texpack-prebuild] Finished replacements (copied and mipped) waiting for the
+// texture whose content matches, keyed by file id and content hash. Under
+// g_tpa_mutex. Bytes are the default texture with its mip chain.
+struct TexpackPrebuilt {
+  Microsoft::WRL::ComPtr<ID3D12Resource> res;
+  uint32_t w = 0, h = 0, hash = 0;
+  uint64_t bytes = 0;
+  int stage = 0;
+};
+inline uint64_t TexpackFileKey(uint64_t file_id, uint32_t hash) { return file_id ^ (uint64_t(hash) << 24) ^ (uint64_t(hash) >> 8); }
+std::unordered_map<uint64_t, TexpackPrebuilt> g_tpa_prebuilt;
+uint64_t g_tpa_prebuilt_bytes = 0;
+std::deque<TexpackJob> g_tpa_prebuild_jobs;   // behind the texture jobs
+std::atomic<uint32_t> g_tpa_prebuilt_hits{0}, g_tpa_prebuilt_misses{0}, g_tpa_prebuild_skipped{0};
+int g_tpa_prebuild_stage = 0;
+uint32_t g_tpa_prebuild_listed = 0, g_tpa_prebuild_done = 0;
+uint64_t TexpackPrebuiltBytes(uint32_t w, uint32_t h) { return uint64_t(w) * h * 4 * 4 / 3; }
+
+// [texbase-precreate] ------------------------------------------------------------
+// A texture's resource description packed into one key: dimension (2 bits),
+// format (8), mips (5), depth/array (12), height (16), width (16) - everything
+// CreateTextureBody puts in the desc except the constants (no flags, unknown
+// layout, one sample, COPY_DEST). Scaled resolves are keyed by their final size.
+inline uint64_t TexbaseKey(const D3D12_RESOURCE_DESC& d) {
+  return (uint64_t(d.Dimension == D3D12_RESOURCE_DIMENSION_TEXTURE3D ? 1 : 0) << 57) |
+         (uint64_t(uint8_t(d.Format)) << 49) | (uint64_t(d.MipLevels & 31) << 44) |
+         (uint64_t(d.DepthOrArraySize & 0xFFF) << 32) | (uint64_t(d.Height & 0xFFFF) << 16) |
+         uint64_t(d.Width & 0xFFFF);
+}
+inline D3D12_RESOURCE_DESC TexbaseDesc(uint64_t key) {
+  D3D12_RESOURCE_DESC d = {};
+  d.Dimension = ((key >> 57) & 1) ? D3D12_RESOURCE_DIMENSION_TEXTURE3D : D3D12_RESOURCE_DIMENSION_TEXTURE2D;
+  d.Alignment = 0;
+  d.Width = key & 0xFFFF;
+  d.Height = UINT((key >> 16) & 0xFFFF);
+  d.DepthOrArraySize = UINT16((key >> 32) & 0xFFF);
+  d.MipLevels = UINT16((key >> 44) & 31);
+  d.Format = DXGI_FORMAT(uint8_t(key >> 49));
+  d.SampleDesc.Count = 1;
+  d.SampleDesc.Quality = 0;
+  d.Layout = D3D12_TEXTURE_LAYOUT_UNKNOWN;
+  d.Flags = D3D12_RESOURCE_FLAG_NONE;
+  return d;
+}
+// Recording (render thread): the shapes created in the current chapter.
+std::mutex g_txs_mutex;
+int g_txs_chapter = 0;
+std::map<uint64_t, uint32_t> g_txs_count;       // this chapter, this session
+uint32_t g_txs_since_flush = 0;
+// The pool (under g_tpa_mutex): ready-made resources by key.
+std::unordered_map<uint64_t, std::vector<Microsoft::WRL::ComPtr<ID3D12Resource>>> g_txs_spares;
+std::unordered_map<uint64_t, uint32_t> g_txs_want, g_txs_have;
+std::unordered_map<uint64_t, uint64_t> g_txs_bytes_of;
+uint64_t g_txs_spare_bytes = 0, g_txs_budget = 0;
+std::atomic<uint32_t> g_txs_taken{0}, g_txs_created{0};
+
+std::filesystem::path TexbaseListPath(int chapter) {
+  char name[32];
+  std::snprintf(name, sizeof(name), "ch%02d.txt", chapter);
+  return std::filesystem::current_path() / "cache" / "texture_shapes" / name;
+}
+// Merge this session's counts into the chapter's file (max per key), so a
+// second visit can only add shapes, never lose them. Render thread; a few KB.
+void TexbaseFlush() {
+  std::map<uint64_t, uint32_t> merged;
+  int chapter = 0;
+  {
+    std::lock_guard<std::mutex> lock(g_txs_mutex);
+    if (g_txs_chapter <= 0 || g_txs_count.empty()) return;
+    chapter = g_txs_chapter;
+    merged = g_txs_count;
+  }
+  const auto path = TexbaseListPath(chapter);
+  {
+    std::ifstream in(path);
+    std::string line;
+    while (std::getline(in, line)) {
+      uint64_t key = 0;
+      uint32_t count = 0;
+      if (std::sscanf(line.c_str(), "%llx %u", (unsigned long long*)&key, &count) == 2 && key)
+        merged[key] = std::max(merged[key], count);
+    }
+  }
+  std::error_code ec;
+  std::filesystem::create_directories(path.parent_path(), ec);
+  std::ofstream out(path, std::ios::trunc);
+  if (!out) return;
+  for (const auto& kv : merged) out << std::hex << kv.first << std::dec << ' ' << kv.second << '\n';
+}
+void TexbaseNoteCreate(const D3D12_RESOURCE_DESC& desc, int chapter) {
+  if (chapter <= 0) return;
+  std::lock_guard<std::mutex> lock(g_txs_mutex);
+  if (chapter != g_txs_chapter) {
+    g_txs_chapter = chapter;
+    g_txs_count.clear();
+  }
+  ++g_txs_count[TexbaseKey(desc)];
+  ++g_txs_since_flush;
+}
+// Take a ready-made resource of exactly this description. Render thread.
+bool TexbaseTake(uint64_t key, Microsoft::WRL::ComPtr<ID3D12Resource>& out) {
+  std::lock_guard<std::mutex> lock(g_tpa_mutex);
+  auto it = g_txs_spares.find(key);
+  if (it == g_txs_spares.end() || it->second.empty()) return false;
+  out = std::move(it->second.back());
+  it->second.pop_back();
+  --g_txs_have[key];
+  g_txs_spare_bytes -= g_txs_bytes_of[key];
+  ++g_txs_taken;
+  return true;
+}
+// Seed the wants from the chapter's list (render thread, at the chapter
+// change): counts capped by the budget, largest counts first.
+void TexbaseSeed(int chapter, ID3D12Device* device) {
+  std::vector<std::pair<uint64_t, uint32_t>> rows;
+  {
+    std::ifstream in(TexbaseListPath(chapter));
+    std::string line;
+    while (std::getline(in, line)) {
+      uint64_t key = 0;
+      uint32_t count = 0;
+      if (std::sscanf(line.c_str(), "%llx %u", (unsigned long long*)&key, &count) == 2 && key && count)
+        rows.push_back({key, count});
+    }
+  }
+  std::lock_guard<std::mutex> lock(g_tpa_mutex);
+  g_txs_want.clear();
+  g_txs_budget = uint64_t(std::max(0, REXCVAR_GET(texture_precreate_mb))) << 20;
+  uint64_t planned = 0;
+  uint32_t n = 0;
+  std::sort(rows.begin(), rows.end(), [](const auto& a, const auto& b) { return a.second > b.second; });
+  for (const auto& r : rows) {
+    if (!g_txs_bytes_of.count(r.first)) {
+      const D3D12_RESOURCE_DESC d = TexbaseDesc(r.first);
+      g_txs_bytes_of[r.first] = device->GetResourceAllocationInfo(0, 1, &d).SizeInBytes;
+    }
+    const uint64_t bytes = g_txs_bytes_of[r.first];
+    const uint32_t have = g_txs_have[r.first];
+    uint32_t count = 0;
+    while (count < r.second && planned + bytes <= g_txs_budget) {
+      planned += bytes;
+      ++count;
+    }
+    if (count > have) g_txs_want[r.first] = count;
+    n += count;
+  }
+  REXLOG_INFO("[texbase] pre-create: chapter {} lists {} shapes; {} resources planned within {} MB (pool holds {} MB)",
+              chapter, rows.size(), n, g_txs_budget >> 20, g_txs_spare_bytes >> 20);
+}
+bool TexbaseDeficitLocked() {
+  if (!g_tpa_device || !REXCVAR_GET(texture_precreate)) return false;
+  for (const auto& kv : g_txs_want) {
+    if (int32_t(kv.second) <= int32_t(g_txs_have[kv.first])) continue;
+    if (g_txs_spare_bytes + g_txs_bytes_of[kv.first] <= g_txs_budget) return true;
+  }
+  return false;
+}
+// Worker: create one resource for the shape with the largest deficit that fits.
+bool TexbaseTopUpOne() {
+  uint64_t key = 0, bytes = 0;
+  {
+    std::lock_guard<std::mutex> lock(g_tpa_mutex);
+    if (!g_tpa_device || !REXCVAR_GET(texture_precreate)) return false;
+    int32_t best = 0;
+    for (const auto& kv : g_txs_want) {
+      const int32_t deficit = int32_t(kv.second) - int32_t(g_txs_have[kv.first]);
+      if (deficit <= best) continue;
+      if (g_txs_spare_bytes + g_txs_bytes_of[kv.first] > g_txs_budget) continue;
+      best = deficit;
+      key = kv.first;
+    }
+    if (best <= 0) return false;
+    bytes = g_txs_bytes_of[key];
+    ++g_txs_have[key];
+    g_txs_spare_bytes += bytes;
+  }
+  TexpackHoldWait();
+  const D3D12_RESOURCE_DESC d = TexbaseDesc(key);
+  Microsoft::WRL::ComPtr<ID3D12Resource> res;
+  const bool ok = SUCCEEDED(g_tpa_device->CreateCommittedResource(
+      &ui::ngpu_d3d12::util::kHeapPropertiesDefault, g_tpa_heap_flags, &d, D3D12_RESOURCE_STATE_COPY_DEST, nullptr,
+      IID_PPV_ARGS(&res)));
+  std::lock_guard<std::mutex> lock(g_tpa_mutex);
+  if (!ok) {
+    --g_txs_have[key];
+    g_txs_spare_bytes -= bytes;
+    return false;
+  }
+  g_txs_spares[key].push_back(std::move(res));
+  ++g_txs_created;
+  return true;
+}
+
+// Render thread, at a chapter change: write the chapter just left, then seed
+// the pool for the chapter coming and wake the worker. Independent of the pack.
+void TexbaseStageChange(int chapter, ID3D12Device* device, D3D12_HEAP_FLAGS heap_flags) {
+  TexbaseFlush();
+  if (!REXCVAR_GET(texture_precreate) || chapter <= 0) return;
+  {
+    std::lock_guard<std::mutex> lock(g_tpa_mutex);
+    g_tpa_device = device;
+    g_tpa_heap_flags = heap_flags;
+    if (g_tpa_threads.empty() && !g_tpa_stop)
+      for (int i = 0; i < 2; ++i) g_tpa_threads.emplace_back(TexpackWorkerMain);
+  }
+  TexbaseSeed(chapter, device);
+  g_tpa_cv.notify_all();
+}
+
+// Reads a pack file's header for its dimensions. Worker side.
+bool TexpackReadDims(const std::string& path, uint32_t& w, uint32_t& h) {
+  std::ifstream hf(path, std::ios::binary);
+  uint8_t head[16] = {};
+  if (!(hf && hf.read(reinterpret_cast<char*>(head), sizeof(head)) && !std::memcmp(head, "NG2T", 4))) return false;
+  uint32_t ver = 0;
+  std::memcpy(&ver, head + 4, 4);
+  std::memcpy(&w, head + 8, 4);
+  std::memcpy(&h, head + 12, 4);
+  return ver == 1 && w && h;
+}
+// The render thread's creation burst: raised by CreateTexture past 16 creations
+// in one frame, cleared at BeginSubmission. The worker keeps its D3D calls
+// (creations, Map/Unmap) off the device while it is up; file reads go on.
+std::atomic<bool> g_tpa_hold{false};
+std::atomic<uint32_t> g_tpa_frame_creates{0};
+std::atomic<uint32_t> g_tpa_held_ms{0};
+void TexpackHoldWait() {
+  while (g_tpa_hold.load(std::memory_order_relaxed) && !g_tpa_stop) {
+    std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    ++g_tpa_held_ms;
+  }
+}
+
+uint32_t TexpackLevelsFor(uint32_t w, uint32_t h) {
+  uint32_t levels = 1;
+  while ((std::max<uint32_t>(w, h) >> levels) >= 1u) ++levels;
+  return levels;
+}
+uint64_t TexpackShapeBytes(uint32_t w, uint32_t h) {
+  // default texture with its mip chain (~4/3 of the base) plus the upload buffer
+  return uint64_t(w) * h * 4 * 7 / 3;
+}
+
+// Creates the default texture and the upload buffer for one (w, h). Thread-safe
+// (the device's creation calls are free-threaded).
+bool TexpackCreatePair(ID3D12Device* device, D3D12_HEAP_FLAGS heap_flags, uint32_t w, uint32_t h,
+                       Microsoft::WRL::ComPtr<ID3D12Resource>& res,
+                       Microsoft::WRL::ComPtr<ID3D12Resource>& upload,
+                       D3D12_PLACED_SUBRESOURCE_FOOTPRINT& fp, UINT& rows) {
+  TexpackHoldWait();
+  D3D12_RESOURCE_DESC rdesc = {};
+  rdesc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
+  rdesc.Width = w;
+  rdesc.Height = h;
+  rdesc.DepthOrArraySize = 1;
+  rdesc.MipLevels = UINT16(TexpackLevelsFor(w, h));
+  rdesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+  rdesc.SampleDesc.Count = 1;
+  rdesc.Layout = D3D12_TEXTURE_LAYOUT_UNKNOWN;
+  rdesc.Flags = D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS;
+  if (FAILED(device->CreateCommittedResource(&ui::ngpu_d3d12::util::kHeapPropertiesDefault, heap_flags, &rdesc,
+                                             D3D12_RESOURCE_STATE_COPY_DEST, nullptr, IID_PPV_ARGS(&res)))) {
+    return false;
+  }
+  UINT64 rowbytes = 0, upsize = 0;
+  device->GetCopyableFootprints(&rdesc, 0, 1, 0, &fp, &rows, &rowbytes, &upsize);
+  D3D12_RESOURCE_DESC updesc = {};
+  updesc.Dimension = D3D12_RESOURCE_DIMENSION_BUFFER;
+  updesc.Width = upsize;
+  updesc.Height = 1;
+  updesc.DepthOrArraySize = 1;
+  updesc.MipLevels = 1;
+  updesc.Format = DXGI_FORMAT_UNKNOWN;
+  updesc.SampleDesc.Count = 1;
+  updesc.Layout = D3D12_TEXTURE_LAYOUT_ROW_MAJOR;
+  if (FAILED(device->CreateCommittedResource(&ui::ngpu_d3d12::util::kHeapPropertiesUpload, D3D12_HEAP_FLAG_NONE,
+                                             &updesc, D3D12_RESOURCE_STATE_GENERIC_READ, nullptr,
+                                             IID_PPV_ARGS(&upload)))) {
+    res.Reset();
+    return false;
+  }
+  return true;
+}
+
+// Takes a spare of this shape, if the pool holds one. Under g_tpa_mutex.
+bool TexpackTakeSpareLocked(uint32_t w, uint32_t h, TexpackSpare& out) {
+  for (size_t i = 0; i < g_tpa_spares.size(); ++i) {
+    if (g_tpa_spares[i].w == w && g_tpa_spares[i].h == h) {
+      out = std::move(g_tpa_spares[i]);
+      g_tpa_spares[i] = std::move(g_tpa_spares.back());
+      g_tpa_spares.pop_back();
+      g_tpa_spare_bytes -= out.bytes;
+      --g_tpa_have[TexpackShapeKey(w, h)];
+      return true;
+    }
+  }
+  return false;
+}
+
+// Worker side: the shape wants from the pack's histogram. Reads one file
+// header per shape (TexturePackDimsForId), so it runs here, not on the render
+// thread. The budget is shared out in proportion to how many files the pack
+// holds of each shape, each shape capped at its own file count.
+void TexpackSeedWants(std::vector<TexpackSeedShape> shapes, uint64_t budget) {
+  struct Row { uint64_t key; uint32_t count; uint64_t bytes; };
+  std::vector<Row> rows;
+  uint64_t total = 0;
+  for (const TexpackSeedShape& s : shapes) {
+    uint32_t w = 0, h = 0;
+    if (!TexturePackDimsForId(s.sample_id, w, h) || !w || !h) continue;
+    rows.push_back({TexpackShapeKey(w, h), s.count, TexpackShapeBytes(w, h)});
+    total += s.count;
+  }
+  std::unordered_map<uint64_t, uint32_t> want;
+  uint64_t planned = 0;
+  uint32_t n = 0;
+  for (const Row& r : rows) {
+    if (!total) break;
+    uint64_t share = budget * r.count / total;
+    uint32_t count = uint32_t(std::min<uint64_t>(share / std::max<uint64_t>(r.bytes, 1), r.count));
+    if (count == 0) continue;
+    want[r.key] += count;
+    planned += uint64_t(count) * r.bytes;
+    n += count;
+  }
+  // Second pass: the leftover budget goes round-robin to the shapes still
+  // short of their file count, smallest first, so no shape is left with none.
+  std::sort(rows.begin(), rows.end(), [](const Row& a, const Row& b) { return a.bytes < b.bytes; });
+  for (bool progress = true; progress;) {
+    progress = false;
+    for (const Row& r : rows) {
+      if (want[r.key] >= r.count || planned + r.bytes > budget) continue;
+      ++want[r.key];
+      planned += r.bytes;
+      ++n;
+      progress = true;
+    }
+  }
+  std::lock_guard<std::mutex> lock(g_tpa_mutex);
+  g_tpa_want = std::move(want);
+  REXLOG_INFO("[texpack] spare pool: {} shapes in the pack, {} spares planned over {} shapes, {} MB of {} MB",
+              shapes.size(), n, g_tpa_want.size(), planned >> 20, budget >> 20);
+}
+
+// Worker side: create one spare for the shape with the largest deficit. Returns
+// false when nothing is wanted or the budget is spent. Called with the mutex
+// NOT held; creation happens outside it.
+bool TexpackTopUpOne() {
+  uint32_t w = 0, h = 0;
+  uint64_t bytes = 0;
+  {
+    std::lock_guard<std::mutex> lock(g_tpa_mutex);
+    if (!g_tpa_device || g_tpa_spare_bytes >= g_tpa_spare_budget) return false;
+    int32_t best = 0;
+    for (const auto& kv : g_tpa_want) {
+      const int32_t deficit = int32_t(kv.second) - int32_t(g_tpa_have[kv.first]);
+      if (deficit <= best) continue;
+      const uint32_t cw = uint32_t(kv.first >> 32), ch = uint32_t(kv.first & 0xFFFFFFFFu);
+      if (g_tpa_spare_bytes + TexpackShapeBytes(cw, ch) > g_tpa_spare_budget) continue;  // does not fit
+      best = deficit;
+      w = cw;
+      h = ch;
+    }
+    if (best <= 0) return false;
+    bytes = TexpackShapeBytes(w, h);
+    ++g_tpa_have[TexpackShapeKey(w, h)];   // claimed before creation, so two workers do not both fill it
+    g_tpa_spare_bytes += bytes;
+  }
+  TexpackSpare sp;
+  sp.w = w;
+  sp.h = h;
+  sp.bytes = bytes;
+  const bool ok = TexpackCreatePair(g_tpa_device, g_tpa_heap_flags, w, h, sp.res, sp.upload, sp.fp, sp.rows);
+  std::lock_guard<std::mutex> lock(g_tpa_mutex);
+  if (!ok) {
+    --g_tpa_have[TexpackShapeKey(w, h)];
+    g_tpa_spare_bytes -= bytes;
+    return false;
+  }
+  g_tpa_spares.push_back(std::move(sp));
+  return true;
+}
+// Every D3D12Texture alive, so a result for a texture that died meanwhile is
+// dropped instead of dereferenced (the same reason ~D3D12Texture prunes
+// g_texpack_pending).
+std::mutex g_texpack_live_mutex;
+std::unordered_set<void*> g_texpack_live;
+void TexpackLiveInsert(void* t) {
+  std::lock_guard<std::mutex> lock(g_texpack_live_mutex);
+  g_texpack_live.insert(t);
+}
+void TexpackLiveErase(void* t) {
+  std::lock_guard<std::mutex> lock(g_texpack_live_mutex);
+  g_texpack_live.erase(t);
+}
+bool TexpackLive(void* t) {
+  std::lock_guard<std::mutex> lock(g_texpack_live_mutex);
+  return g_texpack_live.count(t) != 0;
+}
+
+// Builds one replacement off the render thread: the default texture, the
+// upload buffer, the file read straight into the mapped upload buffer. The
+// device's creation calls are free-threaded; nothing here touches the
+// deferred command list or the texture.
+TexpackDone TexpackBuild(TexpackJob job) {
+  TexpackDone d;
+  d.job = std::move(job);
+  if (d.job.prebuild) {
+    // The header says the shape; the budget says whether this file is built.
+    if (!TexpackReadDims(d.job.path, d.job.w, d.job.h)) { ++g_tpa_prebuild_skipped; return d; }
+    d.job.levels = TexpackLevelsFor(d.job.w, d.job.h);
+    const uint64_t bytes = TexpackPrebuiltBytes(d.job.w, d.job.h);
+    uint64_t budget = uint64_t(std::max(0, REXCVAR_GET(texture_pack_prebuild_mb))) << 20;
+    if (const uint64_t vram = g_tpa_vram_budget.load(std::memory_order_relaxed)) budget = std::min(budget, vram);
+    std::lock_guard<std::mutex> lock(g_tpa_mutex);
+    if (g_tpa_prebuilt.count(TexpackFileKey(d.job.file_id, d.job.hash)) ||
+        g_tpa_prebuilt_bytes + bytes > budget) {
+      ++g_tpa_prebuild_skipped;
+      return d;
+    }
+    g_tpa_prebuilt_bytes += bytes;   // reserved now; released if the build fails or the result is dropped
+  }
+  const TexpackJob& j = d.job;
+  UINT rows = 0;
+  {
+    // A spare of this shape first: no creation at all during a burst.
+    TexpackSpare sp;
+    bool got = false;
+    {
+      std::lock_guard<std::mutex> lock(g_tpa_mutex);
+      got = TexpackTakeSpareLocked(j.w, j.h, sp);
+    }
+    if (got) {
+      d.res = std::move(sp.res);
+      d.upload = std::move(sp.upload);
+      d.fp = sp.fp;
+      rows = sp.rows;
+      ++g_tpa_spares_used;
+    } else {
+      ++g_tpa_spares_missed;
+      if (!TexpackCreatePair(j.device, j.heap_flags, j.w, j.h, d.res, d.upload, d.fp, rows)) return d;
+    }
+  }
+  void* mapped = nullptr;
+  TexpackHoldWait();
+  if (FAILED(d.upload->Map(0, nullptr, &mapped))) {
+    d.res.Reset();
+    d.upload.Reset();
+    return d;
+  }
+  const auto t0 = std::chrono::steady_clock::now();
+  bool ok = false;
+  {
+    std::ifstream f(j.path, std::ios::binary);
+    if (f) {
+      f.seekg(16);
+      uint8_t* out = static_cast<uint8_t*>(mapped) + d.fp.Offset;
+      const size_t srcpitch = size_t(j.w) * 4;
+      if (d.fp.Footprint.RowPitch == srcpitch) {
+        ok = bool(f.read(reinterpret_cast<char*>(out), std::streamsize(srcpitch * rows)));
+      } else {
+        ok = true;
+        for (UINT y = 0; y < rows && ok; ++y)
+          ok = bool(f.read(reinterpret_cast<char*>(out + size_t(y) * d.fp.Footprint.RowPitch),
+                           std::streamsize(srcpitch)));
+      }
+    }
+  }
+  d.read_us = uint64_t(
+      std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now() - t0).count());
+  TexpackHoldWait();
+  d.upload->Unmap(0, nullptr);
+  if (!ok) {
+    d.res.Reset();
+    d.upload.Reset();
+    return d;
+  }
+  d.ok = true;
+  return d;
+}
+
+// A shape that wants a spare AND fits the budget - the same test TexpackTopUpOne
+// makes, so the worker never wakes for a spare it cannot create.
+bool TexpackDeficitLocked() {
+  if (!g_tpa_device || g_tpa_spare_bytes >= g_tpa_spare_budget) return false;
+  for (const auto& kv : g_tpa_want) {
+    if (int32_t(kv.second) <= int32_t(g_tpa_have[kv.first])) continue;
+    const uint64_t bytes = TexpackShapeBytes(uint32_t(kv.first >> 32), uint32_t(kv.first & 0xFFFFFFFFu));
+    if (g_tpa_spare_bytes + bytes <= g_tpa_spare_budget) return true;
+  }
+  return false;
+}
+
+void TexpackWorkerMain() {
+  for (;;) {
+    TexpackJob job;
+    bool have_job = false;
+    std::vector<TexpackSeedShape> seed;
+    uint64_t budget = 0;
+    {
+      std::unique_lock<std::mutex> lock(g_tpa_mutex);
+      g_tpa_cv.wait(lock, [] {
+        return g_tpa_stop || !g_tpa_jobs.empty() || !g_tpa_prebuild_jobs.empty() || g_tpa_seed_pending ||
+               TexpackDeficitLocked() || TexbaseDeficitLocked();
+      });
+      if (g_tpa_stop) return;
+      if (g_tpa_seed_pending) {
+        g_tpa_seed_pending = false;
+        seed.swap(g_tpa_seed);
+        budget = g_tpa_spare_budget;
+      } else if (!g_tpa_jobs.empty()) {
+        job = std::move(g_tpa_jobs.front());
+        g_tpa_jobs.pop_front();
+        have_job = true;
+      } else if (!g_tpa_prebuild_jobs.empty()) {   // [texpack-prebuild] behind the textures' own jobs
+        job = std::move(g_tpa_prebuild_jobs.front());
+        g_tpa_prebuild_jobs.pop_front();
+        have_job = true;
+      }
+    }
+    if (!seed.empty()) {
+      TexpackSeedWants(std::move(seed), budget);
+      continue;
+    }
+    if (have_job) {
+      TexpackDone done = TexpackBuild(std::move(job));
+      std::lock_guard<std::mutex> lock(g_tpa_mutex);
+      g_tpa_done.push_back(std::move(done));
+      continue;
+    }
+    // Idle: fill the pools, one resource at a time, yielding to any job that
+    // arrives. When nothing is creatable the predicate above is false and the
+    // wait sleeps until a job or a new seed.
+    if (!TexpackTopUpOne()) TexbaseTopUpOne();
+  }
+}
+
+void TexpackAsyncEnqueue(TexpackJob job) {
+  std::lock_guard<std::mutex> lock(g_tpa_mutex);
+  if (g_tpa_threads.empty() && !g_tpa_stop) {
+    // Two workers: a read is a memcpy from the OS cache (~1 ms per file after
+    // the stage warm), the creations are kernel time; two keep a 400-file
+    // burst under a second without contending with the render thread.
+    for (int i = 0; i < 2; ++i) g_tpa_threads.emplace_back(TexpackWorkerMain);
+  }
+  ++g_tpa_in_flight;
+  g_tpa_jobs.push_back(std::move(job));
+  g_tpa_cv.notify_one();
+}
+
+// [texpack-prebuild] Render thread, at a stage change: the stage's list becomes
+// prebuild jobs (the worker reads each header, keeps within the budget, builds
+// the rest). The previous stage's finished resources are dropped first: the
+// budget is per stage, and a chapter boundary is where the game itself drops
+// its textures.
+void TexpackPrebuildStage(const std::string& pack_dir, int chapter, ID3D12Device* device,
+                          D3D12_HEAP_FLAGS heap_flags) {
+  g_tpa_vram_budget.store(TexpackVramBudgetBytes(device), std::memory_order_relaxed);   // once; logged once
+  if (pack_dir.empty() || chapter <= 0 || REXCVAR_GET(texture_pack_prebuild_mb) <= 0) return;
+  char name[64];
+  std::snprintf(name, sizeof(name), "stages/ch%02d.txt", chapter);
+  std::ifstream list(std::filesystem::path(pack_dir) / name);
+  if (!list) return;
+  std::deque<TexpackJob> jobs;
+  std::string line;
+  while (std::getline(list, line)) {
+    while (!line.empty() && (line.back() == '\r' || line.back() == ' ')) line.pop_back();
+    if (line.size() != 25 || line[16] != '-') continue;
+    TexpackJob j;
+    j.prebuild = true;
+    j.stage = chapter;
+    j.file_id = std::strtoull(line.substr(0, 16).c_str(), nullptr, 16);
+    j.hash = uint32_t(std::strtoul(line.substr(17, 8).c_str(), nullptr, 16));
+    j.path = pack_dir + "/" + line + ".tex";
+    j.dir = pack_dir;
+    j.device = device;
+    j.heap_flags = heap_flags;
+    jobs.push_back(std::move(j));
+  }
+  std::lock_guard<std::mutex> lock(g_tpa_mutex);
+  g_tpa_prebuilt.clear();
+  g_tpa_prebuilt_bytes = 0;
+  g_tpa_prebuild_jobs.clear();
+  g_tpa_prebuild_stage = chapter;
+  g_tpa_prebuild_listed = uint32_t(jobs.size());
+  g_tpa_prebuild_done = 0;
+  g_tpa_prebuild_skipped = 0;
+  g_tpa_prebuild_jobs.swap(jobs);
+  if (g_tpa_threads.empty() && !g_tpa_stop)
+    for (int i = 0; i < 2; ++i) g_tpa_threads.emplace_back(TexpackWorkerMain);
+  g_tpa_cv.notify_all();
+  REXLOG_INFO("[texpack] prebuild: stage {} lists {} files; building GPU-ready within {} MB", chapter,
+              g_tpa_prebuild_listed, REXCVAR_GET(texture_pack_prebuild_mb));
+}
+
+// Render thread: a finished prebuilt file for this id + hash, if any.
+bool TexpackTakePrebuilt(uint64_t file_id, uint32_t hash, TexpackPrebuilt& out) {
+  std::lock_guard<std::mutex> lock(g_tpa_mutex);
+  auto it = g_tpa_prebuilt.find(TexpackFileKey(file_id, hash));
+  if (it == g_tpa_prebuilt.end()) return false;
+  out = std::move(it->second);
+  g_tpa_prebuilt.erase(it);
+  g_tpa_prebuilt_bytes -= out.bytes;
+  return true;
+}
+
+void TexpackAsyncShutdown() {
+  {
+    std::lock_guard<std::mutex> lock(g_tpa_mutex);
+    g_tpa_stop = true;
+  }
+  g_tpa_cv.notify_all();
+  for (auto& t : g_tpa_threads)
+    if (t.joinable()) t.join();
+  g_tpa_threads.clear();
+  std::lock_guard<std::mutex> lock(g_tpa_mutex);
+  g_tpa_jobs.clear();
+  g_tpa_done.clear();
+  g_tpa_spares.clear();
+  g_tpa_have.clear();
+  g_tpa_want.clear();
+  g_tpa_prebuilt.clear();
+  g_tpa_prebuild_jobs.clear();
+  g_tpa_prebuilt_bytes = 0;
+  g_txs_spares.clear();
+  g_txs_have.clear();
+  g_txs_want.clear();
+  g_txs_spare_bytes = 0;
+  g_tpa_spare_bytes = 0;
+  g_tpa_seed_dir.clear();
+  g_tpa_stop = false;
+}
+}  // namespace
+
 D3D12TextureCache::D3D12Texture::D3D12Texture(D3D12TextureCache& texture_cache,
                                               const TextureKey& key, ID3D12Resource* resource,
                                               D3D12_RESOURCE_STATES resource_state,
@@ -2205,6 +2960,7 @@ D3D12TextureCache::D3D12Texture::D3D12Texture(D3D12TextureCache& texture_cache,
 }
 
 D3D12TextureCache::D3D12Texture::~D3D12Texture() {
+  TexpackLiveErase(this);  // [texpack-async] a result for this texture is dropped from now on
   {
     // [texpack] An upload still waiting for its frame must not find a dead
     // texture (g_texpack_pending holds raw pointers).
@@ -2333,7 +3089,18 @@ uint32_t D3D12TextureCache::GetMaxHostTextureDepthOrArraySize(
   }
 }
 
+// [hitch] Resource creation blocks the GPU thread in the kernel resource lock
+// (measured on Fable II: 3-6 ms per creation in slow frames). Timed whole.
 std::unique_ptr<TextureCache::Texture> D3D12TextureCache::CreateTexture(TextureKey key) {
+  const auto t0 = std::chrono::steady_clock::now();
+  if (++g_tpa_frame_creates > 16) g_tpa_hold.store(true, std::memory_order_relaxed);  // [texpack-async]
+  std::unique_ptr<TextureCache::Texture> r = CreateTextureBody(key);
+  command_processor_.NoteTextureCreate(uint64_t(
+      std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now() - t0).count()));
+  return r;
+}
+
+std::unique_ptr<TextureCache::Texture> D3D12TextureCache::CreateTextureBody(TextureKey key) {
   D3D12_RESOURCE_DESC desc;
   desc.Format = GetDXGIResourceFormat(key);
   if (desc.Format == DXGI_FORMAT_UNKNOWN) {
@@ -2432,12 +3199,19 @@ std::unique_ptr<TextureCache::Texture> D3D12TextureCache::CreateTexture(TextureK
   // Assuming untiling will be the next operation.
   D3D12_RESOURCE_STATES resource_state = D3D12_RESOURCE_STATE_COPY_DEST;
   Microsoft::WRL::ComPtr<ID3D12Resource> resource;
-  if (FAILED(device->CreateCommittedResource(&ui::ngpu_d3d12::util::kHeapPropertiesDefault,
-                                             provider.GetHeapFlagCreateNotZeroed(), &desc,
-                                             resource_state, nullptr, IID_PPV_ARGS(&resource)))) {
-    return nullptr;
+  // [texbase-precreate] Record the shape for the next load of this chapter;
+  // take a ready-made resource of this exact description if the worker made
+  // one during the load (the spares are created in COPY_DEST, as here).
+  TexbaseNoteCreate(desc, REXCVAR_GET(texture_pack_chapter));
+  if (!(REXCVAR_GET(texture_precreate) && TexbaseTake(TexbaseKey(desc), resource))) {
+    if (FAILED(device->CreateCommittedResource(&ui::ngpu_d3d12::util::kHeapPropertiesDefault,
+                                               provider.GetHeapFlagCreateNotZeroed(), &desc,
+                                               resource_state, nullptr, IID_PPV_ARGS(&resource)))) {
+      return nullptr;
+    }
   }
   auto* texture = new D3D12Texture(*this, key, resource.Get(), resource_state);
+  TexpackLiveInsert(texture);  // [texpack-async]
   // [texpack] The decision is taken here, once, and travels with the resource
   // it sized. The load and the view read it from the texture; a lookup of
   // their own could answer differently after a pack switch, for a resource
@@ -2697,6 +3471,25 @@ void D3D12TextureCache::ApplyTexpackResolve(D3D12Texture& texture, const Texture
   }
   TexpackTrace(trace_prev ? "replace:changed" : "replace", id, hash, key.GetWidth(), key.GetHeight(),
                file_id, trace_prev);
+  // [texpack-prebuild] Built during the stage load: swap the finished resource
+  // in. No read, no creation, no upload, no mip pass.
+  {
+    TexpackPrebuilt pre;
+    if (TexpackTakePrebuilt(file_id, hash, pre)) {
+      ++g_tpa_prebuilt_hits;
+      retire_current();
+      texture.set_texpack_pending_hash(0);
+      texture.SetTexpackResource(pre.res, hash);
+      texture.SetTexpackSamples(guest, gsize, TexpackNowSeconds());
+      texture.ClearSRVDescriptors();
+      StageNote(dir, REXCVAR_GET(texture_pack_chapter), file_id, hash);
+      static std::atomic<uint32_t> built{0};
+      const uint32_t n = ++built;
+      REXCVAR_SET(texture_pack_replaced, int32_t(n));
+      return;
+    }
+    ++g_tpa_prebuilt_misses;
+  }
   char p[600];
   std::snprintf(p, sizeof(p), "%s/%016llX-%08X.tex", dir.c_str(),
                 (unsigned long long)file_id, hash);
@@ -2737,6 +3530,30 @@ void D3D12TextureCache::ApplyTexpackResolve(D3D12Texture& texture, const Texture
       return;
     }
     g_texpack_budget_left -= need;
+  }
+  // [texpack-async] Hand the two creations and the file read to the pack
+  // worker; the result is applied at a later BeginSubmission. Until then the
+  // guest texture shows. A second resolve of the same content while the first
+  // is in flight is a no-op; a resolve of NEW content supersedes it (the old
+  // result is dropped by the hash check in TexpackAsyncDrain).
+  if (REXCVAR_GET(texture_pack_async)) {
+    if (texture.texpack_pending_hash() == hash) return;
+    texture.set_texpack_pending_hash(hash);
+    TexpackJob job;
+    job.texture = static_cast<void*>(&texture);
+    job.base_page = uint32_t(key.base_page);
+    job.hash = hash;
+    job.path = p;
+    job.w = w;
+    job.h = h;
+    job.levels = 1;
+    while ((std::max<uint32_t>(w, h) >> job.levels) >= 1u) ++job.levels;
+    job.dir = dir;
+    job.file_id = file_id;
+    job.device = command_processor_.GetD3D12Provider().GetDevice();
+    job.heap_flags = command_processor_.GetD3D12Provider().GetHeapFlagCreateNotZeroed();
+    TexpackAsyncEnqueue(std::move(job));
+    return;
   }
   const uint64_t completed = command_processor_.GetCompletedSubmission();
   g_texpack_uploads.erase(
@@ -2791,6 +3608,7 @@ void D3D12TextureCache::ApplyTexpackResolve(D3D12Texture& texture, const Texture
   void* mapped = nullptr;
   if (FAILED(upload->Map(0, nullptr, &mapped))) { retire_current(); return; }
   bool ok = false;
+  const auto pack_read_t0 = std::chrono::steady_clock::now();
   {
     std::ifstream f(p, std::ios::binary);
     if (f) {
@@ -2809,6 +3627,22 @@ void D3D12TextureCache::ApplyTexpackResolve(D3D12Texture& texture, const Texture
   }
   upload->Unmap(0, nullptr);
   if (!ok) { retire_current(); return; }
+  const uint64_t read_us = uint64_t(std::chrono::duration_cast<std::chrono::microseconds>(
+                                         std::chrono::steady_clock::now() - pack_read_t0)
+                                         .count());
+  TexpackApplyBuilt(texture, key, std::move(res), std::move(upload), fp, w, h, texpack_levels, hash, file_id,
+                    dir, guest, gsize, read_us);
+}
+
+// The render-thread half, shared by the sync path and the worker results.
+void D3D12TextureCache::TexpackApplyBuilt(D3D12Texture& texture, const TextureKey& key,
+                                          Microsoft::WRL::ComPtr<ID3D12Resource> res,
+                                          Microsoft::WRL::ComPtr<ID3D12Resource> upload,
+                                          const D3D12_PLACED_SUBRESOURCE_FOOTPRINT& fp, uint32_t w,
+                                          uint32_t h, uint32_t levels, uint32_t hash, uint64_t file_id,
+                                          const std::string& dir, const uint8_t* guest, uint32_t gsize,
+                                          uint64_t read_us) {
+  command_processor_.NoteTexpackReplace(read_us);
   DeferredCommandList& cl = command_processor_.GetDeferredCommandList();
   D3D12_TEXTURE_COPY_LOCATION srcloc = {}, dstloc = {};
   srcloc.pResource = upload.Get();
@@ -2818,8 +3652,12 @@ void D3D12TextureCache::ApplyTexpackResolve(D3D12Texture& texture, const Texture
   dstloc.Type = D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX;
   dstloc.SubresourceIndex = 0;
   cl.D3DCopyTextureRegion(&dstloc, 0, 0, 0, &srcloc, nullptr);
-  TexpackGenerateMips(res.Get(), w, h, texpack_levels);
-  retire_current();  // drop the previous variant's resource, if any
+  TexpackGenerateMips(res.Get(), w, h, levels);
+  if (texture.texpack_resource()) {  // drop the previous variant's resource, if any
+    g_texpack_uploads.emplace_back(command_processor_.GetCurrentSubmission(),
+                                   texture.DetachTexpackResource());
+    texture.ClearSRVDescriptors();
+  }
   g_texpack_uploads.emplace_back(command_processor_.GetCurrentSubmission(), std::move(upload));
   texture.SetTexpackResource(res, hash);
   texture.SetTexpackSamples(guest, gsize, TexpackNowSeconds());
@@ -2843,10 +3681,178 @@ void D3D12TextureCache::ApplyTexpackResolve(D3D12Texture& texture, const Texture
   }
 }
 
+// [texpack-async] Results built on the pack worker, applied on the render
+// thread at the start of a submission (the deferred command list was just
+// reset, so the copies and mip passes land in this submission).
+void D3D12TextureCache::TexpackAsyncDrain() {
+  g_tpa_frame_creates.store(0, std::memory_order_relaxed);   // [texpack-async] a new frame: the burst hold ends
+  g_tpa_hold.store(false, std::memory_order_relaxed);
+  {  // [texbase-precreate] the shape record reaches the disk every 500 creations too, not only at a chapter change
+    bool flush = false;
+    {
+      std::lock_guard<std::mutex> lock(g_txs_mutex);
+      if (g_txs_since_flush >= 500) { g_txs_since_flush = 0; flush = true; }
+    }
+    if (flush) TexbaseFlush();
+    static uint32_t last_taken = 0;
+    const uint32_t taken = g_txs_taken.load();
+    if (taken / 250 != last_taken / 250) {
+      last_taken = taken;
+      REXLOG_INFO("[texbase] pre-create: {} textures took a ready-made resource, {} created by the worker so far",
+                  taken, g_txs_created.load());
+    }
+  }
+  // Seed the spare pool once per pack, as soon as the index exists: the shape
+  // histogram is snapshotted here (render thread, under the index mutex) and
+  // the header reads happen on the worker.
+  if (REXCVAR_GET(texture_pack_async)) {
+    const std::string dir = rex::cvar::Query<std::string>("texture_pack_path");
+    if (!dir.empty() && dir != g_tpa_seed_dir) {
+      std::vector<TexpackSeedShape> shapes;
+      {
+        std::lock_guard<std::mutex> lock(g_texpack_mutex);
+        if (g_texpack_index_dir == dir) {
+          for (const auto& kv : g_texpack_shape_count) {
+            auto sh = g_texpack_by_shape.find(kv.first);
+            if (sh != g_texpack_by_shape.end()) shapes.push_back({sh->second.first, kv.second});
+          }
+        }
+      }
+      if (!shapes.empty()) {
+        std::lock_guard<std::mutex> lock(g_tpa_mutex);
+        g_tpa_seed_dir = dir;
+        g_tpa_device = command_processor_.GetD3D12Provider().GetDevice();
+        g_tpa_heap_flags = command_processor_.GetD3D12Provider().GetHeapFlagCreateNotZeroed();
+        g_tpa_spare_budget = uint64_t(std::max(0, REXCVAR_GET(texture_pack_spare_mb))) << 20;
+        g_tpa_seed = std::move(shapes);
+        g_tpa_seed_pending = true;
+        if (g_tpa_threads.empty() && !g_tpa_stop)
+          for (int i = 0; i < 2; ++i) g_tpa_threads.emplace_back(TexpackWorkerMain);
+        g_tpa_cv.notify_all();
+      }
+    }
+  }
+  std::deque<TexpackDone> done;
+  {
+    std::lock_guard<std::mutex> lock(g_tpa_mutex);
+    const int cap = REXCVAR_GET(texture_pack_apply_per_frame);
+    if (cap <= 0 || int(g_tpa_done.size()) <= cap) {
+      done.swap(g_tpa_done);
+    } else {
+      // The oldest results first; the rest stay queued for the next frames.
+      for (int i = 0; i < cap; ++i) {
+        done.push_back(std::move(g_tpa_done.front()));
+        g_tpa_done.pop_front();
+      }
+    }
+  }
+  if (done.empty()) return;
+  const uint64_t completed = command_processor_.GetCompletedSubmission();
+  g_texpack_uploads.erase(
+      std::remove_if(g_texpack_uploads.begin(), g_texpack_uploads.end(),
+                     [completed](const auto& e) { return e.first <= completed; }),
+      g_texpack_uploads.end());
+  ReleaseRetiredDescriptors(completed);
+  const std::string dir_now = rex::cvar::Query<std::string>("texture_pack_path");
+  static std::atomic<uint32_t> dropped{0};
+  for (TexpackDone& d : done) {
+    if (d.job.prebuild) {
+      // [texpack-prebuild] Record the copy and the mip pass now (the deferred
+      // list was just reset), then keep the finished resource by file.
+      if (!d.ok) {
+        std::lock_guard<std::mutex> lock(g_tpa_mutex);
+        if (d.job.w && d.job.h) g_tpa_prebuilt_bytes -= TexpackPrebuiltBytes(d.job.w, d.job.h);
+        continue;
+      }
+      DeferredCommandList& cl = command_processor_.GetDeferredCommandList();
+      D3D12_TEXTURE_COPY_LOCATION srcloc = {}, dstloc = {};
+      srcloc.pResource = d.upload.Get();
+      srcloc.Type = D3D12_TEXTURE_COPY_TYPE_PLACED_FOOTPRINT;
+      srcloc.PlacedFootprint = d.fp;
+      dstloc.pResource = d.res.Get();
+      dstloc.Type = D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX;
+      dstloc.SubresourceIndex = 0;
+      cl.D3DCopyTextureRegion(&dstloc, 0, 0, 0, &srcloc, nullptr);
+      TexpackGenerateMips(d.res.Get(), d.job.w, d.job.h, d.job.levels);
+      g_texpack_uploads.emplace_back(command_processor_.GetCurrentSubmission(), std::move(d.upload));
+      TexpackPrebuilt pre;
+      pre.res = std::move(d.res);
+      pre.w = d.job.w;
+      pre.h = d.job.h;
+      pre.hash = d.job.hash;
+      pre.bytes = TexpackPrebuiltBytes(d.job.w, d.job.h);
+      pre.stage = d.job.stage;
+      uint32_t done_now = 0, listed = 0;
+      {
+        std::lock_guard<std::mutex> lock(g_tpa_mutex);
+        if (d.job.stage == g_tpa_prebuild_stage) {
+          g_tpa_prebuilt[TexpackFileKey(d.job.file_id, d.job.hash)] = std::move(pre);
+          done_now = ++g_tpa_prebuild_done;
+          listed = g_tpa_prebuild_listed;
+        } else {
+          g_tpa_prebuilt_bytes -= pre.bytes;   // a stage that is gone: drop it
+        }
+      }
+      if (done_now && (done_now == listed - g_tpa_prebuild_skipped.load() || done_now % 500 == 0))
+        REXLOG_INFO("[texpack] prebuild: {} of {} stage files GPU-ready ({} MB), {} skipped by budget or header",
+                    done_now, listed, g_tpa_prebuilt_bytes >> 20, g_tpa_prebuild_skipped.load());
+      continue;
+    }
+    --g_tpa_in_flight;
+    D3D12Texture* texture = static_cast<D3D12Texture*>(d.job.texture);
+    if (!TexpackLive(texture)) {  // the texture died while its replacement was built
+      ++dropped;
+      continue;
+    }
+    if (texture->texpack_pending_hash() != d.job.hash) {  // superseded by newer content
+      ++dropped;
+      continue;
+    }
+    texture->set_texpack_pending_hash(0);
+    {
+      static uint32_t last = 0;
+      const uint32_t used = g_tpa_spares_used.load(), missed = g_tpa_spares_missed.load();
+      if ((used + missed) / 250 != last / 250) {
+        last = used + missed;
+        REXLOG_INFO("[texpack] spare pool: {} replacements took a spare, {} created their own; worker held {} ms "
+                    "for the render thread's creation bursts; prebuilt hits {} misses {}",
+                    used, missed, g_tpa_held_ms.load(), g_tpa_prebuilt_hits.load(), g_tpa_prebuilt_misses.load());
+      }
+    }
+    if (!d.ok || dir_now.empty() || dir_now != d.job.dir) {  // the build failed, or the pack went away
+      ++dropped;
+      continue;
+    }
+    const TextureKey& key = texture->key();
+    const uint8_t* guest = shared_memory().memory().TranslatePhysical<const uint8_t*>(
+        d.job.base_page << 12);
+    const uint32_t gsize = texture->GetGuestBaseSize();
+    TexpackApplyBuilt(*texture, key, std::move(d.res), std::move(d.upload), d.fp, d.job.w, d.job.h,
+                      d.job.levels, d.job.hash, d.job.file_id, d.job.dir, guest, gsize, d.read_us);
+  }
+  {
+    static uint32_t last_dropped = 0;
+    const uint32_t n = dropped.load();
+    if (n != last_dropped && (n % 100 == 0 || last_dropped == 0)) {
+      last_dropped = n;
+      REXLOG_INFO("[texpack] {} worker results dropped (texture gone, superseded, or the pack switched)", n);
+    }
+  }
+}
+
 uint64_t g_prof_tex_loads = 0, g_prof_tex_load_bytes = 0, g_prof_tex_loads_scaled = 0;   // NATIVE PATCH: [gpu prof]
 
 bool D3D12TextureCache::LoadTextureDataFromResidentMemoryImpl(Texture& texture, bool load_base,
                                                               bool load_mips) {
+  const auto t0 = std::chrono::steady_clock::now();
+  const bool r = LoadTextureDataFromResidentMemoryImplBody(texture, load_base, load_mips);
+  command_processor_.NoteTextureLoadTime(uint64_t(
+      std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now() - t0).count()));
+  return r;
+}
+
+bool D3D12TextureCache::LoadTextureDataFromResidentMemoryImplBody(Texture& texture, bool load_base,
+                                                                  bool load_mips) {
   D3D12CommandProcessor::GpuCatScope gpu_cat(command_processor_, D3D12CommandProcessor::kGpuCatTexLoad);   // NATIVE PATCH
   {
     extern uint64_t g_prof_tex_loads, g_prof_tex_load_bytes, g_prof_tex_loads_scaled;

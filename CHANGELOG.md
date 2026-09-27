@@ -3,6 +3,33 @@
 Versions are cut with `tools/make_release.py`, which refuses to package a
 version that has no section here.
 
+## v1.1.0 - 2026-09-27
+
+### Added - the native renderer, in the game's own window
+
+A new settings row, "Native renderer" (on by default, restart required),
+runs the game's graphics on the renderer built into `ng2.exe`: the plugin
+still parses the console's command stream, but every frame is drawn by the
+copy of its Direct3D 12 backend compiled into the program, on the same GPU
+device and queue, and handed to the window's presenter through the plugin's
+swap - so the picture, the ultrawide fill and pillarbox, the letterbox, the
+F10 menu, the on-screen readouts and the controller all stay in the one
+window exactly as before. Turning the row off returns to the v1.0.25 plugin
+path.
+
+This is a test cut of the native path: the same frames as the plugin path
+(the two backends are the same code), with the plugin's own GPU work skipped.
+Everything shipped through v1.0.25 rides along: the enhanced-texture pack
+with its stage warming, GPU-ready prebuild and per-chapter pre-creation (the
+prebuild's VRAM budget now follows the graphics card - 30% of its local
+memory, 512 MB to 4 GB - on top of the size cap, for smaller cards), the
+ultrawide fades, the 60 fps path, the F10 settings as tagged by the census.
+
+The 5-second `[ngpu] ONE WINDOW` log line counts the frames the native
+backend handed over and the frames the plugin presented from them; the
+`[ngpu] PACK COUNTERS` line shows the pack replacing textures under the
+native path.
+
 ## v1.0.25 - 2026-09-26
 
 ### Fixed - the enhanced-textures indicator said the pack was idle while it was working

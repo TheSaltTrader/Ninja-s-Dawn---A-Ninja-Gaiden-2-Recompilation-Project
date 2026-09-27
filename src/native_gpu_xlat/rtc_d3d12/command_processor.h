@@ -57,6 +57,11 @@ namespace rex::graphics::ngpu_d3d12 {
 class D3D12CommandProcessor : public CommandProcessor {
   friend class ::ng2::ngpu::backend::Driver;   // NATIVE PATCH
  public:
+  // NG2 PATCH (2026-09-27): the [hitch] timing hooks the fork's texture cache calls since v1.0.25; this copy does
+  // not print the plugin's [hitch] line, so they are no-ops here.
+  void NoteTextureCreate(uint64_t) {}
+  void NoteTextureLoadTime(uint64_t) {}
+  void NoteTexpackReplace(uint64_t) {}
   // [gpu prof] (NATIVE PATCH, ngpu_gpu_prof) GPU time by category: a timestamp is recorded into the deferred list
   // whenever the category changes; the submit thread resolves them and reports ms per frame per category.
   enum GpuCat : uint8_t { kGpuCatOther, kGpuCatDraw, kGpuCatTexLoad, kGpuCatUpload, kGpuCatResolve, kGpuCatRtXfer,

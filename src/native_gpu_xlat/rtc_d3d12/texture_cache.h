@@ -1,4 +1,4 @@
-// VENDORED from rexglue-src 23ace0b:include/rex/graphics/d3d12/texture_cache.h - systematic renames only (see vendor_rtc_d3d12.py / ORIGIN.txt):
+// VENDORED from rexglue-src ng2 fork f6fc6d4c:include/rex/graphics/d3d12/texture_cache.h - systematic renames only (see vendor_rtc_d3d12.py / ORIGIN.txt):
 // namespaces d3d12 -> ngpu_d3d12, plugin headers -> rtc_d3d12/facade.h, cvars -> plugin registry reads (0 bool, 0 string, 0 int).
 #include <string>
 #include <cstdint>
@@ -186,10 +186,14 @@ class D3D12TextureCache final : public TextureCache {
   uint32_t GetMaxHostTextureDepthOrArraySize(xenos::DataDimension dimension) const override;
 
   std::unique_ptr<Texture> CreateTexture(TextureKey key) override;
+  // [hitch] The creation itself; the override above times it.
+  std::unique_ptr<Texture> CreateTextureBody(TextureKey key);
 
   // This binds pipelines, allocates descriptors, and copies!
   bool LoadTextureDataFromResidentMemoryImpl(Texture& texture, bool load_base,
                                              bool load_mips) override;
+  // [hitch] The load itself; the override above times it.
+  bool LoadTextureDataFromResidentMemoryImplBody(Texture& texture, bool load_base, bool load_mips);
 
   void UpdateTextureBindingsImpl(uint32_t fetch_constant_mask) override;
 
@@ -314,6 +318,10 @@ class D3D12TextureCache final : public TextureCache {
     // missing; this is only what the sampler reads when a pack file matched.
     ID3D12Resource* texpack_resource() const { return texpack_resource_.Get(); }
     uint32_t texpack_content_hash() const { return texpack_content_hash_; }
+    // [texpack-async] The content hash of a replacement being built on the pack
+    // worker (0 = none). A result whose hash no longer matches is dropped.
+    uint32_t texpack_pending_hash() const { return texpack_pending_hash_; }
+    void set_texpack_pending_hash(uint32_t h) { texpack_pending_hash_ = h; }
     // Eight 8-byte samples of the guest bytes the replacement was resolved
     // from, spread across the base level, and when they were last checked.
     void SetTexpackSamples(const uint8_t* guest, uint32_t size, double now) {
@@ -359,6 +367,7 @@ class D3D12TextureCache final : public TextureCache {
     std::string texpack_path_;
     Microsoft::WRL::ComPtr<ID3D12Resource> texpack_resource_;  // resolve-at-load 4x
     uint32_t texpack_content_hash_ = 0;
+    uint32_t texpack_pending_hash_ = 0;  // [texpack-async] a replacement in flight
     uint64_t texpack_samples_[8] = {};
     double texpack_verified_at_ = 0.0;
     uint32_t srv_generation_ = 0;
@@ -493,6 +502,17 @@ class D3D12TextureCache final : public TextureCache {
   // [texpack] resolve-at-load: build/refresh/drop the separate 4x resource the
   // view samples, from the bytes in memory now.
   void ApplyTexpackResolve(D3D12Texture& texture, const TextureKey& key);
+  // [texpack-async] The render-thread half of a replacement once its resources
+  // exist and the file is in the upload buffer: record the copy and the mip
+  // pass, swap the view. Called by the sync path directly and by
+  // TexpackAsyncDrain for results built on the pack worker.
+  void TexpackApplyBuilt(D3D12Texture& texture, const TextureKey& key,
+                         Microsoft::WRL::ComPtr<ID3D12Resource> res,
+                         Microsoft::WRL::ComPtr<ID3D12Resource> upload,
+                         const D3D12_PLACED_SUBRESOURCE_FOOTPRINT& fp, uint32_t w, uint32_t h,
+                         uint32_t levels, uint32_t hash, uint64_t file_id, const std::string& dir,
+                         const uint8_t* guest, uint32_t gsize, uint64_t read_us);
+  void TexpackAsyncDrain();
   // Once per half second per bound replaced texture: the samples against the
   // memory; a change invalidates the range as a CPU write would.
   void TexpackReverify(D3D12Texture& texture);

@@ -2584,7 +2584,11 @@ void D3D12CommandProcessor::IssueSwap(uint32_t frontbuffer_ptr, uint32_t frontbu
     // NG2_UW_NOPAUSE=1 to fall back to the pure draw-count path below.
     static const uint32_t kNg2PauseFlagA = 0x84C29930u;
     static const uint32_t kNg2PauseFlagB = 0x84C39A4Cu;
-    static const bool s_uw_use_pause = std::getenv("NG2_UW_NOPAUSE") == nullptr;
+    // OFF by default since v1.0.25 (same edit as the plugin's, uw_fade_detector.py): with the weapons menu open
+    // the two flags toggle at ~1 Hz, so the mode flipped 1/2/1/2 and the presenter swung between full width and
+    // pillarbox for as long as the menu stayed up; the player asked for the full-width fade on Start/Select. Set
+    // NG2_UW_PAUSE_16_9=1 for the v1.0.19-v1.0.24 behaviour.
+    static const bool s_uw_use_pause = std::getenv("NG2_UW_PAUSE_16_9") != nullptr;
     const int cnt3d = g_ng2_persp_this_frame;
     const int cnt2d = g_ng2_2d_this_frame;
     const int cnt2d_solid = g_ng2_2d_solid_this_frame;  // [ng2-fade] diagnostic
@@ -2623,7 +2627,9 @@ void D3D12CommandProcessor::IssueSwap(uint32_t frontbuffer_ptr, uint32_t frontbu
     // a fade fill the width cleanly would need to widen that 2D fade layer without
     // touching the HUD/menus (which must stay 16:9) - a dedicated change left as
     // future work. See [[ng2-ultrawide-fov]].
-    const bool frame_gameplay = has_world && !pause_menu;
+    // A frame that draws the solid fade counts as ultrawide even with no world behind it (v1.0.25; the fade is
+    // the only textureless 2D draw), so the fades that bracket a video or a scene change cover the full width.
+    const bool frame_gameplay = (has_world || cnt2d_solid > 0) && !pause_menu;
     static bool s_uw_gameplay = false;
     static int s_uw_gp_streak = 0;
     static int s_uw_menu_streak = 0;

@@ -3,7 +3,7 @@
 #include <string>
 #include <cstdint>
 #include <rex/logging.h>
-namespace ng2::ngpu::xlat { bool PluginBool(const char*, bool); std::string PluginString(const char*, const char*); int32_t PluginInt(const char*, int32_t); double PluginDouble(const char*, double); }
+namespace ng2::ngpu::xlat { bool PluginBool(const char*, bool); std::string PluginString(const char*, const char*); int32_t PluginInt(const char*, int32_t); double PluginDouble(const char*, double); void RefreshInt(const char*, int32_t&); void RefreshBool(const char*, bool&); void RefreshString(const char*, std::string&); }
 /**
  ******************************************************************************
  * Xenia : Xbox 360 Emulator Research Project                                 *
@@ -43,7 +43,7 @@ namespace ng2::ngpu::xlat { bool PluginBool(const char*, bool); std::string Plug
 #include <rex/system/kernel_state.h>
 #include <rex/system/user_module.h>
 
-bool& FLAGS_vsync_storage_() { static bool s = ::ng2::ngpu::xlat::PluginBool("vsync", true); return s; }
+bool& FLAGS_vsync_storage_() { static bool s = ::ng2::ngpu::xlat::PluginBool("vsync", true); ::ng2::ngpu::xlat::RefreshBool("vsync", s); return s; }   // NATIVE PATCH: [live cvars]
 
 bool& FLAGS_clear_memory_page_state_storage_() { static bool s = ::ng2::ngpu::rtc::NativeOwnsGuestMemory() ? ::ng2::ngpu::xlat::PluginBool("clear_memory_page_state", true) : false; return s; }   // NATIVE FORCED unless the native backend owns guest memory (plugin gpu_offload_to_native)
 

@@ -1,3 +1,6 @@
+#include <chrono>
+#include <unordered_map>
+#include <mutex>
 // Definitions the vendored SDK shader translator links against that live in
 // OTHER plugin translation units (not vendored): two cvars from
 // src/graphics/flags.cpp and one constant table from src/graphics/util/draw.cpp
@@ -53,6 +56,36 @@ int32_t PluginInt(const char* name, int32_t fallback) {
   if (!v.empty()) { try { r = std::stoi(v); } catch (...) {} }
   REXLOG_INFO("[ngpu] vendored SDK cvar {} = {} (plugin registry '{}')", name, r, v);
   return r;
+}
+// NATIVE PATCH: [live cvars] (2026-09-27): every vendored FLAGS_*_storage_ is a STARTUP SNAPSHOT of the plugin
+// registry. The app changes a few plugin cvars while the game runs (texture_pack_chapter at every region load, the F10
+// dump / pack path / vsync), and the native backend never saw them: texture_pack_chapter read 0 forever, so no stage
+// change, no stage warming, no stage lists and no texture-pack prebuild on the native path. These re-read the registry
+// quietly, at most every 250 ms per cvar. Only for cvars the APP writes - never for ones the backend itself publishes.
+static bool RefreshDue(const void* key) {
+  static std::mutex m;
+  static std::unordered_map<const void*, int64_t> last;
+  const int64_t now = std::chrono::duration_cast<std::chrono::milliseconds>(
+      std::chrono::steady_clock::now().time_since_epoch()).count();
+  std::lock_guard<std::mutex> lock(m);
+  int64_t& t = last[key];
+  if (t && now - t < 250) return false;
+  t = now;
+  return true;
+}
+void RefreshInt(const char* name, int32_t& v) {
+  if (!RefreshDue(&v)) return;
+  const std::string s = rex::cvar::GetFlagByName(name);
+  if (!s.empty()) { try { v = std::stoi(s); } catch (...) {} }
+}
+void RefreshBool(const char* name, bool& v) {
+  if (!RefreshDue(&v)) return;
+  const std::string s = rex::cvar::GetFlagByName(name);
+  if (!s.empty()) v = (s == "true" || s == "1");
+}
+void RefreshString(const char* name, std::string& v) {
+  if (!RefreshDue(&v)) return;
+  v = rex::cvar::GetFlagByName(name);
 }
 double PluginDouble(const char* name, double fallback) {
   const std::string v = rex::cvar::GetFlagByName(name);

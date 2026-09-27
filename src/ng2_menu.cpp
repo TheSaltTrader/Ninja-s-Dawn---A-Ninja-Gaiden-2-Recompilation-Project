@@ -593,6 +593,14 @@ bool DrawSettings(Ng2Settings& s, const PageOptions& opts) {
     RestartTag();  // always: the row is restart-bound whether or not it is editable (2026-09-27)
     ImGui::EndDisabled();
 
+    RowStart("Native renderer",
+             "Draws the game with the native renderer built into this program: "
+             "the console's drawing commands are translated once and drawn "
+             "directly, in this window, instead of going through the plugin's "
+             "own GPU path. Off = the v1.0.25 plugin path. Restart required.");
+    changed |= ImGui::Checkbox("##nativegpu", &s.native_renderer);
+    RestartTag();  // ngpu_backend and gpu_offload_to_native are read once at startup (ng2_tuning.h)
+
     RowStart("Fuzzy alpha test",
              "Compares alpha-test values approximately rather than exactly. The "
              "plugin offers this specifically to stop flickering on NVIDIA "

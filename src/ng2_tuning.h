@@ -220,27 +220,33 @@ struct Ng2Tuning {
       out.push_back({"readback_resolve", rb,
                      "[test lever NG2_READBACK] resolve readback: none/fast/some/full"});
     }
-    // --- The native-GPU backend transplant (2026-09-26) -----------------------
+    // --- The native renderer (2026-09-26 transplant; a settings row since v1.1.0) ---
     //
-    //   NG2_NATIVE_GPU=1      ngpu_backend=true: the plugin's callbacks feed the
-    //       plugin's own D3D12 backend vendored in-app, presenting on the native
-    //       window beside the game's (lockstep: both render; compare them).
-    //   NG2_NATIVE_OFFLOAD=1  gpu_offload_to_native=true (plugin): the plugin
-    //       draws nothing and the native backend is the only GPU. The game's
-    //       own window goes black - expected, not a defect.
+    //   Settings row "Native renderer" (s.native_renderer, ON by default):
+    //       ngpu_backend=true (exe): the plugin's draw / swap callbacks feed the
+    //       copy of its D3D12 backend built into this program; and
+    //       gpu_offload_to_native=true (plugin): the plugin draws nothing itself -
+    //       the native backend is the only GPU, on the plugin's device, and each
+    //       frame goes to the game's own window through the runtime presenter
+    //       (ONE WINDOW, ng2_ngpu_bridge.cpp). Both cvars are read once at
+    //       startup, so the row is restart-bound.
+    //   NG2_NATIVE_GPU=1|0    overrides the row (1 on, 0 off).
+    //   NG2_NATIVE_OFFLOAD=0  lockstep for diagnosis: the plugin keeps drawing too
+    //       and the native backend presents on its own window beside the game's.
     //   NG2_TUNE=a=b;c=d      any cvars, for experiments (Fable II's FABLE2_TUNE);
     //       items separated by ';' - a ',' would make the whole text one name.
-    //
-    // Levers, not settings, until the native path passes the release gate
-    // (claudecode/RELEASE_GATE.md); then they graduate to a settings row.
-    if (const char* ng = std::getenv("NG2_NATIVE_GPU"); ng && *ng && ng[0] != '0') {
-      out.push_back({"ngpu_backend", "true",
-                     "[test lever NG2_NATIVE_GPU] the native backend transplant (exe cvar)"});
-      if (const char* off = std::getenv("NG2_NATIVE_OFFLOAD"); off && *off && off[0] != '0') {
-        out.push_back({"gpu_offload_to_native", "true",
-                       "[test lever NG2_NATIVE_OFFLOAD] the plugin skips its GPU work; the native "
-                       "backend is the only GPU (plugin cvar)"});
-      }
+    {
+      const char* ng = std::getenv("NG2_NATIVE_GPU");
+      const char* off = std::getenv("NG2_NATIVE_OFFLOAD");
+      const bool offload_ok = !(off && *off && off[0] == '0');
+      out.push_back({"ngpu_backend",
+                     ((ng && *ng) ? ng[0] != '0' : s.native_renderer) ? "true" : "false",
+                     "Native renderer (settings row; NG2_NATIVE_GPU=1|0 overrides): the native backend transplant "
+                     "(exe cvar)"});
+      out.push_back({"gpu_offload_to_native",
+                     (((ng && *ng) ? ng[0] != '0' : s.native_renderer) && offload_ok) ? "true" : "false",
+                     "Native renderer: the plugin skips its own GPU work; the native backend is the only GPU "
+                     "(plugin cvar; NG2_NATIVE_OFFLOAD=0 keeps the plugin drawing too)"});
     }
     if (const char* tune = std::getenv("NG2_TUNE"); tune && *tune) {
       static std::deque<std::string> owned;   // Entry holds const char*; these must outlive it
