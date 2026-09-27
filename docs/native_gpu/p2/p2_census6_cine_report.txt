@@ -1,0 +1,84 @@
+P2 CENSUS: 60 frames (4800..4859), 424159 call ranges (attributing by field cur: 46326 usable, cur2: 20), 899526 packets, 93249 draws
+METRIC 1  unattributed packets: 0 of 899526 (0.0%)   unattributed draws: 0 of 93249 (0.0%)
+METRIC 2  draws not issued by a native front end: n/a (no front end yet; the bridge draws them all)
+          attributed through the last-writer map (buffers recorded before the window and replayed): 366813 packets, top: sub_8373CB08=263853, sub_8373C720=56498, sub_8373BD50=18819, sub_8373D570=18438
+
+by producer (whole run): packets  draws  producer
+    581660   26577  sub_8373CB08 lib sites=6
+    102211   57048  via INDIRECT_BUFFER issued by sub_8373BC68
+     89364    3518  sub_8373C720 lib sites=3
+     50613    1777  sub_8373D570 lib sites=43 IM_LOAD_IMMEDIA
+     35585       0  sub_8373BD50 lib sites=49
+      9836       0  sub_8373BC68 lib sites=14
+      7864    1966  ENGINE INLINE after sub_8373BD50
+      7133    1968  sub_837452C0 lib sites=1 VdGetSystemComma
+      6180     240  sub_83739188 lib sites=1
+      2048       0  sub_8373C1F0 lib sites=4
+      1860       0  sub_83737180 lib sites=29
+       894       0  sub_8373A3D0 lib sites=6
+       720       0  sub_83744D90 lib sites=1
+
+unattributed packets by type/opcode:
+
+per frame: frame  packets  draws  unattributed(packets/draws)  type0/2/3  bins(draws by bin select)
+    4800    13986   1511       0/0      7253/3139/3594  ffffffff:1511
+    4801    13929   1509       0/0      7219/3124/3586  ffffffff:1509
+    4802    13937   1509       0/0      7225/3123/3589  ffffffff:1509
+    4803    13956   1510       0/0      7240/3123/3593  ffffffff:1510
+    4804    13910   1508       0/0      7218/3106/3586  ffffffff:1508
+    4805    13852   1506       0/0      7184/3091/3577  ffffffff:1506
+    4806    13954   1510       0/0      7258/3111/3585  ffffffff:1510
+    4807    15044   1555       0/0      7867/3458/3719  ffffffff:1555
+    4808    15052   1555       0/0      7873/3457/3722  ffffffff:1555
+    4809    15016   1552       0/0      7856/3456/3704  ffffffff:1552
+    4810    15143   1557       0/0      7932/3491/3720  ffffffff:1557
+    4811    15422   1568       0/0      8080/3584/3758  ffffffff:1568
+    4812    15683   1578       0/0      8228/3662/3793  ffffffff:1578
+    4813    15676   1577       0/0      8208/3672/3796  ffffffff:1577
+    4814    15758   1580       0/0      8257/3695/3806  ffffffff:1580
+    4815    15775   1581       0/0      8265/3704/3806  ffffffff:1581
+    4816    15782   1581       0/0      8270/3703/3809  ffffffff:1581
+    4817    15727   1579       0/0      8237/3688/3802  ffffffff:1579
+    4818    15662   1576       0/0      8201/3663/3798  ffffffff:1576
+    4819    15634   1575       0/0      8180/3660/3794  ffffffff:1575
+    4820    15590   1573       0/0      8158/3643/3789  ffffffff:1573
+    4821    15351   1564       0/0      8026/3572/3753  ffffffff:1564
+    4822    14390   1525       0/0      7488/3271/3631  ffffffff:1525
+    4823    14203   1518       0/0      7384/3216/3603  ffffffff:1518
+    4824    15280   1562       0/0      8003/3542/3735  ffffffff:1562
+    4825    15225   1560       0/0      7969/3530/3726  ffffffff:1560
+    4826    15391   1566       0/0      8058/3575/3758  ffffffff:1566
+    4827    15503   1571       0/0      8123/3615/3765  ffffffff:1571
+    4828    15765   1581       0/0      8269/3694/3802  ffffffff:1581
+    4829    15988   1590       0/0      8389/3767/3832  ffffffff:1590
+    4830    16487   1618       0/0      8686/3872/3929  ffffffff:1618
+    4831    16527   1620       0/0      8708/3889/3930  ffffffff:1620
+    4832    16539   1620       0/0      8714/3890/3935  ffffffff:1620
+    4833    16506   1619       0/0      8694/3883/3929  ffffffff:1619
+    4834    16487   1618       0/0      8686/3874/3927  ffffffff:1618
+    4835    16448   1617       0/0      8665/3868/3915  ffffffff:1617
+    4836    16454   1617       0/0      8672/3864/3918  ffffffff:1617
+    4837    16246   1608       0/0      8541/3810/3895  ffffffff:1608
+    4838    16056   1600       0/0      8435/3745/3876  ffffffff:1600
+    4839    14852   1552       0/0      7759/3370/3723  ffffffff:1552
+    4840    14681   1545       0/0      7660/3322/3699  ffffffff:1545
+    4841    14543   1540       0/0      7583/3283/3677  ffffffff:1540
+    4842    14449   1536       0/0      7533/3250/3666  ffffffff:1536
+    4843    14364   1533       0/0      7485/3227/3652  ffffffff:1533
+    4844    14372   1533       0/0      7491/3226/3655  ffffffff:1533
+    4845    14364   1533       0/0      7485/3227/3652  ffffffff:1533
+    4846    14268   1529       0/0      7435/3194/3639  ffffffff:1529
+    4847    14210   1527       0/0      7401/3179/3630  ffffffff:1527
+    4848    14210   1526       0/0      7404/3176/3630  ffffffff:1526
+    4849    14176   1525       0/0      7383/3169/3624  ffffffff:1525
+    4850    14185   1525       0/0      7389/3169/3627  ffffffff:1525
+    4851    14176   1525       0/0      7383/3169/3624  ffffffff:1525
+    4852    14185   1525       0/0      7389/3169/3627  ffffffff:1525
+    4853    14176   1525       0/0      7383/3169/3624  ffffffff:1525
+    4854    14183   1525       0/0      7390/3168/3625  ffffffff:1525
+    4855    14176   1525       0/0      7383/3169/3624  ffffffff:1525
+    4856    14185   1525       0/0      7390/3168/3627  ffffffff:1525
+    4857    14126   1523       0/0      7355/3153/3618  ffffffff:1523
+    4858    14160   1524       0/0      7374/3160/3626  ffffffff:1524
+    4859    14151   1524       0/0      7369/3161/3621  ffffffff:1524
+json -> D:/ng2_frameinterp/ng2recomp-worktree/docs/native_gpu/p2/p2_census6_cine.json
