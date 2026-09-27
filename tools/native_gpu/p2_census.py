@@ -34,7 +34,15 @@ ap.add_argument("--field", choices=("auto", "cur", "cur2"), default="auto",
                 help="which cursor field's ranges attribute (auto: the one that attributes more)")
 ap.add_argument("--window", type=int, default=1,
                 help="also look this many frames BACK for the producing call (the parser runs behind the guest)")
+ap.add_argument("--ring", default="",
+                help="the primary ring as BASE:SIZE (hex, from the plugin's 'InitializeRingBuffer ptr ... -> size' line): "
+                     "packets in it with no producer are the library's kick-off writer, which bypasses the device cursor")
 args = ap.parse_args()
+ring_base, ring_size = 0, 0
+if args.ring:
+    rb, rs = args.ring.split(":")
+    ring_base, ring_size = int(rb, 16) & 0x1FFFFFFF, int(rs, 16)
+RING = 400000          # producer key: "PRIMARY RING (library kick-off writer)"
 
 PHYS = 0x1FFFFFFF
 OPCODE_NAMES = {0x22: "DRAW_INDX", 0x36: "DRAW_INDX_2", 0x27: "IM_LOAD", 0x2B: "IM_LOAD_IMMEDIATE", 0x3B: "INVALIDATE_STATE",
@@ -185,6 +193,10 @@ def census(field):
                     k = bisect.bisect_left(starts[0], addr)
                     if k < len(starts[0]) and starts[0][k] - addr <= INLINE_GAP:
                         hook = INLINE_BEFORE + starts[1][k]
+            if hook is None and ring_size and ring_base <= addr < ring_base + ring_size:
+                # The primary ring itself: the library's kick-off writes the INDIRECT_BUFFER calls and the swap
+                # there through the ring's own write pointer, not the device cursor (NG2: 6 IB packets per frame).
+                hook = RING
             key = hook if hook is not None else -1
             if ptype == 3 and ((header >> 8) & 0x7F) == 0x3F:
                 last_ib_key = key if (key != -1 and key < INLINE) else -1
@@ -216,6 +228,8 @@ per_frame, tot, tot_draws, unattr_ops, unattr_draw_ops = results[best]
 def name(h):
     if h == -1:
         return "UNATTRIBUTED"
+    if h == RING:
+        return "PRIMARY RING (library kick-off writer)"
     if h >= IBVIA:
         return "via INDIRECT_BUFFER issued by %s" % hooks[h - IBVIA][0]
     if h >= INLINE_BEFORE:
