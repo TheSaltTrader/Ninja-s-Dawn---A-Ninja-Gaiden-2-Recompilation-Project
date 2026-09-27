@@ -98,6 +98,11 @@ uint64_t g_fe_bin_mask = ~0ull, g_fe_bin_select = ~0ull;
 std::atomic<uint64_t> g_fe_predicated_skips{0};
 std::atomic<bool> g_fe_kick_mode{false};
 std::atomic<uint64_t> g_fe_kicks{0};
+// Early stops of a decode window, by reason and place (ring / inside an INDIRECT_BUFFER): a draw the front end
+// never sees shifts that address's FIFO by one execution for good (leg ng2_076: 15.64 M seen vs 15.72 M bridge
+// draws, and the template draw's constants paired one animation step apart).
+std::atomic<uint64_t> g_fe_stop_unfilled_ring{0}, g_fe_stop_unfilled_ib{0}, g_fe_stop_short_ring{0}, g_fe_stop_short_ib{0}, g_fe_ib_unreadable{0}, g_fe_ib_deep{0};
+std::atomic<int> g_fe_stop_logged{0};
 
 // Decodes [body, body + n) whose first byte lives at guest physical phys_base; returns the bytes consumed (a packet
 // that runs past the end, or an unfilled 0xFFFFFFFF header, stops the decode there - the next call resumes).
@@ -113,10 +118,22 @@ uint32_t FeDecode(const uint8_t* body, uint32_t n, uint32_t phys_base) {
     const uint32_t h = be(i);
     // 0xFFFFFFFF is an UNFILLED header: the library reserves a packet, writes its payload and patches the header
     // afterwards (Fable FE_F3: a UP draw's vertices decoded as packets). Stop here; resume once the header is real.
-    if (h == 0xFFFFFFFFu) break;
+    if (h == 0xFFFFFFFFu) {
+      (t_fe_depth ? g_fe_stop_unfilled_ib : g_fe_stop_unfilled_ring).fetch_add(1, std::memory_order_relaxed);
+      if (g_fe_stop_logged.fetch_add(1) < 6)
+        REXLOG_INFO("[p3fe] decode stopped at an unfilled header: {} at {:08X} (+{} of {} dwords)", t_fe_depth ? "IB" : "ring",
+                    phys_base + i * 4, i, w);
+      break;
+    }
     const uint32_t t = h >> 30;
     const uint32_t need = t == 0 ? ((h >> 16) & 0x3FFF) + 2 : t == 1 ? 3 : t == 2 ? 1 : ((h >> 16) & 0x3FFF) + 2;
-    if (i + need > w) break;   // a packet that runs past what has been written yet: stop BEFORE it
+    if (i + need > w) {   // a packet that runs past what has been written yet: stop BEFORE it
+      (t_fe_depth ? g_fe_stop_short_ib : g_fe_stop_short_ring).fetch_add(1, std::memory_order_relaxed);
+      if (g_fe_stop_logged.fetch_add(1) < 6)
+        REXLOG_INFO("[p3fe] decode stopped before a packet past the end: {} at {:08X} header {:08X} needs {} of {} left",
+                    t_fe_depth ? "IB" : "ring", phys_base + i * 4, h, need, w - i);
+      break;
+    }
     if (t == 0) {
       const uint32_t base = h & 0x7FFF, cnt = ((h >> 16) & 0x3FFF) + 1, one = (h >> 15) & 1;
       for (uint32_t k = 0; k < cnt && i + 1 + k < w; ++k) {
@@ -172,6 +189,8 @@ uint32_t FeDecode(const uint8_t* body, uint32_t n, uint32_t phys_base) {
               g_fe_src[reg] = addr + k * 4;
             }
           }
+      } else if (op == 0x3F && t_fe_depth >= 4) {
+        g_fe_ib_deep.fetch_add(1, std::memory_order_relaxed);
       } else if (op == 0x3F && i + 2 < w && ks && ks->memory() && t_fe_depth < 4) {   // INDIRECT_BUFFER: execute it now
         const uint32_t ib = be(i + 1) & 0x1FFFFFFFu, ibn = be(i + 2) & 0xFFFFF;
         const uint8_t* src = ks->memory()->TranslatePhysical<const uint8_t*>(ib);
@@ -179,6 +198,8 @@ uint32_t FeDecode(const uint8_t* body, uint32_t n, uint32_t phys_base) {
           ++t_fe_depth;
           FeDecode(src, ibn * 4, ib);
           --t_fe_depth;
+        } else {
+          g_fe_ib_unreadable.fetch_add(1, std::memory_order_relaxed);
         }
       } else if (op == 0x22 || op == 0x36) {                         // DRAW_INDX / DRAW_INDX_2
         g_fe_draws.fetch_add(1, std::memory_order_relaxed);
@@ -361,11 +382,12 @@ void FeReport(const char* why) {
   REXLOG_INFO("[p3fe] {} ({}): bridge draws seen {}, compared {}, without a snapshot {}; front end {} kicks / {} decode windows, "
               "skipped {}, saw {} draws, predicated skips {}, {} snapshots pending; constant mismatches {} from memory loads "
               "({} whose source now holds the bridge value), {} from packets; {} registers ever differ (21F9-21FC excluded), "
-              "worst:{} | type-3 ops:{}",
+              "worst:{} | early stops: unfilled ring {} ib {}, short ring {} ib {}, ib unreadable {}, ib too deep {} | type-3 ops:{}",
               why, g_fe_kick_mode.load() ? "kick mode" : "cursor mode", g_fe_seen.load(), g_fe_compared.load(),
               g_fe_unmatched.load(), g_fe_kicks.load(), g_fe_calls.load(), g_fe_skipped.load(), g_fe_draws.load(),
               g_fe_predicated_skips.load(), pending, g_fe_mis_memsrc, g_fe_mis_memsrc_now_bridge, g_fe_mis_packet,
-              regs_bad, s2, ops);
+              regs_bad, s2, g_fe_stop_unfilled_ring.load(), g_fe_stop_unfilled_ib.load(), g_fe_stop_short_ring.load(),
+              g_fe_stop_short_ib.load(), g_fe_ib_unreadable.load(), g_fe_ib_deep.load(), ops);
 }
 
 void Write() {
@@ -560,8 +582,12 @@ void BridgeDraw(uint32_t packet_addr, const uint32_t* regs, uint32_t reg_count) 
           }
         }
       // The first compared draws in full: which registers differ, with both values (front end / bridge).
+      // ... and four more once the warm-up is over (leg ng2_075: the first four differed only in 21F9-21FC while the
+      // steady state had 362 registers differing - the values are the evidence).
       static std::atomic<int> dumped{0};
-      if (dumped.fetch_add(1) < 4) {
+      static std::atomic<int> dumped_late{0};
+      const bool late = g_fe_compared.load(std::memory_order_relaxed) > 100000 && dumped_late.load() < 4;
+      if (dumped.fetch_add(1) < 4 || (late && dumped_late.fetch_add(1) < 4)) {
         std::string d;
         int shown = 0;
         for (uint32_t k = 0; k < 0x400 && shown < 40; ++k)
