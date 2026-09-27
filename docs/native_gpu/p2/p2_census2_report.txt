@@ -1,0 +1,64 @@
+P2 CENSUS: 60 frames (6600..6659), 601890 call ranges (attributing by field cur: 60661 usable, cur2: 0), 1290943 packets, 133021 draws
+METRIC 1  unattributed packets: 144951 of 1290943 (11.2%)   unattributed draws: 80712 of 133021 (60.7%)
+METRIC 2  draws not issued by a native front end: n/a (no front end yet; the bridge draws them all)
+          attributed through the last-writer map (buffers recorded before the window and replayed): 9069 packets, top: sub_8373BD50=6346, sub_8373D570=1446, sub_8373CB08=612, sub_8373BC68=175
+
+by producer (whole run): packets  draws  producer
+    839472   37117  sub_8373CB08 lib sites=6
+    174420    6960  sub_8373C720 lib sites=3
+    144951   80712  UNATTRIBUTED
+     51186    2432  sub_8373D570 lib sites=43 IM_LOAD_IMMEDIA
+     42805    1211  sub_8373BD50 lib sites=49
+     14335      99  sub_8373BC68 lib sites=14
+     11224    4248  sub_837452C0 lib sites=1 VdGetSystemComma
+      6180     240  sub_83739188 lib sites=1
+      1869       0  sub_83737180 lib sites=29
+      1297       0  sub_8373C1F0 lib sites=4
+       969       0  sub_8373A3D0 lib sites=6
+       847       0  sub_83744D90 lib sites=1
+       420       0  sub_83734370 lib sites=3 SET_BIN_MASK_HI,
+
+unattributed packets by type/opcode:
+     80712  DRAW_INDX_2(0x36)  <- DRAW 80712
+     53808  type-0
+      6726  IM_LOAD_IMMEDIATE(0x2B)
+      3363  INVALIDATE_STATE(0x3B)
+       342  INDIRECT_BUFFER(0x3F)
+
+per frame: frame  packets  draws  unattributed(packets/draws)  type0/2/3  bins(draws by bin select)
+    6600    21554   2219    2543/1416   11043/5335/5176  ffffffff:2219
+    6601    21554   2219    2543/1416   11043/5335/5176  ffffffff:2219
+    6602    21554   2219    2543/1416   11043/5335/5176  ffffffff:2219
+    6603    21554   2219    2543/1416   11043/5335/5176  ffffffff:2219
+    6604    21554   2219    2543/1416   11043/5335/5176  ffffffff:2219
+    6605    21554   2219    2543/1416   11043/5335/5176  ffffffff:2219
+    6606    21554   2219    2543/1416   11043/5335/5176  ffffffff:2219
+    6607    21571   2220    2543/1416   11053/5340/5178  ffffffff:2220
+    6608    21581   2220    2543/1416   11055/5344/5182  ffffffff:2220
+    6609    21581   2220    2543/1416   11055/5344/5182  ffffffff:2220
+    6610    21581   2220    2543/1416   11055/5344/5182  ffffffff:2220
+    6611    21581   2220    2543/1416   11055/5344/5182  ffffffff:2220
+    6612    21581   2220    2543/1416   11055/5344/5182  ffffffff:2220
+    6613    21581   2220    2543/1416   11055/5344/5182  ffffffff:2220
+    6614    21581   2220    2543/1416   11055/5344/5182  ffffffff:2220
+    6615    21581   2220    2543/1416   11055/5344/5182  ffffffff:2220
+    6616    21581   2220    2543/1416   11055/5344/5182  ffffffff:2220
+    6617    21615   2222    2543/1416   11075/5354/5186  ffffffff:2222
+    6618    21625   2222    2543/1416   11077/5358/5190  ffffffff:2222
+    6619    21669   2224    2543/1416   11099/5372/5198  ffffffff:2224
+    6620    21669   2224    2543/1416   11099/5372/5198  ffffffff:2224
+    6621    21713   2226    2543/1416   11121/5386/5206  ffffffff:2226
+    6622    21473   2215    2543/1416   11000/5311/5162  ffffffff:2215
+    6623    21473   2215    2543/1416   11000/5311/5162  ffffffff:2215
+    6624    21473   2215    2543/1416   11000/5311/5162  ffffffff:2215
+    6625    21473   2215    2543/1416   11000/5311/5162  ffffffff:2215
+    6626    21473   2215    2543/1416   11000/5311/5162  ffffffff:2215
+    6627    21473   2215       0/0      11000/5311/5162  ffffffff:2215
+    6628    21473   2215       0/0      11000/5311/5162  ffffffff:2215
+    6629    21473   2215       0/0      11000/5311/5162  ffffffff:2215
+    6630    21473   2215    2543/1416   11000/5311/5162  ffffffff:2215
+    6631    21473   2215    2543/1416   11000/5311/5162  ffffffff:2215
+    6632    21473   2215    2543/1416   11000/5311/5162  ffffffff:2215
+    6633    21473   2215    2543/1416   11000/5311/5162  ffffffff:2215
+    6634    21473   2215    2543/1416   11000/5311/5162  ffffffff:2215
+    6635    21473   2215    254

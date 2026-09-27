@@ -59,6 +59,23 @@ wraps is split. Lines:
 The JSON carries the same per frame and in total (`by_producer`, `draws_by_bin_select`, `field`). The bin-select
 column is the tiling census Fable asked for: draws repeated per tile appear as the same count under each select.
 
+## Three producer classes the first NG2 censuses found (Chapter 1 gameplay, 1759-2219 draws per frame)
+
+1. **Per-frame calls** - the call whose range holds the packet in the same frame (the plugin runs a frame or so
+   behind the guest; the join looks at the neighbouring frame too). NG2: about 600 draws per frame, the draw
+   entry point `sub_8373CB08`.
+2. **Recorded once, replayed every frame** - a buffer written long before the window and executed through
+   INDIRECT_BUFFER each frame. NG2: a 24-packet `DRAW_INDX_2` block at physical 1F037980 (the library's persistent
+   template area next to the primary ring, emitted once at device creation by `sub_8373B060`, the one function
+   with an immediate DRAW opcode) executed ~59 times per frame = 1416 of 2219 draws. Hence the recorder keeps the
+   LAST WRITER of every 64-byte block from the first library call on (format version 2, section 'BLK1'), and the
+   device is learned at that first library call, not at the first swap.
+3. **Engine inline** - packets written by engine code right after a hooked library call returned. NG2: 32
+   `DRAW_INDX` per frame exactly 56 bytes past the end of a `sub_8373BD50` range (the state flush before a draw:
+   dirty masks at device+16/+24, constants at +1920/+6016); the join names these `ENGINE INLINE after sub_X`
+   (gap up to 256 bytes past a range end). These are the direct writers the front end must replace by hooking the
+   CALLERS, not the library.
+
 ## Reading it
 
 - Metric 1 at 0 with the hooks covering the whole library surface means every packet has a producer the front end

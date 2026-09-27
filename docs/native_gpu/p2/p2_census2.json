@@ -1,0 +1,1828 @@
+{
+ "frames": [
+  {
+   "frame": 6600,
+   "packets": 21554,
+   "draws": 2219,
+   "unattributed_packets": 2543,
+   "unattributed_draws": 1416,
+   "by_producer": {
+    "sub_837452C0 lib sites=1 VdGetSystemComma": 60,
+    "sub_8373A3D0 lib sites=6": 18,
+    "UNATTRIBUTED": 2543,
+    "sub_83734370 lib sites=3 SET_BIN_MASK_HI,": 7,
+    "sub_83737180 lib sites=29": 33,
+    "sub_83736DC8 lib sites=6": 4,
+    "sub_837374E8 lib sites=30": 1,
+    "sub_83736EC8 lib sites=12": 4,
+    "sub_83739188 lib sites=1": 103,
+    "sub_8373BC68 lib sites=14": 239,
+    "sub_8373CB08 lib sites=6": 13986,
+    "sub_83742C10 lib sites=0 EVENT_WRITE": 2,
+    "sub_83743268 lib sites=0 WAIT_REG_MEM": 5,
+    "sub_8373D570 lib sites=43 IM_LOAD_IMMEDIA": 851,
+    "sub_8373BD50 lib sites=49": 757,
+    "sub_8373C720 lib sites=3": 2907,
+    "sub_8373C1F0 lib sites=4": 21,
+    "sub_83744D90 lib sites=1": 13
+   },
+   "draws_by_bin_select": {
+    "0xffffffff": 2219
+   }
+  },
+  {
+   "frame": 6601,
+   "packets": 21554,
+   "draws": 2219,
+   "unattributed_packets": 2543,
+   "unattributed_draws": 1416,
+   "by_producer": {
+    "sub_837452C0 lib sites=1 VdGetSystemComma": 60,
+    "sub_8373A3D0 lib sites=6": 15,
+    "UNATTRIBUTED": 2543,
+    "sub_83734370 lib sites=3 SET_BIN_MASK_HI,": 7,
+    "sub_8373CB08 lib sites=6": 13991,
+    "sub_83737180 lib sites=29": 30,
+    "sub_83736DC8 lib sites=6": 4,
+    "sub_837374E8 lib sites=30": 1,
+    "sub_83736EC8 lib sites=12": 4,
+    "sub_83739188 lib sites=1": 103,
+    "sub_8373BC68 lib sites=14": 239,
+    "sub_83742C10 lib sites=0 EVENT_WRITE": 2,
+    "sub_83743268 lib sites=0 WAIT_REG_MEM": 5,
+    "sub_8373D570 lib sites=43 IM_LOAD_IMMEDIA": 857,
+    "sub_8373BD50 lib sites=49": 748,
+    "sub_8373C720 lib sites=3": 2907,
+    "sub_8373C1F0 lib sites=4": 22,
+    "sub_83744D90 lib sites=1": 16
+   },
+   "draws_by_bin_select": {
+    "0xffffffff": 2219
+   }
+  },
+  {
+   "frame": 6602,
+   "packets": 21554,
+   "draws": 2219,
+   "unattributed_packets": 2543,
+   "unattributed_draws": 1416,
+   "by_producer": {
+    "sub_837452C0 lib sites=1 VdGetSystemComma": 60,
+    "sub_8373A3D0 lib sites=6": 18,
+    "UNATTRIBUTED": 2543,
+    "sub_83734370 lib sites=3 SET_BIN_MASK_HI,": 7,
+    "sub_83737180 lib sites=29": 33,
+    "sub_83736DC8 lib sites=6": 4,
+    "sub_837374E8 lib sites=30": 1,
+    "sub_83736EC8 lib sites=12": 4,
+    "sub_83739188 lib sites=1": 103,
+    "sub_8373BC68 lib sites=14": 239,
+    "sub_8373CB08 lib sites=6": 13986,
+    "sub_83742C10 lib sites=0 EVENT_WRITE": 2,
+    "sub_83743268 lib sites=0 WAIT_REG_MEM": 5,
+    "sub_8373D570 lib sites=43 IM_LOAD_IMMEDIA": 851,
+    "sub_8373BD50 lib sites=49": 757,
+    "sub_8373C720 lib sites=3": 2907,
+    "sub_8373C1F0 lib sites=4": 21,
+    "sub_83744D90 lib sites=1": 13
+   },
+   "draws_by_bin_select": {
+    "0xffffffff": 2219
+   }
+  },
+  {
+   "frame": 6603,
+   "packets": 21554,
+   "draws": 2219,
+   "unattributed_packets": 2543,
+   "unattributed_draws": 1416,
+   "by_producer": {
+    "sub_837452C0 lib sites=1 VdGetSystemComma": 60,
+    "sub_8373A3D0 lib sites=6": 15,
+    "UNATTRIBUTED": 2543,
+    "sub_83734370 lib sites=3 SET_BIN_MASK_HI,": 7,
+    "sub_8373BC68 lib sites=14": 245,
+    "sub_83737180 lib sites=29": 30,
+    "sub_83736DC8 lib sites=6": 4,
+    "sub_837374E8 lib sites=30": 1,
+    "sub_83736EC8 lib sites=12": 4,
+    "sub_83739188 lib sites=1": 103,
+    "sub_8373CB08 lib sites=6": 13985,
+    "sub_83742C10 lib sites=0 EVENT_WRITE": 2,
+    "sub_83743268 lib sites=0 WAIT_REG_MEM": 5,
+    "sub_8373D570 lib sites=43 IM_LOAD_IMMEDIA": 857,
+    "sub_8373BD50 lib sites=49": 748,
+    "sub_8373C720 lib sites=3": 2907,
+    "sub_8373C1F0 lib sites=4": 22,
+    "sub_83744D90 lib sites=1": 16
+   },
+   "draws_by_bin_select": {
+    "0xffffffff": 2219
+   }
+  },
+  {
+   "frame": 6604,
+   "packets": 21554,
+   "draws": 2219,
+   "unattributed_packets": 2543,
+   "unattributed_draws": 1416,
+   "by_producer": {
+    "sub_837452C0 lib sites=1 VdGetSystemComma": 60,
+    "sub_8373A3D0 lib sites=6": 18,
+    "UNATTRIBUTED": 2543,
+    "sub_83734370 lib sites=3 SET_BIN_MASK_HI,": 7,
+    "sub_83737180 lib sites=29": 33,
+    "sub_83736DC8 lib sites=6": 4,
+    "sub_837374E8 lib sites=30": 1,
+    "sub_83736EC8 lib sites=12": 4,
+    "sub_83739188 lib sites=1": 103,
+    "sub_8373BC68 lib sites=14": 239,
+    "sub_8373CB08 lib sites=6": 13986,
+    "sub_83742C10 lib sites=0 EVENT_WRITE": 2,
+    "sub_83743268 lib sites=0 WAIT_REG_MEM": 5,
+    "sub_8373D570 lib sites=43 IM_LOAD_IMMEDIA": 851,
+    "sub_8373BD50 lib sites=49": 757,
+    "sub_8373C720 lib sites=3": 2907,
+    "sub_8373C1F0 lib sites=4": 21,
+    "sub_83744D90 lib sites=1": 13
+   },
+   "draws_by_bin_select": {
+    "0xffffffff": 2219
+   }
+  },
+  {
+   "frame": 6605,
+   "packets": 21554,
+   "draws": 2219,
+   "unattributed_packets": 2543,
+   "unattributed_draws": 1416,
+   "by_producer": {
+    "sub_837452C0 lib sites=1 VdGetSystemComma": 60,
+    "sub_8373A3D0 lib sites=6": 15,
+    "UNATTRIBUTED": 2543,
+    "sub_83734370 lib sites=3 SET_BIN_MASK_HI,": 7,
+    "sub_8373BC68 lib sites=14": 245,
+    "sub_83737180 lib sites=29": 30,
+    "sub_83736DC8 lib sites=6": 4,
+    "sub_837374E8 lib sites=30": 1,
+    "sub_83736EC8 lib sites=12": 4,
+    "sub_83739188 lib sites=1": 103,
+    "sub_8373CB08 lib sites=6": 13985,
+    "sub_83742C10 lib sites=0 EVENT_WRITE": 2,
+    "sub_83743268 lib sites=0 WAIT_REG_MEM": 5,
+    "sub_8373D570 lib sites=43 IM_LOAD_IMMEDIA": 857,
+    "sub_8373BD50 lib sites=49": 748,
+    "sub_8373C720 lib sites=3": 2907,
+    "sub_8373C1F0 lib sites=4": 22,
+    "sub_83744D90 lib sites=1": 16
+   },
+   "draws_by_bin_select": {
+    "0xffffffff": 2219
+   }
+  },
+  {
+   "frame": 6606,
+   "packets": 21554,
+   "draws": 2219,
+   "unattributed_packets": 2543,
+   "unattributed_draws": 1416,
+   "by_producer": {
+    "sub_837452C0 lib sites=1 VdGetSystemComma": 60,
+    "sub_8373A3D0 lib sites=6": 18,
+    "UNATTRIBUTED": 2543,
+    "sub_83734370 lib sites=3 SET_BIN_MASK_HI,": 7,
+    "sub_83737180 lib sites=29": 33,
+    "sub_83736DC8 lib sites=6": 4,
+    "sub_837374E8 lib sites=30": 1,
+    "sub_83736EC8 lib sites=12": 4,
+    "sub_83739188 lib sites=1": 103,
+    "sub_8373BC68 lib sites=14": 239,
+    "sub_8373CB08 lib sites=6": 13986,
+    "sub_83742C10 lib sites=0 EVENT_WRITE": 2,
+    "sub_83743268 lib sites=0 WAIT_REG_MEM": 5,
+    "sub_8373D570 lib sites=43 IM_LOAD_IMMEDIA": 851,
+    "sub_8373BD50 lib sites=49": 757,
+    "sub_8373C720 lib sites=3": 2907,
+    "sub_8373C1F0 lib sites=4": 21,
+    "sub_83744D90 lib sites=1": 13
+   },
+   "draws_by_bin_select": {
+    "0xffffffff": 2219
+   }
+  },
+  {
+   "frame": 6607,
+   "packets": 21571,
+   "draws": 2220,
+   "unattributed_packets": 2543,
+   "unattributed_draws": 1416,
+   "by_producer": {
+    "sub_837452C0 lib sites=1 VdGetSystemComma": 60,
+    "sub_8373A3D0 lib sites=6": 15,
+    "UNATTRIBUTED": 2543,
+    "sub_83734370 lib sites=3 SET_BIN_MASK_HI,": 7,
+    "sub_8373CB08 lib sites=6": 13991,
+    "sub_83737180 lib sites=29": 30,
+    "sub_83736DC8 lib sites=6": 8,
+    "sub_837374E8 lib sites=30": 1,
+    "sub_83736EC8 lib sites=12": 4,
+    "sub_83739188 lib sites=1": 103,
+    "sub_8373BC68 lib sites=14": 237,
+    "sub_83742C10 lib sites=0 EVENT_WRITE": 2,
+    "sub_83743268 lib sites=0 WAIT_REG_MEM": 5,
+    "sub_8373D570 lib sites=43 IM_LOAD_IMMEDIA": 857,
+    "sub_8373BD50 lib sites=49": 763,
+    "sub_8373C720 lib sites=3": 2907,
+    "sub_8373C1F0 lib sites=4": 22,
+    "sub_83744D90 lib sites=1": 16
+   },
+   "draws_by_bin_select": {
+    "0xffffffff": 2220
+   }
+  },
+  {
+   "frame": 6608,
+   "packets": 21581,
+   "draws": 2220,
+   "unattributed_packets": 2543,
+   "unattributed_draws": 1416,
+   "by_producer": {
+    "sub_837452C0 lib sites=1 VdGetSystemComma": 60,
+    "sub_8373A3D0 lib sites=6": 15,
+    "UNATTRIBUTED": 2543,
+    "sub_83734370 lib sites=3 SET_BIN_MASK_HI,": 7,
+    "sub_8373CB08 lib sites=6": 13996,
+    "sub_83737180 lib sites=29": 30,
+    "sub_83736DC8 lib sites=6": 4,
+    "sub_837374E8 lib sites=30": 1,
+    "sub_83736EC8 lib sites=12": 4,
+    "sub_83739188 lib sites=1": 103,
+    "sub_8373BC68 lib sites=14": 239,
+    "sub_83742C10 lib sites=0 EVENT_WRITE": 2,
+    "sub_83743268 lib sites=0 WAIT_REG_MEM": 5,
+    "sub_8373D570 lib sites=43 IM_LOAD_IMMEDIA": 854,
+    "sub_8373BD50 lib sites=49": 775,
+    "sub_8373C720 lib sites=3": 2907,
+    "sub_8373C1F0 lib sites=4": 22,
+    "sub_83744D90 lib sites=1": 14
+   },
+   "draws_by_bin_select": {
+    "0xffffffff": 2220
+   }
+  },
+  {
+   "frame": 6609,
+   "packets": 21581,
+   "draws": 2220,
+   "unattributed_packets": 2543,
+   "unattributed_draws": 1416,
+   "by_producer": {
+    "sub_837452C0 lib sites=1 VdGetSystemComma": 60,
+    "sub_8373A3D0 lib sites=6": 15,
+    "UNATTRIBUTED": 2543,
+    "sub_83734370 lib sites=3 SET_BIN_MASK_HI,": 7,
+    "sub_8373CB08 lib sites=6": 13996,
+    "sub_83737180 lib sites=29": 30,
+    "sub_83736DC8 lib sites=6": 4,
+    "sub_837374E8 lib sites=30": 1,
+    "sub_83736EC8 lib sites=12": 4,
+    "sub_83739188 lib sites=1": 103,
+    "sub_8373BC68 lib sites=14": 239,
+    "sub_83742C10 lib sites=0 EVENT_WRITE": 2,
+    "sub_83743268 lib sites=0 WAIT_REG_MEM": 5,
+    "sub_8373D570 lib sites=43 IM_LOAD_IMMEDIA": 854,
+    "sub_8373BD50 lib sites=49": 775,
+    "sub_8373C720 lib sites=3": 2907,
+    "sub_8373C1F0 lib sites=4": 22,
+    "sub_83744D90 lib sites=1": 14
+   },
+   "draws_by_bin_select": {
+    "0xffffffff": 2220
+   }
+  },
+  {
+   "frame": 6610,
+   "packets": 21581,
+   "draws": 2220,
+   "unattributed_packets": 2543,
+   "unattributed_draws": 1416,
+   "by_producer": {
+    "sub_837452C0 lib sites=1 VdGetSystemComma": 60,
+    "sub_8373A3D0 lib sites=6": 15,
+    "UNATTRIBUTED": 2543,
+    "sub_83734370 lib sites=3 SET_BIN_MASK_HI,": 7,
+    "sub_8373CB08 lib sites=6": 13996,
+    "sub_83737180 lib sites=29": 30,
+    "sub_83736DC8 lib sites=6": 4,
+    "sub_837374E8 lib sites=30": 1,
+    "sub_83736EC8 lib sites=12": 4,
+    "sub_83739188 lib sites=1": 103,
+    "sub_8373BC68 lib sites=14": 239,
+    "sub_83742C10 lib sites=0 EVENT_WRITE": 2,
+    "sub_83743268 lib sites=0 WAIT_REG_MEM": 5,
+    "sub_8373D570 lib sites=43 IM_LOAD_IMMEDIA": 854,
+    "sub_8373BD50 lib sites=49": 775,
+    "sub_8373C720 lib sites=3": 2907,
+    "sub_8373C1F0 lib sites=4": 22,
+    "sub_83744D90 lib sites=1": 14
+   },
+   "draws_by_bin_select": {
+    "0xffffffff": 2220
+   }
+  },
+  {
+   "frame": 6611,
+   "packets": 21581,
+   "draws": 2220,
+   "unattributed_packets": 2543,
+   "unattributed_draws": 1416,
+   "by_producer": {
+    "sub_837452C0 lib sites=1 VdGetSystemComma": 60,
+    "sub_8373A3D0 lib sites=6": 15,
+    "UNATTRIBUTED": 2543,
+    "sub_83734370 lib sites=3 SET_BIN_MASK_HI,": 7,
+    "sub_8373CB08 lib sites=6": 13996,
+    "sub_83737180 lib sites=29": 30,
+    "sub_83736DC8 lib sites=6": 4,
+    "sub_837374E8 lib sites=30": 1,
+    "sub_83736EC8 lib sites=12": 4,
+    "sub_83739188 lib sites=1": 103,
+    "sub_8373BC68 lib sites=14": 239,
+    "sub_83742C10 lib sites=0 EVENT_WRITE": 2,
+    "sub_83743268 lib sites=0 WAIT_REG_MEM": 5,
+    "sub_8373D570 lib sites=43 IM_LOAD_IMMEDIA": 854,
+    "sub_8373BD50 lib sites=49": 775,
+    "sub_8373C720 lib sites=3": 2907,
+    "sub_8373C1F0 lib sites=4": 22,
+    "sub_83744D90 lib sites=1": 14
+   },
+   "draws_by_bin_select": {
+    "0xffffffff": 2220
+   }
+  },
+  {
+   "frame": 6612,
+   "packets": 21581,
+   "draws": 2220,
+   "unattributed_packets": 2543,
+   "unattributed_draws": 1416,
+   "by_producer": {
+    "sub_837452C0 lib sites=1 VdGetSystemComma": 60,
+    "sub_8373A3D0 lib sites=6": 15,
+    "UNATTRIBUTED": 2543,
+    "sub_83734370 lib sites=3 SET_BIN_MASK_HI,": 7,
+    "sub_8373CB08 lib sites=6": 13996,
+    "sub_83737180 lib sites=29": 30,
+    "sub_83736DC8 lib sites=6": 4,
+    "sub_837374E8 lib sites=30": 1,
+    "sub_83736EC8 lib sites=12": 4,
+    "sub_83739188 lib sites=1": 103,
+    "sub_8373BC68 lib sites=14": 239,
+    "sub_83742C10 lib sites=0 EVENT_WRITE": 2,
+    "sub_83743268 lib sites=0 WAIT_REG_MEM": 5,
+    "sub_8373D570 lib sites=43 IM_LOAD_IMMEDIA": 854,
+    "sub_8373BD50 lib sites=49": 775,
+    "sub_8373C720 lib sites=3": 2907,
+    "sub_8373C1F0 lib sites=4": 22,
+    "sub_83744D90 lib sites=1": 14
+   },
+   "draws_by_bin_select": {
+    "0xffffffff": 2220
+   }
+  },
+  {
+   "frame": 6613,
+   "packets": 21581,
+   "draws": 2220,
+   "unattributed_packets": 2543,
+   "unattributed_draws": 1416,
+   "by_producer": {
+    "sub_837452C0 lib sites=1 VdGetSystemComma": 60,
+    "sub_8373A3D0 lib sites=6": 15,
+    "UNATTRIBUTED": 2543,
+    "sub_83734370 lib sites=3 SET_BIN_MASK_HI,": 7,
+    "sub_8373CB08 lib sites=6": 13996,
+    "sub_83737180 lib sites=29": 30,
+    "sub_83736DC8 lib sites=6": 4,
+    "sub_837374E8 lib sites=30": 1,
+    "sub_83736EC8 lib sites=12": 4,
+    "sub_83739188 lib sites=1": 103,
+    "sub_8373BC68 lib sites=14": 239,
+    "sub_83742C10 lib sites=0 EVENT_WRITE": 2,
+    "sub_83743268 lib sites=0 WAIT_REG_MEM": 5,
+    "sub_8373D570 lib sites=43 IM_LOAD_IMMEDIA": 854,
+    "sub_8373BD50 lib sites=49": 775,
+    "sub_8373C720 lib sites=3": 2907,
+    "sub_8373C1F0 lib sites=4": 22,
+    "sub_83744D90 lib sites=1": 14
+   },
+   "draws_by_bin_select": {
+    "0xffffffff": 2220
+   }
+  },
+  {
+   "frame": 6614,
+   "packets": 21581,
+   "draws": 2220,
+   "unattributed_packets": 2543,
+   "unattributed_draws": 1416,
+   "by_producer": {
+    "sub_837452C0 lib sites=1 VdGetSystemComma": 60,
+    "sub_8373A3D0 lib sites=6": 15,
+    "UNATTRIBUTED": 2543,
+    "sub_83734370 lib sites=3 SET_BIN_MASK_HI,": 7,
+    "sub_8373CB08 lib sites=6": 13996,
+    "sub_83737180 lib sites=29": 30,
+    "sub_83736DC8 lib sites=6": 4,
+    "sub_837374E8 lib sites=30": 1,
+    "sub_83736EC8 lib sites=12": 4,
+    "sub_83739188 lib sites=1": 103,
+    "sub_8373BC68 lib sites=14": 239,
+    "sub_83742C10 lib sites=0 EVENT_WRITE": 2,
+    "sub_83743268 lib sites=0 WAIT_REG_MEM": 5,
+    "sub_8373D570 lib sites=43 IM_LOAD_IMMEDIA": 854,
+    "sub_8373BD50 lib sites=49": 775,
+    "sub_8373C720 lib sites=3": 2907,
+    "sub_8373C1F0 lib sites=4": 22,
+    "sub_83744D90 lib sites=1": 14
+   },
+   "draws_by_bin_select": {
+    "0xffffffff": 2220
+   }
+  },
+  {
+   "frame": 6615,
+   "packets": 21581,
+   "draws": 2220,
+   "unattributed_packets": 2543,
+   "unattributed_draws": 1416,
+   "by_producer": {
+    "sub_837452C0 lib sites=1 VdGetSystemComma": 60,
+    "sub_8373A3D0 lib sites=6": 15,
+    "UNATTRIBUTED": 2543,
+    "sub_83734370 lib sites=3 SET_BIN_MASK_HI,": 7,
+    "sub_8373CB08 lib sites=6": 13996,
+    "sub_83737180 lib sites=29": 30,
+    "sub_83736DC8 lib sites=6": 4,
+    "sub_837374E8 lib sites=30": 1,
+    "sub_83736EC8 lib sites=12": 4,
+    "sub_83739188 lib sites=1": 103,
+    "sub_8373BC68 lib sites=14": 239,
+    "sub_83742C10 lib sites=0 EVENT_WRITE": 2,
+    "sub_83743268 lib sites=0 WAIT_REG_MEM": 5,
+    "sub_8373D570 lib sites=43 IM_LOAD_IMMEDIA": 854,
+    "sub_8373BD50 lib sites=49": 775,
+    "sub_8373C720 lib sites=3": 2907,
+    "sub_8373C1F0 lib sites=4": 22,
+    "sub_83744D90 lib sites=1": 14
+   },
+   "draws_by_bin_select": {
+    "0xffffffff": 2220
+   }
+  },
+  {
+   "frame": 6616,
+   "packets": 21581,
+   "draws": 2220,
+   "unattributed_packets": 2543,
+   "unattributed_draws": 1416,
+   "by_producer": {
+    "sub_837452C0 lib sites=1 VdGetSystemComma": 60,
+    "sub_8373A3D0 lib sites=6": 15,
+    "UNATTRIBUTED": 2543,
+    "sub_83734370 lib sites=3 SET_BIN_MASK_HI,": 7,
+    "sub_8373CB08 lib sites=6": 13996,
+    "sub_83737180 lib sites=29": 30,
+    "sub_83736DC8 lib sites=6": 4,
+    "sub_837374E8 lib sites=30": 1,
+    "sub_83736EC8 lib sites=12": 4,
+    "sub_83739188 lib sites=1": 103,
+    "sub_8373BC68 lib sites=14": 239,
+    "sub_83742C10 lib sites=0 EVENT_WRITE": 2,
+    "sub_83743268 lib sites=0 WAIT_REG_MEM": 5,
+    "sub_8373D570 lib sites=43 IM_LOAD_IMMEDIA": 854,
+    "sub_8373BD50 lib sites=49": 775,
+    "sub_8373C720 lib sites=3": 2907,
+    "sub_8373C1F0 lib sites=4": 22,
+    "sub_83744D90 lib sites=1": 14
+   },
+   "draws_by_bin_select": {
+    "0xffffffff": 2220
+   }
+  },
+  {
+   "frame": 6617,
+   "packets": 21615,
+   "draws": 2222,
+   "unattributed_packets": 2543,
+   "unattributed_draws": 1416,
+   "by_producer": {
+    "sub_837452C0 lib sites=1 VdGetSystemComma": 60,
+    "sub_8373A3D0 lib sites=6": 15,
+    "UNATTRIBUTED": 2543,
+    "sub_83734370 lib sites=3 SET_BIN_MASK_HI,": 7,
+    "sub_8373CB08 lib sites=6": 13991,
+    "sub_83737180 lib sites=29": 30,
+    "sub_83736DC8 lib sites=6": 8,
+    "sub_837374E8 lib sites=30": 1,
+    "sub_83736EC8 lib sites=12": 4,
+    "sub_83739188 lib sites=1": 103,
+    "sub_8373BC68 lib sites=14": 237,
+    "sub_83742C10 lib sites=0 EVENT_WRITE": 2,
+    "sub_83743268 lib sites=0 WAIT_REG_MEM": 5,
+    "sub_8373D570 lib sites=43 IM_LOAD_IMMEDIA": 857,
+    "sub_8373BD50 lib sites=49": 807,
+    "sub_8373C720 lib sites=3": 2907,
+    "sub_8373C1F0 lib sites=4": 22,
+    "sub_83744D90 lib sites=1": 16
+   },
+   "draws_by_bin_select": {
+    "0xffffffff": 2222
+   }
+  },
+  {
+   "frame": 6618,
+   "packets": 21625,
+   "draws": 2222,
+   "unattributed_packets": 2543,
+   "unattributed_draws": 1416,
+   "by_producer": {
+    "sub_837452C0 lib sites=1 VdGetSystemComma": 60,
+    "sub_8373A3D0 lib sites=6": 15,
+    "UNATTRIBUTED": 2543,
+    "sub_83734370 lib sites=3 SET_BIN_MASK_HI,": 7,
+    "sub_8373CB08 lib sites=6": 13996,
+    "sub_83737180 lib sites=29": 30,
+    "sub_83736DC8 lib sites=6": 4,
+    "sub_837374E8 lib sites=30": 1,
+    "sub_83736EC8 lib sites=12": 4,
+    "sub_83739188 lib sites=1": 103,
+    "sub_8373BC68 lib sites=14": 239,
+    "sub_83742C10 lib sites=0 EVENT_WRITE": 2,
+    "sub_83743268 lib sites=0 WAIT_REG_MEM": 5,
+    "sub_8373D570 lib sites=43 IM_LOAD_IMMEDIA": 854,
+    "sub_8373BD50 lib sites=49": 819,
+    "sub_8373C720 lib sites=3": 2907,
+    "sub_8373C1F0 lib sites=4": 22,
+    "sub_83744D90 lib sites=1": 14
+   },
+   "draws_by_bin_select": {
+    "0xffffffff": 2222
+   }
+  },
+  {
+   "frame": 6619,
+   "packets": 21669,
+   "draws": 2224,
+   "unattributed_packets": 2543,
+   "unattributed_draws": 1416,
+   "by_producer": {
+    "sub_837452C0 lib sites=1 VdGetSystemComma": 60,
+    "sub_8373A3D0 lib sites=6": 15,
+    "UNATTRIBUTED": 2543,
+    "sub_83734370 lib sites=3 SET_BIN_MASK_HI,": 7,
+    "sub_8373CB08 lib sites=6": 13996,
+    "sub_83737180 lib sites=29": 30,
+    "sub_83736DC8 lib sites=6": 4,
+    "sub_837374E8 lib sites=30": 1,
+    "sub_83736EC8 lib sites=12": 4,
+    "sub_83739188 lib sites=1": 103,
+    "sub_8373BC68 lib sites=14": 239,
+    "sub_83742C10 lib sites=0 EVENT_WRITE": 2,
+    "sub_83743268 lib sites=0 WAIT_REG_MEM": 5,
+    "sub_8373D570 lib sites=43 IM_LOAD_IMMEDIA": 854,
+    "sub_8373BD50 lib sites=49": 863,
+    "sub_8373C720 lib sites=3": 2907,
+    "sub_8373C1F0 lib sites=4": 22,
+    "sub_83744D90 lib sites=1": 14
+   },
+   "draws_by_bin_select": {
+    "0xffffffff": 2224
+   }
+  },
+  {
+   "frame": 6620,
+   "packets": 21669,
+   "draws": 2224,
+   "unattributed_packets": 2543,
+   "unattributed_draws": 1416,
+   "by_producer": {
+    "sub_837452C0 lib sites=1 VdGetSystemComma": 60,
+    "sub_8373A3D0 lib sites=6": 15,
+    "UNATTRIBUTED": 2543,
+    "sub_83734370 lib sites=3 SET_BIN_MASK_HI,": 7,
+    "sub_8373CB08 lib sites=6": 13996,
+    "sub_83737180 lib sites=29": 30,
+    "sub_83736DC8 lib sites=6": 4,
+    "sub_837374E8 lib sites=30": 1,
+    "sub_83736EC8 lib sites=12": 4,
+    "sub_83739188 lib sites=1": 103,
+    "sub_8373BC68 lib sites=14": 239,
+    "sub_83742C10 lib sites=0 EVENT_WRITE": 2,
+    "sub_83743268 lib sites=0 WAIT_REG_MEM": 5,
+    "sub_8373D570 lib sites=43 IM_LOAD_IMMEDIA": 854,
+    "sub_8373BD50 lib sites=49": 863,
+    "sub_8373C720 lib sites=3": 2907,
+    "sub_8373C1F0 lib sites=4": 22,
+    "sub_83744D90 lib sites=1": 14
+   },
+   "draws_by_bin_select": {
+    "0xffffffff": 2224
+   }
+  },
+  {
+   "frame": 6621,
+   "packets": 21713,
+   "draws": 2226,
+   "unattributed_packets": 2543,
+   "unattributed_draws": 1416,
+   "by_producer": {
+    "sub_837452C0 lib sites=1 VdGetSystemComma": 60,
+    "sub_8373A3D0 lib sites=6": 15,
+    "UNATTRIBUTED": 2543,
+    "sub_83734370 lib sites=3 SET_BIN_MASK_HI,": 7,
+    "sub_8373CB08 lib sites=6": 13996,
+    "sub_83737180 lib sites=29": 30,
+    "sub_83736DC8 lib sites=6": 4,
+    "sub_837374E8 lib sites=30": 1,
+    "sub_83736EC8 lib sites=12": 4,
+    "sub_83739188 lib sites=1": 103,
+    "sub_8373BC68 lib sites=14": 239,
+    "sub_83742C10 lib sites=0 EVENT_WRITE": 2,
+    "sub_83743268 lib sites=0 WAIT_REG_MEM": 5,
+    "sub_8373D570 lib sites=43 IM_LOAD_IMMEDIA": 854,
+    "sub_8373BD50 lib sites=49": 907,
+    "sub_8373C720 lib sites=3": 2907,
+    "sub_8373C1F0 lib sites=4": 22,
+    "sub_83744D90 lib sites=1": 14
+   },
+   "draws_by_bin_select": {
+    "0xffffffff": 2226
+   }
+  },
+  {
+   "frame": 6622,
+   "packets": 21473,
+   "draws": 2215,
+   "unattributed_packets": 2543,
+   "unattributed_draws": 1416,
+   "by_producer": {
+    "sub_837452C0 lib sites=1 VdGetSystemComma": 60,
+    "sub_8373A3D0 lib sites=6": 15,
+    "UNATTRIBUTED": 2543,
+    "sub_83734370 lib sites=3 SET_BIN_MASK_HI,": 7,
+    "sub_8373CB08 lib sites=6": 13996,
+    "sub_83737180 lib sites=29": 30,
+    "sub_83736DC8 lib sites=6": 4,
+    "sub_837374E8 lib sites=30": 1,
+    "sub_83736EC8 lib sites=12": 4,
+    "sub_83739188 lib sites=1": 103,
+    "sub_8373BC68 lib sites=14": 239,
+    "sub_83742C10 lib sites=0 EVENT_WRITE": 2,
+    "sub_83743268 lib sites=0 WAIT_REG_MEM": 5,
+    "sub_8373D570 lib sites=43 IM_LOAD_IMMEDIA": 853,
+    "sub_8373BD50 lib sites=49": 667,
+    "sub_8373C720 lib sites=3": 2907,
+    "sub_8373C1F0 lib sites=4": 22,
+    "sub_83744D90 lib sites=1": 15
+   },
+   "draws_by_bin_select": {
+    "0xffffffff": 2215
+   }
+  },
+  {
+   "frame": 6623,
+   "packets": 21473,
+   "draws": 2215,
+   "unattributed_packets": 2543,
+   "unattributed_draws": 1416,
+   "by_producer": {
+    "sub_837452C0 lib sites=1 VdGetSystemComma": 60,
+    "sub_8373A3D0 lib sites=6": 18,
+    "UNATTRIBUTED": 2543,
+    "sub_83734370 lib sites=3 SET_BIN_MASK_HI,": 7,
+    "sub_83737180 lib sites=29": 33,
+    "sub_83736DC8 lib sites=6": 4,
+    "sub_837374E8 lib sites=30": 1,
+    "sub_83736EC8 lib sites=12": 4,
+    "sub_83739188 lib sites=1": 103,
+    "sub_8373BC68 lib sites=14": 238,
+    "sub_8373CB08 lib sites=6": 13985,
+    "sub_83742C10 lib sites=0 EVENT_WRITE": 2,
+    "sub_83743268 lib sites=0 WAIT_REG_MEM": 5,
+    "sub_8373D570 lib sites=43 IM_LOAD_IMMEDIA": 852,
+    "sub_8373BD50 lib sites=49": 677,
+    "sub_8373C720 lib sites=3": 2907,
+    "sub_8373C1F0 lib sites=4": 21,
+    "sub_83744D90 lib sites=1": 13
+   },
+   "draws_by_bin_select": {
+    "0xffffffff": 2215
+   }
+  },
+  {
+   "frame": 6624,
+   "packets": 21473,
+   "draws": 2215,
+   "unattributed_packets": 2543,
+   "unattributed_draws": 1416,
+   "by_producer": {
+    "sub_837452C0 lib sites=1 VdGetSystemComma": 60,
+    "sub_8373A3D0 lib sites=6": 15,
+    "UNATTRIBUTED": 2543,
+    "sub_83734370 lib sites=3 SET_BIN_MASK_HI,": 7,
+    "sub_8373CB08 lib sites=6": 13996,
+    "sub_83737180 lib sites=29": 30,
+    "sub_83736DC8 lib sites=6": 4,
+    "sub_837374E8 lib sites=30": 1,
+    "sub_83736EC8 lib sites=12": 4,
+    "sub_83739188 lib sites=1": 103,
+    "sub_8373BC68 lib sites=14": 239,
+    "sub_83742C10 lib sites=0 EVENT_WRITE": 2,
+    "sub_83743268 lib sites=0 WAIT_REG_MEM": 5,
+    "sub_8373D570 lib sites=43 IM_LOAD_IMMEDIA": 853,
+    "sub_8373BD50 lib sites=49": 667,
+    "sub_8373C720 lib sites=3": 2907,
+    "sub_8373C1F0 lib sites=4": 22,
+    "sub_83744D90 lib sites=1": 15
+   },
+   "draws_by_bin_select": {
+    "0xffffffff": 2215
+   }
+  },
+  {
+   "frame": 6625,
+   "packets": 21473,
+   "draws": 2215,
+   "unattributed_packets": 2543,
+   "unattributed_draws": 1416,
+   "by_producer": {
+    "sub_837452C0 lib sites=1 VdGetSystemComma": 60,
+    "sub_8373A3D0 lib sites=6": 18,
+    "UNATTRIBUTED": 2543,
+    "sub_83734370 lib sites=3 SET_BIN_MASK_HI,": 7,
+    "sub_83737180 lib sites=29": 33,
+    "sub_83736DC8 lib sites=6": 4,
+    "sub_837374E8 lib sites=30": 1,
+    "sub_83736EC8 lib sites=12": 4,
+    "sub_83739188 lib sites=1": 103,
+    "sub_8373BC68 lib sites=14": 238,
+    "sub_8373CB08 lib sites=6": 13985,
+    "sub_83742C10 lib sites=0 EVENT_WRITE": 2,
+    "sub_83743268 lib sites=0 WAIT_REG_MEM": 5,
+    "sub_8373D570 lib sites=43 IM_LOAD_IMMEDIA": 852,
+    "sub_8373BD50 lib sites=49": 677,
+    "sub_8373C720 lib sites=3": 2907,
+    "sub_8373C1F0 lib sites=4": 21,
+    "sub_83744D90 lib sites=1": 13
+   },
+   "draws_by_bin_select": {
+    "0xffffffff": 2215
+   }
+  },
+  {
+   "frame": 6626,
+   "packets": 21473,
+   "draws": 2215,
+   "unattributed_packets": 2543,
+   "unattributed_draws": 1416,
+   "by_producer": {
+    "sub_837452C0 lib sites=1 VdGetSystemComma": 60,
+    "sub_8373A3D0 lib sites=6": 15,
+    "UNATTRIBUTED": 2543,
+    "sub_83734370 lib sites=3 SET_BIN_MASK_HI,": 7,
+    "sub_8373CB08 lib sites=6": 13996,
+    "sub_83737180 lib sites=29": 30,
+    "sub_83736DC8 lib sites=6": 4,
+    "sub_837374E8 lib sites=30": 1,
+    "sub_83736EC8 lib sites=12": 4,
+    "sub_83739188 lib sites=1": 103,
+    "sub_8373BC68 lib sites=14": 239,
+    "sub_83742C10 lib sites=0 EVENT_WRITE": 2,
+    "sub_83743268 lib sites=0 WAIT_REG_MEM": 5,
+    "sub_8373D570 lib sites=43 IM_LOAD_IMMEDIA": 853,
+    "sub_8373BD50 lib sites=49": 667,
+    "sub_8373C720 lib sites=3": 2907,
+    "sub_8373C1F0 lib sites=4": 22,
+    "sub_83744D90 lib sites=1": 15
+   },
+   "draws_by_bin_select": {
+    "0xffffffff": 2215
+   }
+  },
+  {
+   "frame": 6627,
+   "packets": 21473,
+   "draws": 2215,
+   "unattributed_packets": 0,
+   "unattributed_draws": 0,
+   "by_producer": {
+    "sub_837452C0 lib sites=1 VdGetSystemComma": 2603,
+    "sub_8373A3D0 lib sites=6": 18,
+    "sub_83734370 lib sites=3 SET_BIN_MASK_HI,": 7,
+    "sub_83737180 lib sites=29": 33,
+    "sub_83736DC8 lib sites=6": 4,
+    "sub_837374E8 lib sites=30": 1,
+    "sub_83736EC8 lib sites=12": 4,
+    "sub_83739188 lib sites=1": 103,
+    "sub_8373BC68 lib sites=14": 238,
+    "sub_8373CB08 lib sites=6": 13985,
+    "sub_83742C10 lib sites=0 EVENT_WRITE": 2,
+    "sub_83743268 lib sites=0 WAIT_REG_MEM": 5,
+    "sub_8373D570 lib sites=43 IM_LOAD_IMMEDIA": 852,
+    "sub_8373BD50 lib sites=49": 677,
+    "sub_8373C720 lib sites=3": 2907,
+    "sub_8373C1F0 lib sites=4": 21,
+    "sub_83744D90 lib sites=1": 13
+   },
+   "draws_by_bin_select": {
+    "0xffffffff": 2215
+   }
+  },
+  {
+   "frame": 6628,
+   "packets": 21473,
+   "draws": 2215,
+   "unattributed_packets": 0,
+   "unattributed_draws": 0,
+   "by_producer": {
+    "sub_837452C0 lib sites=1 VdGetSystemComma": 2603,
+    "sub_8373A3D0 lib sites=6": 15,
+    "sub_83734370 lib sites=3 SET_BIN_MASK_HI,": 7,
+    "sub_8373BC68 lib sites=14": 245,
+    "sub_83737180 lib sites=29": 30,
+    "sub_83736DC8 lib sites=6": 4,
+    "sub_837374E8 lib sites=30": 1,
+    "sub_83736EC8 lib sites=12": 4,
+    "sub_83739188 lib sites=1": 103,
+    "sub_8373CB08 lib sites=6": 13990,
+    "sub_83742C10 lib sites=0 EVENT_WRITE": 2,
+    "sub_83743268 lib sites=0 WAIT_REG_MEM": 5,
+    "sub_8373D570 lib sites=43 IM_LOAD_IMMEDIA": 853,
+    "sub_8373BD50 lib sites=49": 667,
+    "sub_8373C720 lib sites=3": 2907,
+    "sub_8373C1F0 lib sites=4": 22,
+    "sub_83744D90 lib sites=1": 15
+   },
+   "draws_by_bin_select": {
+    "0xffffffff": 2215
+   }
+  },
+  {
+   "frame": 6629,
+   "packets": 21473,
+   "draws": 2215,
+   "unattributed_packets": 0,
+   "unattributed_draws": 0,
+   "by_producer": {
+    "sub_837452C0 lib sites=1 VdGetSystemComma": 2603,
+    "sub_8373A3D0 lib sites=6": 18,
+    "sub_83734370 lib sites=3 SET_BIN_MASK_HI,": 7,
+    "sub_83737180 lib sites=29": 33,
+    "sub_83736DC8 lib sites=6": 4,
+    "sub_837374E8 lib sites=30": 1,
+    "sub_83736EC8 lib sites=12": 4,
+    "sub_83739188 lib sites=1": 103,
+    "sub_8373BC68 lib sites=14": 238,
+    "sub_8373CB08 lib sites=6": 13985,
+    "sub_83742C10 lib sites=0 EVENT_WRITE": 2,
+    "sub_83743268 lib sites=0 WAIT_REG_MEM": 5,
+    "sub_8373D570 lib sites=43 IM_LOAD_IMMEDIA": 852,
+    "sub_8373BD50 lib sites=49": 677,
+    "sub_8373C720 lib sites=3": 2907,
+    "sub_8373C1F0 lib sites=4": 21,
+    "sub_83744D90 lib sites=1": 13
+   },
+   "draws_by_bin_select": {
+    "0xffffffff": 2215
+   }
+  },
+  {
+   "frame": 6630,
+   "packets": 21473,
+   "draws": 2215,
+   "unattributed_packets": 2543,
+   "unattributed_draws": 1416,
+   "by_producer": {
+    "sub_837452C0 lib sites=1 VdGetSystemComma": 60,
+    "sub_8373A3D0 lib sites=6": 15,
+    "UNATTRIBUTED": 2543,
+    "sub_83734370 lib sites=3 SET_BIN_MASK_HI,": 7,
+    "sub_8373CB08 lib sites=6": 13996,
+    "sub_83737180 lib sites=29": 30,
+    "sub_83736DC8 lib sites=6": 4,
+    "sub_837374E8 lib sites=30": 1,
+    "sub_83736EC8 lib sites=12": 4,
+    "sub_83739188 lib sites=1": 103,
+    "sub_8373BC68 lib sites=14": 239,
+    "sub_83742C10 lib sites=0 EVENT_WRITE": 2,
+    "sub_83743268 lib sites=0 WAIT_REG_MEM": 5,
+    "sub_8373D570 lib sites=43 IM_LOAD_IMMEDIA": 853,
+    "sub_8373BD50 lib sites=49": 667,
+    "sub_8373C720 lib sites=3": 2907,
+    "sub_8373C1F0 lib sites=4": 22,
+    "sub_83744D90 lib sites=1": 15
+   },
+   "draws_by_bin_select": {
+    "0xffffffff": 2215
+   }
+  },
+  {
+   "frame": 6631,
+   "packets": 21473,
+   "draws": 2215,
+   "unattributed_packets": 2543,
+   "unattributed_draws": 1416,
+   "by_producer": {
+    "sub_837452C0 lib sites=1 VdGetSystemComma": 60,
+    "sub_8373A3D0 lib sites=6": 18,
+    "UNATTRIBUTED": 2543,
+    "sub_83734370 lib sites=3 SET_BIN_MASK_HI,": 7,
+    "sub_83737180 lib sites=29": 33,
+    "sub_83736DC8 lib sites=6": 4,
+    "sub_837374E8 lib sites=30": 1,
+    "sub_83736EC8 lib sites=12": 4,
+    "sub_83739188 lib sites=1": 103,
+    "sub_8373BC68 lib sites=14": 238,
+    "sub_8373CB08 lib sites=6": 13985,
+    "sub_83742C10 lib sites=0 EVENT_WRITE": 2,
+    "sub_83743268 lib sites=0 WAIT_REG_MEM": 5,
+    "sub_8373D570 lib sites=43 IM_LOAD_IMMEDIA": 852,
+    "sub_8373BD50 lib sites=49": 677,
+    "sub_8373C720 lib sites=3": 2907,
+    "sub_8373C1F0 lib sites=4": 21,
+    "sub_83744D90 lib sites=1": 13
+   },
+   "draws_by_bin_select": {
+    "0xffffffff": 2215
+   }
+  },
+  {
+   "frame": 6632,
+   "packets": 21473,
+   "draws": 2215,
+   "unattributed_packets": 2543,
+   "unattributed_draws": 1416,
+   "by_producer": {
+    "sub_837452C0 lib sites=1 VdGetSystemComma": 60,
+    "sub_8373A3D0 lib sites=6": 15,
+    "UNATTRIBUTED": 2543,
+    "sub_83734370 lib sites=3 SET_BIN_MASK_HI,": 7,
+    "sub_8373CB08 lib sites=6": 13996,
+    "sub_83737180 lib sites=29": 30,
+    "sub_83736DC8 lib sites=6": 4,
+    "sub_837374E8 lib sites=30": 1,
+    "sub_83736EC8 lib sites=12": 4,
+    "sub_83739188 lib sites=1": 103,
+    "sub_8373BC68 lib sites=14": 239,
+    "sub_83742C10 lib sites=0 EVENT_WRITE": 2,
+    "sub_83743268 lib sites=0 WAIT_REG_MEM": 5,
+    "sub_8373D570 lib sites=43 IM_LOAD_IMMEDIA": 853,
+    "sub_8373BD50 lib sites=49": 667,
+    "sub_8373C720 lib sites=3": 2907,
+    "sub_8373C1F0 lib sites=4": 22,
+    "sub_83744D90 lib sites=1": 15
+   },
+   "draws_by_bin_select": {
+    "0xffffffff": 2215
+   }
+  },
+  {
+   "frame": 6633,
+   "packets": 21473,
+   "draws": 2215,
+   "unattributed_packets": 2543,
+   "unattributed_draws": 1416,
+   "by_producer": {
+    "sub_837452C0 lib sites=1 VdGetSystemComma": 60,
+    "sub_8373A3D0 lib sites=6": 18,
+    "UNATTRIBUTED": 2543,
+    "sub_83734370 lib sites=3 SET_BIN_MASK_HI,": 7,
+    "sub_83737180 lib sites=29": 33,
+    "sub_83736DC8 lib sites=6": 4,
+    "sub_837374E8 lib sites=30": 1,
+    "sub_83736EC8 lib sites=12": 4,
+    "sub_83739188 lib sites=1": 103,
+    "sub_8373BC68 lib sites=14": 238,
+    "sub_8373CB08 lib sites=6": 13985,
+    "sub_83742C10 lib sites=0 EVENT_WRITE": 2,
+    "sub_83743268 lib sites=0 WAIT_REG_MEM": 5,
+    "sub_8373D570 lib sites=43 IM_LOAD_IMMEDIA": 852,
+    "sub_8373BD50 lib sites=49": 677,
+    "sub_8373C720 lib sites=3": 2907,
+    "sub_8373C1F0 lib sites=4": 21,
+    "sub_83744D90 lib sites=1": 13
+   },
+   "draws_by_bin_select": {
+    "0xffffffff": 2215
+   }
+  },
+  {
+   "frame": 6634,
+   "packets": 21473,
+   "draws": 2215,
+   "unattributed_packets": 2543,
+   "unattributed_draws": 1416,
+   "by_producer": {
+    "sub_837452C0 lib sites=1 VdGetSystemComma": 60,
+    "sub_8373A3D0 lib sites=6": 15,
+    "UNATTRIBUTED": 2543,
+    "sub_83734370 lib sites=3 SET_BIN_MASK_HI,": 7,
+    "sub_8373CB08 lib sites=6": 13996,
+    "sub_83737180 lib sites=29": 30,
+    "sub_83736DC8 lib sites=6": 4,
+    "sub_837374E8 lib sites=30": 1,
+    "sub_83736EC8 lib sites=12": 4,
+    "sub_83739188 lib sites=1": 103,
+    "sub_8373BC68 lib sites=14": 239,
+    "sub_83742C10 lib sites=0 EVENT_WRITE": 2,
+    "sub_83743268 lib sites=0 WAIT_REG_MEM": 5,
+    "sub_8373D570 lib sites=43 IM_LOAD_IMMEDIA": 853,
+    "sub_8373BD50 lib sites=49": 667,
+    "sub_8373C720 lib sites=3": 2907,
+    "sub_8373C1F0 lib sites=4": 22,
+    "sub_83744D90 lib sites=1": 15
+   },
+   "draws_by_bin_select": {
+    "0xffffffff": 2215
+   }
+  },
+  {
+   "frame": 6635,
+   "packets": 21473,
+   "draws": 2215,
+   "unattributed_packets": 2543,
+   "unattributed_draws": 1416,
+   "by_producer": {
+    "sub_837452C0 lib sites=1 VdGetSystemComma": 60,
+    "sub_8373A3D0 lib sites=6": 18,
+    "UNATTRIBUTED": 2543,
+    "sub_83734370 lib sites=3 SET_BIN_MASK_HI,": 7,
+    "sub_83737180 lib sites=29": 33,
+    "sub_83736DC8 lib sites=6": 4,
+    "sub_837374E8 lib sites=30": 1,
+    "sub_83736EC8 lib sites=12": 4,
+    "sub_83739188 lib sites=1": 103,
+    "sub_8373BC68 lib sites=14": 238,
+    "sub_8373CB08 lib sites=6": 13985,
+    "sub_83742C10 lib sites=0 EVENT_WRITE": 2,
+    "sub_83743268 lib sites=0 WAIT_REG_MEM": 5,
+    "sub_8373D570 lib sites=43 IM_LOAD_IMMEDIA": 852,
+    "sub_8373BD50 lib sites=49": 677,
+    "sub_8373C720 lib sites=3": 2907,
+    "sub_8373C1F0 lib sites=4": 21,
+    "sub_83744D90 lib sites=1": 13
+   },
+   "draws_by_bin_select": {
+    "0xffffffff": 2215
+   }
+  },
+  {
+   "frame": 6636,
+   "packets": 21473,
+   "draws": 2215,
+   "unattributed_packets": 2543,
+   "unattributed_draws": 1416,
+   "by_producer": {
+    "sub_837452C0 lib sites=1 VdGetSystemComma": 60,
+    "sub_8373A3D0 lib sites=6": 15,
+    "UNATTRIBUTED": 2543,
+    "sub_83734370 lib sites=3 SET_BIN_MASK_HI,": 7,
+    "sub_8373CB08 lib sites=6": 13996,
+    "sub_83737180 lib sites=29": 30,
+    "sub_83736DC8 lib sites=6": 4,
+    "sub_837374E8 lib sites=30": 1,
+    "sub_83736EC8 lib sites=12": 4,
+    "sub_83739188 lib sites=1": 103,
+    "sub_8373BC68 lib sites=14": 239,
+    "sub_83742C10 lib sites=0 EVENT_WRITE": 2,
+    "sub_83743268 lib sites=0 WAIT_REG_MEM": 5,
+    "sub_8373D570 lib sites=43 IM_LOAD_IMMEDIA": 853,
+    "sub_8373BD50 lib sites=49": 667,
+    "sub_8373C720 lib sites=3": 2907,
+    "sub_8373C1F0 lib sites=4": 22,
+    "sub_83744D90 lib sites=1": 15
+   },
+   "draws_by_bin_select": {
+    "0xffffffff": 2215
+   }
+  },
+  {
+   "frame": 6637,
+   "packets": 21473,
+   "draws": 2215,
+   "unattributed_packets": 2543,
+   "unattributed_draws": 1416,
+   "by_producer": {
+    "sub_837452C0 lib sites=1 VdGetSystemComma": 60,
+    "sub_8373A3D0 lib sites=6": 18,
+    "UNATTRIBUTED": 2543,
+    "sub_83734370 lib sites=3 SET_BIN_MASK_HI,": 7,
+    "sub_83737180 lib sites=29": 33,
+    "sub_83736DC8 lib sites=6": 4,
+    "sub_837374E8 lib sites=30": 1,
+    "sub_83736EC8 lib sites=12": 4,
+    "sub_83739188 lib sites=1": 103,
+    "sub_8373BC68 lib sites=14": 238,
+    "sub_8373CB08 lib sites=6": 13985,
+    "sub_83742C10 lib sites=0 EVENT_WRITE": 2,
+    "sub_83743268 lib sites=0 WAIT_REG_MEM": 5,
+    "sub_8373D570 lib sites=43 IM_LOAD_IMMEDIA": 852,
+    "sub_8373BD50 lib sites=49": 677,
+    "sub_8373C720 lib sites=3": 2907,
+    "sub_8373C1F0 lib sites=4": 21,
+    "sub_83744D90 lib sites=1": 13
+   },
+   "draws_by_bin_select": {
+    "0xffffffff": 2215
+   }
+  },
+  {
+   "frame": 6638,
+   "packets": 21473,
+   "draws": 2215,
+   "unattributed_packets": 2543,
+   "unattributed_draws": 1416,
+   "by_producer": {
+    "sub_837452C0 lib sites=1 VdGetSystemComma": 60,
+    "sub_8373A3D0 lib sites=6": 15,
+    "UNATTRIBUTED": 2543,
+    "sub_83734370 lib sites=3 SET_BIN_MASK_HI,": 7,
+    "sub_8373CB08 lib sites=6": 13996,
+    "sub_83737180 lib sites=29": 30,
+    "sub_83736DC8 lib sites=6": 4,
+    "sub_837374E8 lib sites=30": 1,
+    "sub_83736EC8 lib sites=12": 4,
+    "sub_83739188 lib sites=1": 103,
+    "sub_8373BC68 lib sites=14": 239,
+    "sub_83742C10 lib sites=0 EVENT_WRITE": 2,
+    "sub_83743268 lib sites=0 WAIT_REG_MEM": 5,
+    "sub_8373D570 lib sites=43 IM_LOAD_IMMEDIA": 853,
+    "sub_8373BD50 lib sites=49": 667,
+    "sub_8373C720 lib sites=3": 2907,
+    "sub_8373C1F0 lib sites=4": 22,
+    "sub_83744D90 lib sites=1": 15
+   },
+   "draws_by_bin_select": {
+    "0xffffffff": 2215
+   }
+  },
+  {
+   "frame": 6639,
+   "packets": 21473,
+   "draws": 2215,
+   "unattributed_packets": 2543,
+   "unattributed_draws": 1416,
+   "by_producer": {
+    "sub_837452C0 lib sites=1 VdGetSystemComma": 60,
+    "sub_8373A3D0 lib sites=6": 18,
+    "UNATTRIBUTED": 2543,
+    "sub_83734370 lib sites=3 SET_BIN_MASK_HI,": 7,
+    "sub_83737180 lib sites=29": 33,
+    "sub_83736DC8 lib sites=6": 4,
+    "sub_837374E8 lib sites=30": 1,
+    "sub_83736EC8 lib sites=12": 4,
+    "sub_83739188 lib sites=1": 103,
+    "sub_8373BC68 lib sites=14": 238,
+    "sub_8373CB08 lib sites=6": 13985,
+    "sub_83742C10 lib sites=0 EVENT_WRITE": 2,
+    "sub_83743268 lib sites=0 WAIT_REG_MEM": 5,
+    "sub_8373D570 lib sites=43 IM_LOAD_IMMEDIA": 852,
+    "sub_8373BD50 lib sites=49": 677,
+    "sub_8373C720 lib sites=3": 2907,
+    "sub_8373C1F0 lib sites=4": 21,
+    "sub_83744D90 lib sites=1": 13
+   },
+   "draws_by_bin_select": {
+    "0xffffffff": 2215
+   }
+  },
+  {
+   "frame": 6640,
+   "packets": 21473,
+   "draws": 2215,
+   "unattributed_packets": 2543,
+   "unattributed_draws": 1416,
+   "by_producer": {
+    "sub_837452C0 lib sites=1 VdGetSystemComma": 60,
+    "sub_8373A3D0 lib sites=6": 15,
+    "UNATTRIBUTED": 2543,
+    "sub_83734370 lib sites=3 SET_BIN_MASK_HI,": 7,
+    "sub_8373CB08 lib sites=6": 13996,
+    "sub_83737180 lib sites=29": 30,
+    "sub_83736DC8 lib sites=6": 4,
+    "sub_837374E8 lib sites=30": 1,
+    "sub_83736EC8 lib sites=12": 4,
+    "sub_83739188 lib sites=1": 103,
+    "sub_8373BC68 lib sites=14": 239,
+    "sub_83742C10 lib sites=0 EVENT_WRITE": 2,
+    "sub_83743268 lib sites=0 WAIT_REG_MEM": 5,
+    "sub_8373D570 lib sites=43 IM_LOAD_IMMEDIA": 853,
+    "sub_8373BD50 lib sites=49": 667,
+    "sub_8373C720 lib sites=3": 2907,
+    "sub_8373C1F0 lib sites=4": 22,
+    "sub_83744D90 lib sites=1": 15
+   },
+   "draws_by_bin_select": {
+    "0xffffffff": 2215
+   }
+  },
+  {
+   "frame": 6641,
+   "packets": 21473,
+   "draws": 2215,
+   "unattributed_packets": 2543,
+   "unattributed_draws": 1416,
+   "by_producer": {
+    "sub_837452C0 lib sites=1 VdGetSystemComma": 60,
+    "sub_8373A3D0 lib sites=6": 18,
+    "UNATTRIBUTED": 2543,
+    "sub_83734370 lib sites=3 SET_BIN_MASK_HI,": 7,
+    "sub_83737180 lib sites=29": 33,
+    "sub_83736DC8 lib sites=6": 4,
+    "sub_837374E8 lib sites=30": 1,
+    "sub_83736EC8 lib sites=12": 4,
+    "sub_83739188 lib sites=1": 103,
+    "sub_8373BC68 lib sites=14": 238,
+    "sub_8373CB08 lib sites=6": 13985,
+    "sub_83742C10 lib sites=0 EVENT_WRITE": 2,
+    "sub_83743268 lib sites=0 WAIT_REG_MEM": 5,
+    "sub_8373D570 lib sites=43 IM_LOAD_IMMEDIA": 852,
+    "sub_8373BD50 lib sites=49": 677,
+    "sub_8373C720 lib sites=3": 2907,
+    "sub_8373C1F0 lib sites=4": 21,
+    "sub_83744D90 lib sites=1": 13
+   },
+   "draws_by_bin_select": {
+    "0xffffffff": 2215
+   }
+  },
+  {
+   "frame": 6642,
+   "packets": 21473,
+   "draws": 2215,
+   "unattributed_packets": 2543,
+   "unattributed_draws": 1416,
+   "by_producer": {
+    "sub_837452C0 lib sites=1 VdGetSystemComma": 60,
+    "sub_8373A3D0 lib sites=6": 15,
+    "UNATTRIBUTED": 2543,
+    "sub_83734370 lib sites=3 SET_BIN_MASK_HI,": 7,
+    "sub_8373CB08 lib sites=6": 13996,
+    "sub_83737180 lib sites=29": 30,
+    "sub_83736DC8 lib sites=6": 4,
+    "sub_837374E8 lib sites=30": 1,
+    "sub_83736EC8 lib sites=12": 4,
+    "sub_83739188 lib sites=1": 103,
+    "sub_8373BC68 lib sites=14": 239,
+    "sub_83742C10 lib sites=0 EVENT_WRITE": 2,
+    "sub_83743268 lib sites=0 WAIT_REG_MEM": 5,
+    "sub_8373D570 lib sites=43 IM_LOAD_IMMEDIA": 853,
+    "sub_8373BD50 lib sites=49": 667,
+    "sub_8373C720 lib sites=3": 2907,
+    "sub_8373C1F0 lib sites=4": 22,
+    "sub_83744D90 lib sites=1": 15
+   },
+   "draws_by_bin_select": {
+    "0xffffffff": 2215
+   }
+  },
+  {
+   "frame": 6643,
+   "packets": 21473,
+   "draws": 2215,
+   "unattributed_packets": 2543,
+   "unattributed_draws": 1416,
+   "by_producer": {
+    "sub_837452C0 lib sites=1 VdGetSystemComma": 60,
+    "sub_8373A3D0 lib sites=6": 18,
+    "UNATTRIBUTED": 2543,
+    "sub_83734370 lib sites=3 SET_BIN_MASK_HI,": 7,
+    "sub_83737180 lib sites=29": 33,
+    "sub_83736DC8 lib sites=6": 4,
+    "sub_837374E8 lib sites=30": 1,
+    "sub_83736EC8 lib sites=12": 4,
+    "sub_83739188 lib sites=1": 103,
+    "sub_8373BC68 lib sites=14": 238,
+    "sub_8373CB08 lib sites=6": 13985,
+    "sub_83742C10 lib sites=0 EVENT_WRITE": 2,
+    "sub_83743268 lib sites=0 WAIT_REG_MEM": 5,
+    "sub_8373D570 lib sites=43 IM_LOAD_IMMEDIA": 852,
+    "sub_8373BD50 lib sites=49": 677,
+    "sub_8373C720 lib sites=3": 2907,
+    "sub_8373C1F0 lib sites=4": 21,
+    "sub_83744D90 lib sites=1": 13
+   },
+   "draws_by_bin_select": {
+    "0xffffffff": 2215
+   }
+  },
+  {
+   "frame": 6644,
+   "packets": 21473,
+   "draws": 2215,
+   "unattributed_packets": 2543,
+   "unattributed_draws": 1416,
+   "by_producer": {
+    "sub_837452C0 lib sites=1 VdGetSystemComma": 60,
+    "sub_8373A3D0 lib sites=6": 15,
+    "UNATTRIBUTED": 2543,
+    "sub_83734370 lib sites=3 SET_BIN_MASK_HI,": 7,
+    "sub_8373CB08 lib sites=6": 13996,
+    "sub_83737180 lib sites=29": 30,
+    "sub_83736DC8 lib sites=6": 4,
+    "sub_837374E8 lib sites=30": 1,
+    "sub_83736EC8 lib sites=12": 4,
+    "sub_83739188 lib sites=1": 103,
+    "sub_8373BC68 lib sites=14": 239,
+    "sub_83742C10 lib sites=0 EVENT_WRITE": 2,
+    "sub_83743268 lib sites=0 WAIT_REG_MEM": 5,
+    "sub_8373D570 lib sites=43 IM_LOAD_IMMEDIA": 853,
+    "sub_8373BD50 lib sites=49": 667,
+    "sub_8373C720 lib sites=3": 2907,
+    "sub_8373C1F0 lib sites=4": 22,
+    "sub_83744D90 lib sites=1": 15
+   },
+   "draws_by_bin_select": {
+    "0xffffffff": 2215
+   }
+  },
+  {
+   "frame": 6645,
+   "packets": 21473,
+   "draws": 2215,
+   "unattributed_packets": 2543,
+   "unattributed_draws": 1416,
+   "by_producer": {
+    "sub_837452C0 lib sites=1 VdGetSystemComma": 60,
+    "sub_8373A3D0 lib sites=6": 18,
+    "UNATTRIBUTED": 2543,
+    "sub_83734370 lib sites=3 SET_BIN_MASK_HI,": 7,
+    "sub_83737180 lib sites=29": 33,
+    "sub_83736DC8 lib sites=6": 4,
+    "sub_837374E8 lib sites=30": 1,
+    "sub_83736EC8 lib sites=12": 4,
+    "sub_83739188 lib sites=1": 103,
+    "sub_8373BC68 lib sites=14": 238,
+    "sub_8373CB08 lib sites=6": 13985,
+    "sub_83742C10 lib sites=0 EVENT_WRITE": 2,
+    "sub_83743268 lib sites=0 WAIT_REG_MEM": 5,
+    "sub_8373D570 lib sites=43 IM_LOAD_IMMEDIA": 852,
+    "sub_8373BD50 lib sites=49": 677,
+    "sub_8373C720 lib sites=3": 2907,
+    "sub_8373C1F0 lib sites=4": 21,
+    "sub_83744D90 lib sites=1": 13
+   },
+   "draws_by_bin_select": {
+    "0xffffffff": 2215
+   }
+  },
+  {
+   "frame": 6646,
+   "packets": 21473,
+   "draws": 2215,
+   "unattributed_packets": 2543,
+   "unattributed_draws": 1416,
+   "by_producer": {
+    "sub_837452C0 lib sites=1 VdGetSystemComma": 60,
+    "sub_8373A3D0 lib sites=6": 15,
+    "UNATTRIBUTED": 2543,
+    "sub_83734370 lib sites=3 SET_BIN_MASK_HI,": 7,
+    "sub_8373CB08 lib sites=6": 13996,
+    "sub_83737180 lib sites=29": 30,
+    "sub_83736DC8 lib sites=6": 4,
+    "sub_837374E8 lib sites=30": 1,
+    "sub_83736EC8 lib sites=12": 4,
+    "sub_83739188 lib sites=1": 103,
+    "sub_8373BC68 lib sites=14": 239,
+    "sub_83742C10 lib sites=0 EVENT_WRITE": 2,
+    "sub_83743268 lib sites=0 WAIT_REG_MEM": 5,
+    "sub_8373D570 lib sites=43 IM_LOAD_IMMEDIA": 853,
+    "sub_8373BD50 lib sites=49": 667,
+    "sub_8373C720 lib sites=3": 2907,
+    "sub_8373C1F0 lib sites=4": 22,
+    "sub_83744D90 lib sites=1": 15
+   },
+   "draws_by_bin_select": {
+    "0xffffffff": 2215
+   }
+  },
+  {
+   "frame": 6647,
+   "packets": 21473,
+   "draws": 2215,
+   "unattributed_packets": 2543,
+   "unattributed_draws": 1416,
+   "by_producer": {
+    "sub_837452C0 lib sites=1 VdGetSystemComma": 60,
+    "sub_8373A3D0 lib sites=6": 18,
+    "UNATTRIBUTED": 2543,
+    "sub_83734370 lib sites=3 SET_BIN_MASK_HI,": 7,
+    "sub_83737180 lib sites=29": 33,
+    "sub_83736DC8 lib sites=6": 4,
+    "sub_837374E8 lib sites=30": 1,
+    "sub_83736EC8 lib sites=12": 4,
+    "sub_83739188 lib sites=1": 103,
+    "sub_8373BC68 lib sites=14": 238,
+    "sub_8373CB08 lib sites=6": 13985,
+    "sub_83742C10 lib sites=0 EVENT_WRITE": 2,
+    "sub_83743268 lib sites=0 WAIT_REG_MEM": 5,
+    "sub_8373D570 lib sites=43 IM_LOAD_IMMEDIA": 852,
+    "sub_8373BD50 lib sites=49": 677,
+    "sub_8373C720 lib sites=3": 2907,
+    "sub_8373C1F0 lib sites=4": 21,
+    "sub_83744D90 lib sites=1": 13
+   },
+   "draws_by_bin_select": {
+    "0xffffffff": 2215
+   }
+  },
+  {
+   "frame": 6648,
+   "packets": 21473,
+   "draws": 2215,
+   "unattributed_packets": 2543,
+   "unattributed_draws": 1416,
+   "by_producer": {
+    "sub_837452C0 lib sites=1 VdGetSystemComma": 60,
+    "sub_8373A3D0 lib sites=6": 15,
+    "UNATTRIBUTED": 2543,
+    "sub_83734370 lib sites=3 SET_BIN_MASK_HI,": 7,
+    "sub_8373CB08 lib sites=6": 13996,
+    "sub_83737180 lib sites=29": 30,
+    "sub_83736DC8 lib sites=6": 4,
+    "sub_837374E8 lib sites=30": 1,
+    "sub_83736EC8 lib sites=12": 4,
+    "sub_83739188 lib sites=1": 103,
+    "sub_8373BC68 lib sites=14": 239,
+    "sub_83742C10 lib sites=0 EVENT_WRITE": 2,
+    "sub_83743268 lib sites=0 WAIT_REG_MEM": 5,
+    "sub_8373D570 lib sites=43 IM_LOAD_IMMEDIA": 853,
+    "sub_8373BD50 lib sites=49": 667,
+    "sub_8373C720 lib sites=3": 2907,
+    "sub_8373C1F0 lib sites=4": 22,
+    "sub_83744D90 lib sites=1": 15
+   },
+   "draws_by_bin_select": {
+    "0xffffffff": 2215
+   }
+  },
+  {
+   "frame": 6649,
+   "packets": 21473,
+   "draws": 2215,
+   "unattributed_packets": 2543,
+   "unattributed_draws": 1416,
+   "by_producer": {
+    "sub_837452C0 lib sites=1 VdGetSystemComma": 60,
+    "sub_8373A3D0 lib sites=6": 18,
+    "UNATTRIBUTED": 2543,
+    "sub_83734370 lib sites=3 SET_BIN_MASK_HI,": 7,
+    "sub_83737180 lib sites=29": 33,
+    "sub_83736DC8 lib sites=6": 4,
+    "sub_837374E8 lib sites=30": 1,
+    "sub_83736EC8 lib sites=12": 4,
+    "sub_83739188 lib sites=1": 103,
+    "sub_8373BC68 lib sites=14": 238,
+    "sub_8373CB08 lib sites=6": 13985,
+    "sub_83742C10 lib sites=0 EVENT_WRITE": 2,
+    "sub_83743268 lib sites=0 WAIT_REG_MEM": 5,
+    "sub_8373D570 lib sites=43 IM_LOAD_IMMEDIA": 852,
+    "sub_8373BD50 lib sites=49": 677,
+    "sub_8373C720 lib sites=3": 2907,
+    "sub_8373C1F0 lib sites=4": 21,
+    "sub_83744D90 lib sites=1": 13
+   },
+   "draws_by_bin_select": {
+    "0xffffffff": 2215
+   }
+  },
+  {
+   "frame": 6650,
+   "packets": 21473,
+   "draws": 2215,
+   "unattributed_packets": 2543,
+   "unattributed_draws": 1416,
+   "by_producer": {
+    "sub_837452C0 lib sites=1 VdGetSystemComma": 60,
+    "sub_8373A3D0 lib sites=6": 15,
+    "UNATTRIBUTED": 2543,
+    "sub_83734370 lib sites=3 SET_BIN_MASK_HI,": 7,
+    "sub_8373CB08 lib sites=6": 13996,
+    "sub_83737180 lib sites=29": 30,
+    "sub_83736DC8 lib sites=6": 4,
+    "sub_837374E8 lib sites=30": 1,
+    "sub_83736EC8 lib sites=12": 4,
+    "sub_83739188 lib sites=1": 103,
+    "sub_8373BC68 lib sites=14": 239,
+    "sub_83742C10 lib sites=0 EVENT_WRITE": 2,
+    "sub_83743268 lib sites=0 WAIT_REG_MEM": 5,
+    "sub_8373D570 lib sites=43 IM_LOAD_IMMEDIA": 853,
+    "sub_8373BD50 lib sites=49": 667,
+    "sub_8373C720 lib sites=3": 2907,
+    "sub_8373C1F0 lib sites=4": 22,
+    "sub_83744D90 lib sites=1": 15
+   },
+   "draws_by_bin_select": {
+    "0xffffffff": 2215
+   }
+  },
+  {
+   "frame": 6651,
+   "packets": 21473,
+   "draws": 2215,
+   "unattributed_packets": 2543,
+   "unattributed_draws": 1416,
+   "by_producer": {
+    "sub_837452C0 lib sites=1 VdGetSystemComma": 60,
+    "sub_8373A3D0 lib sites=6": 18,
+    "UNATTRIBUTED": 2543,
+    "sub_83734370 lib sites=3 SET_BIN_MASK_HI,": 7,
+    "sub_83737180 lib sites=29": 33,
+    "sub_83736DC8 lib sites=6": 4,
+    "sub_837374E8 lib sites=30": 1,
+    "sub_83736EC8 lib sites=12": 4,
+    "sub_83739188 lib sites=1": 103,
+    "sub_8373BC68 lib sites=14": 238,
+    "sub_8373CB08 lib sites=6": 13985,
+    "sub_83742C10 lib sites=0 EVENT_WRITE": 2,
+    "sub_83743268 lib sites=0 WAIT_REG_MEM": 5,
+    "sub_8373D570 lib sites=43 IM_LOAD_IMMEDIA": 852,
+    "sub_8373BD50 lib sites=49": 677,
+    "sub_8373C720 lib sites=3": 2907,
+    "sub_8373C1F0 lib sites=4": 21,
+    "sub_83744D90 lib sites=1": 13
+   },
+   "draws_by_bin_select": {
+    "0xffffffff": 2215
+   }
+  },
+  {
+   "frame": 6652,
+   "packets": 21473,
+   "draws": 2215,
+   "unattributed_packets": 2543,
+   "unattributed_draws": 1416,
+   "by_producer": {
+    "sub_837452C0 lib sites=1 VdGetSystemComma": 60,
+    "sub_8373A3D0 lib sites=6": 15,
+    "UNATTRIBUTED": 2543,
+    "sub_83734370 lib sites=3 SET_BIN_MASK_HI,": 7,
+    "sub_8373CB08 lib sites=6": 13996,
+    "sub_83737180 lib sites=29": 30,
+    "sub_83736DC8 lib sites=6": 4,
+    "sub_837374E8 lib sites=30": 1,
+    "sub_83736EC8 lib sites=12": 4,
+    "sub_83739188 lib sites=1": 103,
+    "sub_8373BC68 lib sites=14": 239,
+    "sub_83742C10 lib sites=0 EVENT_WRITE": 2,
+    "sub_83743268 lib sites=0 WAIT_REG_MEM": 5,
+    "sub_8373D570 lib sites=43 IM_LOAD_IMMEDIA": 853,
+    "sub_8373BD50 lib sites=49": 667,
+    "sub_8373C720 lib sites=3": 2907,
+    "sub_8373C1F0 lib sites=4": 22,
+    "sub_83744D90 lib sites=1": 15
+   },
+   "draws_by_bin_select": {
+    "0xffffffff": 2215
+   }
+  },
+  {
+   "frame": 6653,
+   "packets": 21473,
+   "draws": 2215,
+   "unattributed_packets": 2543,
+   "unattributed_draws": 1416,
+   "by_producer": {
+    "sub_837452C0 lib sites=1 VdGetSystemComma": 60,
+    "sub_8373A3D0 lib sites=6": 18,
+    "UNATTRIBUTED": 2543,
+    "sub_83734370 lib sites=3 SET_BIN_MASK_HI,": 7,
+    "sub_83737180 lib sites=29": 33,
+    "sub_83736DC8 lib sites=6": 4,
+    "sub_837374E8 lib sites=30": 1,
+    "sub_83736EC8 lib sites=12": 4,
+    "sub_83739188 lib sites=1": 103,
+    "sub_8373BC68 lib sites=14": 238,
+    "sub_8373CB08 lib sites=6": 13985,
+    "sub_83742C10 lib sites=0 EVENT_WRITE": 2,
+    "sub_83743268 lib sites=0 WAIT_REG_MEM": 5,
+    "sub_8373D570 lib sites=43 IM_LOAD_IMMEDIA": 852,
+    "sub_8373BD50 lib sites=49": 677,
+    "sub_8373C720 lib sites=3": 2907,
+    "sub_8373C1F0 lib sites=4": 21,
+    "sub_83744D90 lib sites=1": 13
+   },
+   "draws_by_bin_select": {
+    "0xffffffff": 2215
+   }
+  },
+  {
+   "frame": 6654,
+   "packets": 21473,
+   "draws": 2215,
+   "unattributed_packets": 2543,
+   "unattributed_draws": 1416,
+   "by_producer": {
+    "sub_837452C0 lib sites=1 VdGetSystemComma": 60,
+    "sub_8373A3D0 lib sites=6": 15,
+    "UNATTRIBUTED": 2543,
+    "sub_83734370 lib sites=3 SET_BIN_MASK_HI,": 7,
+    "sub_8373CB08 lib sites=6": 13996,
+    "sub_83737180 lib sites=29": 30,
+    "sub_83736DC8 lib sites=6": 4,
+    "sub_837374E8 lib sites=30": 1,
+    "sub_83736EC8 lib sites=12": 4,
+    "sub_83739188 lib sites=1": 103,
+    "sub_8373BC68 lib sites=14": 239,
+    "sub_83742C10 lib sites=0 EVENT_WRITE": 2,
+    "sub_83743268 lib sites=0 WAIT_REG_MEM": 5,
+    "sub_8373D570 lib sites=43 IM_LOAD_IMMEDIA": 853,
+    "sub_8373BD50 lib sites=49": 667,
+    "sub_8373C720 lib sites=3": 2907,
+    "sub_8373C1F0 lib sites=4": 22,
+    "sub_83744D90 lib sites=1": 15
+   },
+   "draws_by_bin_select": {
+    "0xffffffff": 2215
+   }
+  },
+  {
+   "frame": 6655,
+   "packets": 21473,
+   "draws": 2215,
+   "unattributed_packets": 2543,
+   "unattributed_draws": 1416,
+   "by_producer": {
+    "sub_837452C0 lib sites=1 VdGetSystemComma": 60,
+    "sub_8373A3D0 lib sites=6": 18,
+    "UNATTRIBUTED": 2543,
+    "sub_83734370 lib sites=3 SET_BIN_MASK_HI,": 7,
+    "sub_83737180 lib sites=29": 33,
+    "sub_83736DC8 lib sites=6": 4,
+    "sub_837374E8 lib sites=30": 1,
+    "sub_83736EC8 lib sites=12": 4,
+    "sub_83739188 lib sites=1": 103,
+    "sub_8373BC68 lib sites=14": 238,
+    "sub_8373CB08 lib sites=6": 13985,
+    "sub_83742C10 lib sites=0 EVENT_WRITE": 2,
+    "sub_83743268 lib sites=0 WAIT_REG_MEM": 5,
+    "sub_8373D570 lib sites=43 IM_LOAD_IMMEDIA": 852,
+    "sub_8373BD50 lib sites=49": 677,
+    "sub_8373C720 lib sites=3": 2907,
+    "sub_8373C1F0 lib sites=4": 21,
+    "sub_83744D90 lib sites=1": 13
+   },
+   "draws_by_bin_select": {
+    "0xffffffff": 2215
+   }
+  },
+  {
+   "frame": 6656,
+   "packets": 21473,
+   "draws": 2215,
+   "unattributed_packets": 2543,
+   "unattributed_draws": 1416,
+   "by_producer": {
+    "sub_837452C0 lib sites=1 VdGetSystemComma": 60,
+    "sub_8373A3D0 lib sites=6": 15,
+    "UNATTRIBUTED": 2543,
+    "sub_83734370 lib sites=3 SET_BIN_MASK_HI,": 7,
+    "sub_8373CB08 lib sites=6": 13996,
+    "sub_83737180 lib sites=29": 30,
+    "sub_83736DC8 lib sites=6": 4,
+    "sub_837374E8 lib sites=30": 1,
+    "sub_83736EC8 lib sites=12": 4,
+    "sub_83739188 lib sites=1": 103,
+    "sub_8373BC68 lib sites=14": 239,
+    "sub_83742C10 lib sites=0 EVENT_WRITE": 2,
+    "sub_83743268 lib sites=0 WAIT_REG_MEM": 5,
+    "sub_8373D570 lib sites=43 IM_LOAD_IMMEDIA": 853,
+    "sub_8373BD50 lib sites=49": 667,
+    "sub_8373C720 lib sites=3": 2907,
+    "sub_8373C1F0 lib sites=4": 22,
+    "sub_83744D90 lib sites=1": 15
+   },
+   "draws_by_bin_select": {
+    "0xffffffff": 2215
+   }
+  },
+  {
+   "frame": 6657,
+   "packets": 21473,
+   "draws": 2215,
+   "unattributed_packets": 2543,
+   "unattributed_draws": 1416,
+   "by_producer": {
+    "sub_837452C0 lib sites=1 VdGetSystemComma": 60,
+    "sub_8373A3D0 lib sites=6": 18,
+    "UNATTRIBUTED": 2543,
+    "sub_83734370 lib sites=3 SET_BIN_MASK_HI,": 7,
+    "sub_83737180 lib sites=29": 33,
+    "sub_83736DC8 lib sites=6": 4,
+    "sub_837374E8 lib sites=30": 1,
+    "sub_83736EC8 lib sites=12": 4,
+    "sub_83739188 lib sites=1": 103,
+    "sub_8373BC68 lib sites=14": 238,
+    "sub_8373CB08 lib sites=6": 13985,
+    "sub_83742C10 lib sites=0 EVENT_WRITE": 2,
+    "sub_83743268 lib sites=0 WAIT_REG_MEM": 5,
+    "sub_8373D570 lib sites=43 IM_LOAD_IMMEDIA": 852,
+    "sub_8373BD50 lib sites=49": 677,
+    "sub_8373C720 lib sites=3": 2907,
+    "sub_8373C1F0 lib sites=4": 21,
+    "sub_83744D90 lib sites=1": 13
+   },
+   "draws_by_bin_select": {
+    "0xffffffff": 2215
+   }
+  },
+  {
+   "frame": 6658,
+   "packets": 21473,
+   "draws": 2215,
+   "unattributed_packets": 2543,
+   "unattributed_draws": 1416,
+   "by_producer": {
+    "sub_837452C0 lib sites=1 VdGetSystemComma": 60,
+    "sub_8373A3D0 lib sites=6": 15,
+    "UNATTRIBUTED": 2543,
+    "sub_83734370 lib sites=3 SET_BIN_MASK_HI,": 7,
+    "sub_8373CB08 lib sites=6": 13996,
+    "sub_83737180 lib sites=29": 30,
+    "sub_83736DC8 lib sites=6": 4,
+    "sub_837374E8 lib sites=30": 1,
+    "sub_83736EC8 lib sites=12": 4,
+    "sub_83739188 lib sites=1": 103,
+    "sub_8373BC68 lib sites=14": 239,
+    "sub_83742C10 lib sites=0 EVENT_WRITE": 2,
+    "sub_83743268 lib sites=0 WAIT_REG_MEM": 5,
+    "sub_8373D570 lib sites=43 IM_LOAD_IMMEDIA": 853,
+    "sub_8373BD50 lib sites=49": 667,
+    "sub_8373C720 lib sites=3": 2907,
+    "sub_8373C1F0 lib sites=4": 22,
+    "sub_83744D90 lib sites=1": 15
+   },
+   "draws_by_bin_select": {
+    "0xffffffff": 2215
+   }
+  },
+  {
+   "frame": 6659,
+   "packets": 21473,
+   "draws": 2215,
+   "unattributed_packets": 2543,
+   "unattributed_draws": 1416,
+   "by_producer": {
+    "sub_837452C0 lib sites=1 VdGetSystemComma": 55,
+    "sub_8373A3D0 lib sites=6": 18,
+    "UNATTRIBUTED": 2543,
+    "sub_83734370 lib sites=3 SET_BIN_MASK_HI,": 7,
+    "sub_83737180 lib sites=29": 33,
+    "sub_83736DC8 lib sites=6": 4,
+    "sub_837374E8 lib sites=30": 1,
+    "sub_83736EC8 lib sites=12": 4,
+    "sub_83739188 lib sites=1": 103,
+    "sub_8373BC68 lib sites=14": 238,
+    "sub_8373CB08 lib sites=6": 13989,
+    "sub_83742C10 lib sites=0 EVENT_WRITE": 2,
+    "sub_83743268 lib sites=0 WAIT_REG_MEM": 5,
+    "sub_8373D570 lib sites=43 IM_LOAD_IMMEDIA": 852,
+    "sub_8373BD50 lib sites=49": 677,
+    "sub_8373C720 lib sites=3": 2907,
+    "sub_8373C1F0 lib sites=4": 21,
+    "sub_83744D90 lib sites=1": 14
+   },
+   "draws_by_bin_select": {
+    "0xffffffff": 2215
+   }
+  }
+ ],
+ "totals": {
+  "packets": 1290943,
+  "draws": 133021,
+  "unattributed_packets": 144951,
+  "unattributed_draws": 80712,
+  "by_producer": {
+   "sub_837452C0 lib sites=1 VdGetSystemComma": 11224,
+   "sub_8373A3D0 lib sites=6": 969,
+   "UNATTRIBUTED": 144951,
+   "sub_83734370 lib sites=3 SET_BIN_MASK_HI,": 420,
+   "sub_83737180 lib sites=29": 1869,
+   "sub_83736DC8 lib sites=6": 248,
+   "sub_837374E8 lib sites=30": 60,
+   "sub_83736EC8 lib sites=12": 240,
+   "sub_83739188 lib sites=1": 6180,
+   "sub_8373BC68 lib sites=14": 14335,
+   "sub_8373CB08 lib sites=6": 839472,
+   "sub_83742C10 lib sites=0 EVENT_WRITE": 120,
+   "sub_83743268 lib sites=0 WAIT_REG_MEM": 300,
+   "sub_8373D570 lib sites=43 IM_LOAD_IMMEDIA": 51186,
+   "sub_8373BD50 lib sites=49": 42805,
+   "sub_8373C720 lib sites=3": 174420,
+   "sub_8373C1F0 lib sites=4": 1297,
+   "sub_83744D90 lib sites=1": 847
+  },
+  "field": "cur"
+ }
+}
