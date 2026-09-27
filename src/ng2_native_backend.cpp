@@ -153,6 +153,12 @@ class Driver {
   }
 
   void EndFrameNoSwap() { cp_->EndSubmission(false); }
+  void InitShaderStorage(const std::filesystem::path& cache_root, uint32_t title_id) {
+    if (cp_) cp_->InitializeShaderStorage(cache_root, title_id, true);   // blocking: pipelines exist before the draws
+  }
+  void ShutdownShaderStorage() {
+    if (cp_ && cp_->pipeline_cache_) cp_->pipeline_cache_->ShutdownShaderStorage();
+  }
   // PUBLISHED VALUES (ported from the kit's native_gpu_backend.cpp, Fable 012fcf3): settings the backend WRITES
   // (REXCVAR_SET in the vendored code) land in this module's accessor storage, not in the runtime registry other
   // modules read by name. Under offload the plugin no longer computes them, so at each swap the changed ones are
@@ -218,6 +224,8 @@ void WriteRegister(uint32_t index, uint32_t value) { g_driver.WriteRegister(inde
 bool Draw(const DrawRecord& d) { return g_driver.Draw(d); }
 void Swap(uint32_t fb, uint32_t w, uint32_t h, const uint32_t* fetch0, const uint32_t* table, const uint32_t* pwl) { g_driver.Swap(fb, w, h, fetch0, table, pwl); }
 void EndFrameNoSwap() { g_driver.EndFrameNoSwap(); }
+void InitShaderStorage(const std::filesystem::path& cache_root, uint32_t title_id) { g_driver.InitShaderStorage(cache_root, title_id); }
+void ShutdownShaderStorage() { g_driver.ShutdownShaderStorage(); }
 ID3D12Resource* GuestOutput(uint32_t& w, uint32_t& h) { w = g_output_w; h = g_output_h; return g_output; }
 bool GuestOutputIs8bpc() { return g_output_is_8bpc; }
 Stats GetStats() { return g_driver.stats_; }

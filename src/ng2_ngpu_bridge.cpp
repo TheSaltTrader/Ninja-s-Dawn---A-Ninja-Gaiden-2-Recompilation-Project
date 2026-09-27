@@ -24,6 +24,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <filesystem>
 #include <string>
 #include <vector>
 
@@ -138,6 +139,7 @@ using OutputFn = int (*)(ID3D12Resource**, uint32_t*, uint32_t*, int*);   // ONE
 using SetOutputFn = void (*)(OutputFn);
 using GetDeviceFn = int (*)(ID3D12Device**, ID3D12CommandQueue**);
 using PresentStatsFn = void (*)(uint64_t*);
+using StorageFn = int (*)(char*, uint32_t, uint32_t*);   // RexNgpuGetShaderStorage (fork, 2026-09-27)
 
 constexpr uint32_t kRegisterFileCount = 0x5000;   // >= the plugin's RegisterFile::kRegisterCount (0x4928 forwarded)
 constexpr uint32_t kForwardedEnd = 0x4928;
@@ -152,6 +154,8 @@ RevealFn g_reveal_plugin = nullptr;
 SetOutputFn g_set_output = nullptr;
 GetDeviceFn g_get_device = nullptr;
 PresentStatsFn g_present_stats = nullptr;
+StorageFn g_get_storage = nullptr;
+bool g_storage_open = false;
 bool g_one_window = false;       // ONE WINDOW: the backend on the plugin's device, its frames through the presenter
 bool g_hold_this_swap = false;   // the reveal hold's verdict at the last swap; the provider reads it
 uint64_t g_provider_calls = 0, g_provider_held = 0, g_provider_waits_timed_out = 0, g_provider_no_output = 0;
@@ -409,6 +413,21 @@ bool LockstepReady() {
   tried = true;
   g_backend_on = backend::Init(device, queue);
   g_lockstep = g_backend_on;
+  if (g_backend_on) {
+    // The pipeline storage: the plugin recorded the runtime's cache root and title id and, under offload, left the
+    // files to this backend (else every launch recompiled every pipeline on demand: 29-52 ms pipeline waits on the
+    // arrival frames, ng2_044, and nothing persisted).
+    char root[1024] = {};
+    uint32_t title = 0;
+    if (g_get_storage && g_get_storage(root, sizeof(root), &title) && root[0] && title) {
+      backend::InitShaderStorage(std::filesystem::path(reinterpret_cast<const char8_t*>(root)), title);
+      g_storage_open = true;
+      REXLOG_INFO("[ngpu] BACKEND: pipeline storage loaded from {} (title {:08X})", root, title);
+    } else {
+      REXLOG_INFO("[ngpu] BACKEND: no pipeline storage from the plugin ({}) - pipelines are created on demand this run",
+                  g_get_storage ? "not initialised yet" : "no RexNgpuGetShaderStorage export");
+    }
+  }
   REXLOG_INFO("[ngpu] LOCKSTEP (in-exe): {}", g_backend_on
                                                    ? "the plugin's draw callback feeds the transplanted backend directly"
                                                    : "backend initialisation FAILED - the native path stays off");
@@ -680,6 +699,7 @@ void Start(const render::WindowSpec& window) {
   g_set_output = Bind<SetOutputFn>(m, "RexNgpuSetOutputProvider");   // ONE WINDOW (fork f6fc6d4c)
   g_get_device = Bind<GetDeviceFn>(m, "RexNgpuGetDevice");
   g_present_stats = Bind<PresentStatsFn>(m, "RexNgpuPresentStats");
+  g_get_storage = Bind<StorageFn>(m, "RexNgpuGetShaderStorage");
   if (auto dirty_fn = Bind<DirtyFn>(m, "RexNgpuDirtyRegs")) {
     g_dirty = dirty_fn(&g_dirty_words);
     if (g_dirty && g_dirty_words * 64 < kForwardedEnd) g_dirty = nullptr;
@@ -769,6 +789,11 @@ void Stop() {
   if (g_set_swap) g_set_swap(nullptr);
   if (g_set_output) g_set_output(nullptr);
   g_set_output = nullptr;
+  if (g_storage_open) {
+    g_storage_open = false;
+    backend::ShutdownShaderStorage();   // this run's new pipelines reach the files before the process goes
+    REXLOG_INFO("[ngpu] BACKEND: pipeline storage closed");
+  }
   g_set_draw = nullptr;
   g_set_swap = nullptr;
   render::Stop();

@@ -7,6 +7,7 @@
 // Behind ngpu_backend (default off). Nothing here writes guest memory: every readback is forced off in the vendored
 // sources (vendor_rtc_d3d12.py NATIVE_FORCED / SOURCE_PATCHES) - the plugin, still running, owns guest memory.
 #include <cstdint>
+#include <filesystem>
 
 struct ID3D12Device;
 struct ID3D12CommandQueue;
@@ -15,6 +16,11 @@ struct ID3D12Resource;
 namespace ng2::ngpu::backend {
 
 bool Init(ID3D12Device* device, ID3D12CommandQueue* queue);
+// The pipeline storage (cache root + title id as the runtime gave them to the plugin, RexNgpuGetShaderStorage):
+// load it synchronously (on the GPU thread, right after Init) and append this run's pipelines; Shutdown writes
+// the tail out and closes the files.
+void InitShaderStorage(const std::filesystem::path& cache_root, uint32_t title_id);
+void ShutdownShaderStorage();
 bool Ready();
 
 // Register write, exactly as the PM4 parser would perform it (the command processor tracks dirty constants here).
