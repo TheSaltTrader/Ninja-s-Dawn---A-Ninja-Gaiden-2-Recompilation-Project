@@ -1,0 +1,1650 @@
+{
+ "frames": [
+  {
+   "frame": 900,
+   "packets": 245,
+   "draws": 5,
+   "unattributed_packets": 0,
+   "unattributed_draws": 0,
+   "by_producer": {
+    "sub_837452C0 lib sites=1 VdGetSystemComma": 63,
+    "sub_8373A3D0 lib sites=6": 6,
+    "PRIMARY RING (library kick-off writer)": 4,
+    "sub_83734370 lib sites=3 SET_BIN_MASK_HI,": 7,
+    "ENGINE INLINE after sub_8373A3D0": 7,
+    "sub_83737180 lib sites=29": 2,
+    "sub_83736DC8 lib sites=6": 1,
+    "sub_83739188 lib sites=1": 32,
+    "sub_8373E5B8 lib sites=3 WAIT_REG_MEM": 27,
+    "sub_8373BD50 lib sites=49": 35,
+    "sub_83743268 lib sites=0 WAIT_REG_MEM": 6,
+    "ENGINE INLINE after sub_8373BD50": 12,
+    "sub_8373D570 lib sites=43 IM_LOAD_IMMEDIA": 23,
+    "ENGINE INLINE after sub_8373D570": 8,
+    "sub_83744D90 lib sites=1": 12
+   },
+   "draws_by_bin_select": {
+    "0xffffffff": 5
+   }
+  },
+  {
+   "frame": 901,
+   "packets": 245,
+   "draws": 5,
+   "unattributed_packets": 0,
+   "unattributed_draws": 0,
+   "by_producer": {
+    "sub_837452C0 lib sites=1 VdGetSystemComma": 63,
+    "sub_8373A3D0 lib sites=6": 6,
+    "PRIMARY RING (library kick-off writer)": 4,
+    "sub_83734370 lib sites=3 SET_BIN_MASK_HI,": 7,
+    "ENGINE INLINE after sub_8373A3D0": 7,
+    "sub_83737180 lib sites=29": 2,
+    "sub_83736DC8 lib sites=6": 1,
+    "sub_83739188 lib sites=1": 32,
+    "sub_8373E5B8 lib sites=3 WAIT_REG_MEM": 27,
+    "sub_8373BD50 lib sites=49": 35,
+    "sub_83743268 lib sites=0 WAIT_REG_MEM": 6,
+    "ENGINE INLINE after sub_8373BD50": 12,
+    "sub_8373D570 lib sites=43 IM_LOAD_IMMEDIA": 23,
+    "ENGINE INLINE after sub_8373D570": 8,
+    "sub_83744D90 lib sites=1": 12
+   },
+   "draws_by_bin_select": {
+    "0xffffffff": 5
+   }
+  },
+  {
+   "frame": 902,
+   "packets": 245,
+   "draws": 5,
+   "unattributed_packets": 0,
+   "unattributed_draws": 0,
+   "by_producer": {
+    "sub_837452C0 lib sites=1 VdGetSystemComma": 63,
+    "sub_8373A3D0 lib sites=6": 6,
+    "PRIMARY RING (library kick-off writer)": 4,
+    "sub_83734370 lib sites=3 SET_BIN_MASK_HI,": 7,
+    "ENGINE INLINE after sub_8373A3D0": 7,
+    "sub_83737180 lib sites=29": 2,
+    "sub_83736DC8 lib sites=6": 1,
+    "sub_83739188 lib sites=1": 32,
+    "sub_8373E5B8 lib sites=3 WAIT_REG_MEM": 27,
+    "sub_8373BD50 lib sites=49": 35,
+    "sub_83743268 lib sites=0 WAIT_REG_MEM": 6,
+    "ENGINE INLINE after sub_8373BD50": 12,
+    "sub_8373D570 lib sites=43 IM_LOAD_IMMEDIA": 23,
+    "ENGINE INLINE after sub_8373D570": 8,
+    "sub_83744D90 lib sites=1": 12
+   },
+   "draws_by_bin_select": {
+    "0xffffffff": 5
+   }
+  },
+  {
+   "frame": 903,
+   "packets": 245,
+   "draws": 5,
+   "unattributed_packets": 0,
+   "unattributed_draws": 0,
+   "by_producer": {
+    "sub_837452C0 lib sites=1 VdGetSystemComma": 63,
+    "sub_8373A3D0 lib sites=6": 6,
+    "PRIMARY RING (library kick-off writer)": 4,
+    "sub_83734370 lib sites=3 SET_BIN_MASK_HI,": 7,
+    "ENGINE INLINE after sub_8373A3D0": 7,
+    "sub_83737180 lib sites=29": 2,
+    "sub_83736DC8 lib sites=6": 1,
+    "sub_83739188 lib sites=1": 32,
+    "sub_8373E5B8 lib sites=3 WAIT_REG_MEM": 27,
+    "sub_8373BD50 lib sites=49": 35,
+    "sub_83743268 lib sites=0 WAIT_REG_MEM": 6,
+    "ENGINE INLINE after sub_8373BD50": 12,
+    "sub_8373D570 lib sites=43 IM_LOAD_IMMEDIA": 23,
+    "ENGINE INLINE after sub_8373D570": 8,
+    "sub_83744D90 lib sites=1": 12
+   },
+   "draws_by_bin_select": {
+    "0xffffffff": 5
+   }
+  },
+  {
+   "frame": 904,
+   "packets": 245,
+   "draws": 5,
+   "unattributed_packets": 0,
+   "unattributed_draws": 0,
+   "by_producer": {
+    "sub_837452C0 lib sites=1 VdGetSystemComma": 63,
+    "sub_8373A3D0 lib sites=6": 6,
+    "PRIMARY RING (library kick-off writer)": 4,
+    "sub_83734370 lib sites=3 SET_BIN_MASK_HI,": 7,
+    "ENGINE INLINE after sub_8373A3D0": 7,
+    "sub_83737180 lib sites=29": 2,
+    "sub_83736DC8 lib sites=6": 1,
+    "sub_83739188 lib sites=1": 32,
+    "sub_8373E5B8 lib sites=3 WAIT_REG_MEM": 27,
+    "sub_8373BD50 lib sites=49": 35,
+    "sub_83743268 lib sites=0 WAIT_REG_MEM": 6,
+    "ENGINE INLINE after sub_8373BD50": 12,
+    "sub_8373D570 lib sites=43 IM_LOAD_IMMEDIA": 23,
+    "ENGINE INLINE after sub_8373D570": 8,
+    "sub_83744D90 lib sites=1": 12
+   },
+   "draws_by_bin_select": {
+    "0xffffffff": 5
+   }
+  },
+  {
+   "frame": 905,
+   "packets": 245,
+   "draws": 5,
+   "unattributed_packets": 0,
+   "unattributed_draws": 0,
+   "by_producer": {
+    "sub_837452C0 lib sites=1 VdGetSystemComma": 63,
+    "sub_8373A3D0 lib sites=6": 6,
+    "PRIMARY RING (library kick-off writer)": 4,
+    "sub_83734370 lib sites=3 SET_BIN_MASK_HI,": 7,
+    "ENGINE INLINE after sub_8373A3D0": 7,
+    "sub_83737180 lib sites=29": 2,
+    "sub_83736DC8 lib sites=6": 1,
+    "sub_83739188 lib sites=1": 32,
+    "sub_8373E5B8 lib sites=3 WAIT_REG_MEM": 27,
+    "sub_8373BD50 lib sites=49": 35,
+    "sub_83743268 lib sites=0 WAIT_REG_MEM": 6,
+    "ENGINE INLINE after sub_8373BD50": 12,
+    "sub_8373D570 lib sites=43 IM_LOAD_IMMEDIA": 23,
+    "ENGINE INLINE after sub_8373D570": 8,
+    "sub_83744D90 lib sites=1": 12
+   },
+   "draws_by_bin_select": {
+    "0xffffffff": 5
+   }
+  },
+  {
+   "frame": 906,
+   "packets": 245,
+   "draws": 5,
+   "unattributed_packets": 0,
+   "unattributed_draws": 0,
+   "by_producer": {
+    "sub_837452C0 lib sites=1 VdGetSystemComma": 63,
+    "sub_8373A3D0 lib sites=6": 6,
+    "PRIMARY RING (library kick-off writer)": 4,
+    "sub_83734370 lib sites=3 SET_BIN_MASK_HI,": 7,
+    "ENGINE INLINE after sub_8373A3D0": 7,
+    "sub_83737180 lib sites=29": 2,
+    "sub_83736DC8 lib sites=6": 1,
+    "sub_83739188 lib sites=1": 32,
+    "sub_8373E5B8 lib sites=3 WAIT_REG_MEM": 27,
+    "sub_8373BD50 lib sites=49": 35,
+    "sub_83743268 lib sites=0 WAIT_REG_MEM": 6,
+    "ENGINE INLINE after sub_8373BD50": 12,
+    "sub_8373D570 lib sites=43 IM_LOAD_IMMEDIA": 23,
+    "ENGINE INLINE after sub_8373D570": 8,
+    "sub_83744D90 lib sites=1": 12
+   },
+   "draws_by_bin_select": {
+    "0xffffffff": 5
+   }
+  },
+  {
+   "frame": 907,
+   "packets": 245,
+   "draws": 5,
+   "unattributed_packets": 0,
+   "unattributed_draws": 0,
+   "by_producer": {
+    "sub_837452C0 lib sites=1 VdGetSystemComma": 63,
+    "sub_8373A3D0 lib sites=6": 6,
+    "PRIMARY RING (library kick-off writer)": 4,
+    "sub_83734370 lib sites=3 SET_BIN_MASK_HI,": 7,
+    "ENGINE INLINE after sub_8373A3D0": 7,
+    "sub_83737180 lib sites=29": 2,
+    "sub_83736DC8 lib sites=6": 1,
+    "sub_83739188 lib sites=1": 32,
+    "sub_8373E5B8 lib sites=3 WAIT_REG_MEM": 27,
+    "sub_8373BD50 lib sites=49": 35,
+    "sub_83743268 lib sites=0 WAIT_REG_MEM": 6,
+    "ENGINE INLINE after sub_8373BD50": 12,
+    "sub_8373D570 lib sites=43 IM_LOAD_IMMEDIA": 23,
+    "ENGINE INLINE after sub_8373D570": 8,
+    "sub_83744D90 lib sites=1": 12
+   },
+   "draws_by_bin_select": {
+    "0xffffffff": 5
+   }
+  },
+  {
+   "frame": 908,
+   "packets": 245,
+   "draws": 5,
+   "unattributed_packets": 0,
+   "unattributed_draws": 0,
+   "by_producer": {
+    "sub_837452C0 lib sites=1 VdGetSystemComma": 63,
+    "sub_8373A3D0 lib sites=6": 6,
+    "PRIMARY RING (library kick-off writer)": 4,
+    "sub_83734370 lib sites=3 SET_BIN_MASK_HI,": 7,
+    "ENGINE INLINE after sub_8373A3D0": 7,
+    "sub_83737180 lib sites=29": 2,
+    "sub_83736DC8 lib sites=6": 1,
+    "sub_83739188 lib sites=1": 32,
+    "sub_8373E5B8 lib sites=3 WAIT_REG_MEM": 27,
+    "sub_8373BD50 lib sites=49": 35,
+    "sub_83743268 lib sites=0 WAIT_REG_MEM": 6,
+    "ENGINE INLINE after sub_8373BD50": 12,
+    "sub_8373D570 lib sites=43 IM_LOAD_IMMEDIA": 23,
+    "ENGINE INLINE after sub_8373D570": 8,
+    "sub_83744D90 lib sites=1": 12
+   },
+   "draws_by_bin_select": {
+    "0xffffffff": 5
+   }
+  },
+  {
+   "frame": 909,
+   "packets": 245,
+   "draws": 5,
+   "unattributed_packets": 0,
+   "unattributed_draws": 0,
+   "by_producer": {
+    "sub_837452C0 lib sites=1 VdGetSystemComma": 63,
+    "sub_8373A3D0 lib sites=6": 6,
+    "PRIMARY RING (library kick-off writer)": 4,
+    "sub_83734370 lib sites=3 SET_BIN_MASK_HI,": 7,
+    "ENGINE INLINE after sub_8373A3D0": 7,
+    "sub_83737180 lib sites=29": 2,
+    "sub_83736DC8 lib sites=6": 1,
+    "sub_83739188 lib sites=1": 32,
+    "sub_8373E5B8 lib sites=3 WAIT_REG_MEM": 27,
+    "sub_8373BD50 lib sites=49": 35,
+    "sub_83743268 lib sites=0 WAIT_REG_MEM": 6,
+    "ENGINE INLINE after sub_8373BD50": 12,
+    "sub_8373D570 lib sites=43 IM_LOAD_IMMEDIA": 23,
+    "ENGINE INLINE after sub_8373D570": 8,
+    "sub_83744D90 lib sites=1": 12
+   },
+   "draws_by_bin_select": {
+    "0xffffffff": 5
+   }
+  },
+  {
+   "frame": 910,
+   "packets": 245,
+   "draws": 5,
+   "unattributed_packets": 0,
+   "unattributed_draws": 0,
+   "by_producer": {
+    "sub_837452C0 lib sites=1 VdGetSystemComma": 63,
+    "sub_8373A3D0 lib sites=6": 6,
+    "PRIMARY RING (library kick-off writer)": 4,
+    "sub_83734370 lib sites=3 SET_BIN_MASK_HI,": 7,
+    "ENGINE INLINE after sub_8373A3D0": 7,
+    "sub_83737180 lib sites=29": 2,
+    "sub_83736DC8 lib sites=6": 1,
+    "sub_83739188 lib sites=1": 32,
+    "sub_8373E5B8 lib sites=3 WAIT_REG_MEM": 27,
+    "sub_8373BD50 lib sites=49": 35,
+    "sub_83743268 lib sites=0 WAIT_REG_MEM": 6,
+    "ENGINE INLINE after sub_8373BD50": 12,
+    "sub_8373D570 lib sites=43 IM_LOAD_IMMEDIA": 23,
+    "ENGINE INLINE after sub_8373D570": 8,
+    "sub_83744D90 lib sites=1": 12
+   },
+   "draws_by_bin_select": {
+    "0xffffffff": 5
+   }
+  },
+  {
+   "frame": 911,
+   "packets": 245,
+   "draws": 5,
+   "unattributed_packets": 0,
+   "unattributed_draws": 0,
+   "by_producer": {
+    "sub_837452C0 lib sites=1 VdGetSystemComma": 63,
+    "sub_8373A3D0 lib sites=6": 6,
+    "PRIMARY RING (library kick-off writer)": 4,
+    "sub_83734370 lib sites=3 SET_BIN_MASK_HI,": 7,
+    "ENGINE INLINE after sub_8373A3D0": 7,
+    "sub_83737180 lib sites=29": 2,
+    "sub_83736DC8 lib sites=6": 1,
+    "sub_83739188 lib sites=1": 32,
+    "sub_8373E5B8 lib sites=3 WAIT_REG_MEM": 27,
+    "sub_8373BD50 lib sites=49": 35,
+    "sub_83743268 lib sites=0 WAIT_REG_MEM": 6,
+    "ENGINE INLINE after sub_8373BD50": 12,
+    "sub_8373D570 lib sites=43 IM_LOAD_IMMEDIA": 23,
+    "ENGINE INLINE after sub_8373D570": 8,
+    "sub_83744D90 lib sites=1": 12
+   },
+   "draws_by_bin_select": {
+    "0xffffffff": 5
+   }
+  },
+  {
+   "frame": 912,
+   "packets": 245,
+   "draws": 5,
+   "unattributed_packets": 0,
+   "unattributed_draws": 0,
+   "by_producer": {
+    "sub_837452C0 lib sites=1 VdGetSystemComma": 63,
+    "sub_8373A3D0 lib sites=6": 6,
+    "PRIMARY RING (library kick-off writer)": 4,
+    "sub_83734370 lib sites=3 SET_BIN_MASK_HI,": 7,
+    "ENGINE INLINE after sub_8373A3D0": 7,
+    "sub_83737180 lib sites=29": 2,
+    "sub_83736DC8 lib sites=6": 1,
+    "sub_83739188 lib sites=1": 32,
+    "sub_8373E5B8 lib sites=3 WAIT_REG_MEM": 27,
+    "sub_8373BD50 lib sites=49": 35,
+    "sub_83743268 lib sites=0 WAIT_REG_MEM": 6,
+    "ENGINE INLINE after sub_8373BD50": 12,
+    "sub_8373D570 lib sites=43 IM_LOAD_IMMEDIA": 23,
+    "ENGINE INLINE after sub_8373D570": 8,
+    "sub_83744D90 lib sites=1": 12
+   },
+   "draws_by_bin_select": {
+    "0xffffffff": 5
+   }
+  },
+  {
+   "frame": 913,
+   "packets": 245,
+   "draws": 5,
+   "unattributed_packets": 0,
+   "unattributed_draws": 0,
+   "by_producer": {
+    "sub_837452C0 lib sites=1 VdGetSystemComma": 63,
+    "sub_8373A3D0 lib sites=6": 6,
+    "PRIMARY RING (library kick-off writer)": 4,
+    "sub_83734370 lib sites=3 SET_BIN_MASK_HI,": 7,
+    "ENGINE INLINE after sub_8373A3D0": 7,
+    "sub_83737180 lib sites=29": 2,
+    "sub_83736DC8 lib sites=6": 1,
+    "sub_83739188 lib sites=1": 32,
+    "sub_8373E5B8 lib sites=3 WAIT_REG_MEM": 27,
+    "sub_8373BD50 lib sites=49": 35,
+    "sub_83743268 lib sites=0 WAIT_REG_MEM": 6,
+    "ENGINE INLINE after sub_8373BD50": 12,
+    "sub_8373D570 lib sites=43 IM_LOAD_IMMEDIA": 23,
+    "ENGINE INLINE after sub_8373D570": 8,
+    "sub_83744D90 lib sites=1": 12
+   },
+   "draws_by_bin_select": {
+    "0xffffffff": 5
+   }
+  },
+  {
+   "frame": 914,
+   "packets": 245,
+   "draws": 5,
+   "unattributed_packets": 0,
+   "unattributed_draws": 0,
+   "by_producer": {
+    "sub_837452C0 lib sites=1 VdGetSystemComma": 63,
+    "sub_8373A3D0 lib sites=6": 6,
+    "PRIMARY RING (library kick-off writer)": 4,
+    "sub_83734370 lib sites=3 SET_BIN_MASK_HI,": 7,
+    "ENGINE INLINE after sub_8373A3D0": 7,
+    "sub_83737180 lib sites=29": 2,
+    "sub_83736DC8 lib sites=6": 1,
+    "sub_83739188 lib sites=1": 32,
+    "sub_8373E5B8 lib sites=3 WAIT_REG_MEM": 27,
+    "sub_8373BD50 lib sites=49": 35,
+    "sub_83743268 lib sites=0 WAIT_REG_MEM": 6,
+    "ENGINE INLINE after sub_8373BD50": 12,
+    "sub_8373D570 lib sites=43 IM_LOAD_IMMEDIA": 23,
+    "ENGINE INLINE after sub_8373D570": 8,
+    "sub_83744D90 lib sites=1": 12
+   },
+   "draws_by_bin_select": {
+    "0xffffffff": 5
+   }
+  },
+  {
+   "frame": 915,
+   "packets": 245,
+   "draws": 5,
+   "unattributed_packets": 0,
+   "unattributed_draws": 0,
+   "by_producer": {
+    "sub_837452C0 lib sites=1 VdGetSystemComma": 63,
+    "sub_8373A3D0 lib sites=6": 6,
+    "PRIMARY RING (library kick-off writer)": 4,
+    "sub_83734370 lib sites=3 SET_BIN_MASK_HI,": 7,
+    "ENGINE INLINE after sub_8373A3D0": 7,
+    "sub_83737180 lib sites=29": 2,
+    "sub_83736DC8 lib sites=6": 1,
+    "sub_83739188 lib sites=1": 32,
+    "sub_8373E5B8 lib sites=3 WAIT_REG_MEM": 27,
+    "sub_8373BD50 lib sites=49": 35,
+    "sub_83743268 lib sites=0 WAIT_REG_MEM": 6,
+    "ENGINE INLINE after sub_8373BD50": 12,
+    "sub_8373D570 lib sites=43 IM_LOAD_IMMEDIA": 23,
+    "ENGINE INLINE after sub_8373D570": 8,
+    "sub_83744D90 lib sites=1": 12
+   },
+   "draws_by_bin_select": {
+    "0xffffffff": 5
+   }
+  },
+  {
+   "frame": 916,
+   "packets": 245,
+   "draws": 5,
+   "unattributed_packets": 0,
+   "unattributed_draws": 0,
+   "by_producer": {
+    "sub_837452C0 lib sites=1 VdGetSystemComma": 63,
+    "sub_8373A3D0 lib sites=6": 6,
+    "PRIMARY RING (library kick-off writer)": 4,
+    "sub_83734370 lib sites=3 SET_BIN_MASK_HI,": 7,
+    "ENGINE INLINE after sub_8373A3D0": 7,
+    "sub_83737180 lib sites=29": 2,
+    "sub_83736DC8 lib sites=6": 1,
+    "sub_83739188 lib sites=1": 32,
+    "sub_8373E5B8 lib sites=3 WAIT_REG_MEM": 27,
+    "sub_8373BD50 lib sites=49": 35,
+    "sub_83743268 lib sites=0 WAIT_REG_MEM": 6,
+    "ENGINE INLINE after sub_8373BD50": 12,
+    "sub_8373D570 lib sites=43 IM_LOAD_IMMEDIA": 23,
+    "ENGINE INLINE after sub_8373D570": 8,
+    "sub_83744D90 lib sites=1": 12
+   },
+   "draws_by_bin_select": {
+    "0xffffffff": 5
+   }
+  },
+  {
+   "frame": 917,
+   "packets": 245,
+   "draws": 5,
+   "unattributed_packets": 0,
+   "unattributed_draws": 0,
+   "by_producer": {
+    "sub_837452C0 lib sites=1 VdGetSystemComma": 63,
+    "sub_8373A3D0 lib sites=6": 6,
+    "PRIMARY RING (library kick-off writer)": 4,
+    "sub_83734370 lib sites=3 SET_BIN_MASK_HI,": 7,
+    "ENGINE INLINE after sub_8373A3D0": 7,
+    "sub_83737180 lib sites=29": 2,
+    "sub_83736DC8 lib sites=6": 1,
+    "sub_83739188 lib sites=1": 32,
+    "sub_8373E5B8 lib sites=3 WAIT_REG_MEM": 27,
+    "sub_8373BD50 lib sites=49": 35,
+    "sub_83743268 lib sites=0 WAIT_REG_MEM": 6,
+    "ENGINE INLINE after sub_8373BD50": 12,
+    "sub_8373D570 lib sites=43 IM_LOAD_IMMEDIA": 23,
+    "ENGINE INLINE after sub_8373D570": 8,
+    "sub_83744D90 lib sites=1": 12
+   },
+   "draws_by_bin_select": {
+    "0xffffffff": 5
+   }
+  },
+  {
+   "frame": 918,
+   "packets": 245,
+   "draws": 5,
+   "unattributed_packets": 0,
+   "unattributed_draws": 0,
+   "by_producer": {
+    "sub_837452C0 lib sites=1 VdGetSystemComma": 63,
+    "sub_8373A3D0 lib sites=6": 6,
+    "PRIMARY RING (library kick-off writer)": 4,
+    "sub_83734370 lib sites=3 SET_BIN_MASK_HI,": 7,
+    "ENGINE INLINE after sub_8373A3D0": 7,
+    "sub_83737180 lib sites=29": 2,
+    "sub_83736DC8 lib sites=6": 1,
+    "sub_83739188 lib sites=1": 32,
+    "sub_8373E5B8 lib sites=3 WAIT_REG_MEM": 27,
+    "sub_8373BD50 lib sites=49": 35,
+    "sub_83743268 lib sites=0 WAIT_REG_MEM": 6,
+    "ENGINE INLINE after sub_8373BD50": 12,
+    "sub_8373D570 lib sites=43 IM_LOAD_IMMEDIA": 23,
+    "ENGINE INLINE after sub_8373D570": 8,
+    "sub_83744D90 lib sites=1": 12
+   },
+   "draws_by_bin_select": {
+    "0xffffffff": 5
+   }
+  },
+  {
+   "frame": 919,
+   "packets": 245,
+   "draws": 5,
+   "unattributed_packets": 0,
+   "unattributed_draws": 0,
+   "by_producer": {
+    "sub_837452C0 lib sites=1 VdGetSystemComma": 63,
+    "sub_8373A3D0 lib sites=6": 6,
+    "PRIMARY RING (library kick-off writer)": 4,
+    "sub_83734370 lib sites=3 SET_BIN_MASK_HI,": 7,
+    "ENGINE INLINE after sub_8373A3D0": 7,
+    "sub_83737180 lib sites=29": 2,
+    "sub_83736DC8 lib sites=6": 1,
+    "sub_83739188 lib sites=1": 32,
+    "sub_8373E5B8 lib sites=3 WAIT_REG_MEM": 27,
+    "sub_8373BD50 lib sites=49": 35,
+    "sub_83743268 lib sites=0 WAIT_REG_MEM": 6,
+    "ENGINE INLINE after sub_8373BD50": 12,
+    "sub_8373D570 lib sites=43 IM_LOAD_IMMEDIA": 23,
+    "ENGINE INLINE after sub_8373D570": 8,
+    "sub_83744D90 lib sites=1": 12
+   },
+   "draws_by_bin_select": {
+    "0xffffffff": 5
+   }
+  },
+  {
+   "frame": 920,
+   "packets": 245,
+   "draws": 5,
+   "unattributed_packets": 0,
+   "unattributed_draws": 0,
+   "by_producer": {
+    "sub_837452C0 lib sites=1 VdGetSystemComma": 63,
+    "sub_8373A3D0 lib sites=6": 6,
+    "PRIMARY RING (library kick-off writer)": 4,
+    "sub_83734370 lib sites=3 SET_BIN_MASK_HI,": 7,
+    "ENGINE INLINE after sub_8373A3D0": 7,
+    "sub_83737180 lib sites=29": 2,
+    "sub_83736DC8 lib sites=6": 1,
+    "sub_83739188 lib sites=1": 32,
+    "sub_8373E5B8 lib sites=3 WAIT_REG_MEM": 27,
+    "sub_8373BD50 lib sites=49": 35,
+    "sub_83743268 lib sites=0 WAIT_REG_MEM": 6,
+    "ENGINE INLINE after sub_8373BD50": 12,
+    "sub_8373D570 lib sites=43 IM_LOAD_IMMEDIA": 23,
+    "ENGINE INLINE after sub_8373D570": 8,
+    "sub_83744D90 lib sites=1": 12
+   },
+   "draws_by_bin_select": {
+    "0xffffffff": 5
+   }
+  },
+  {
+   "frame": 921,
+   "packets": 245,
+   "draws": 5,
+   "unattributed_packets": 0,
+   "unattributed_draws": 0,
+   "by_producer": {
+    "sub_837452C0 lib sites=1 VdGetSystemComma": 63,
+    "sub_8373A3D0 lib sites=6": 6,
+    "PRIMARY RING (library kick-off writer)": 4,
+    "sub_83734370 lib sites=3 SET_BIN_MASK_HI,": 7,
+    "ENGINE INLINE after sub_8373A3D0": 7,
+    "sub_83737180 lib sites=29": 2,
+    "sub_83736DC8 lib sites=6": 1,
+    "sub_83739188 lib sites=1": 32,
+    "sub_8373E5B8 lib sites=3 WAIT_REG_MEM": 27,
+    "sub_8373BD50 lib sites=49": 35,
+    "sub_83743268 lib sites=0 WAIT_REG_MEM": 6,
+    "ENGINE INLINE after sub_8373BD50": 12,
+    "sub_8373D570 lib sites=43 IM_LOAD_IMMEDIA": 23,
+    "ENGINE INLINE after sub_8373D570": 8,
+    "sub_83744D90 lib sites=1": 12
+   },
+   "draws_by_bin_select": {
+    "0xffffffff": 5
+   }
+  },
+  {
+   "frame": 922,
+   "packets": 245,
+   "draws": 5,
+   "unattributed_packets": 0,
+   "unattributed_draws": 0,
+   "by_producer": {
+    "sub_837452C0 lib sites=1 VdGetSystemComma": 63,
+    "sub_8373A3D0 lib sites=6": 6,
+    "PRIMARY RING (library kick-off writer)": 4,
+    "sub_83734370 lib sites=3 SET_BIN_MASK_HI,": 7,
+    "ENGINE INLINE after sub_8373A3D0": 7,
+    "sub_83737180 lib sites=29": 2,
+    "sub_83736DC8 lib sites=6": 1,
+    "sub_83739188 lib sites=1": 32,
+    "sub_8373E5B8 lib sites=3 WAIT_REG_MEM": 27,
+    "sub_8373BD50 lib sites=49": 35,
+    "sub_83743268 lib sites=0 WAIT_REG_MEM": 6,
+    "ENGINE INLINE after sub_8373BD50": 12,
+    "sub_8373D570 lib sites=43 IM_LOAD_IMMEDIA": 23,
+    "ENGINE INLINE after sub_8373D570": 8,
+    "sub_83744D90 lib sites=1": 12
+   },
+   "draws_by_bin_select": {
+    "0xffffffff": 5
+   }
+  },
+  {
+   "frame": 923,
+   "packets": 245,
+   "draws": 5,
+   "unattributed_packets": 0,
+   "unattributed_draws": 0,
+   "by_producer": {
+    "sub_837452C0 lib sites=1 VdGetSystemComma": 63,
+    "sub_8373A3D0 lib sites=6": 6,
+    "PRIMARY RING (library kick-off writer)": 4,
+    "sub_83734370 lib sites=3 SET_BIN_MASK_HI,": 7,
+    "ENGINE INLINE after sub_8373A3D0": 7,
+    "sub_83737180 lib sites=29": 2,
+    "sub_83736DC8 lib sites=6": 1,
+    "sub_83739188 lib sites=1": 32,
+    "sub_8373E5B8 lib sites=3 WAIT_REG_MEM": 27,
+    "sub_8373BD50 lib sites=49": 35,
+    "sub_83743268 lib sites=0 WAIT_REG_MEM": 6,
+    "ENGINE INLINE after sub_8373BD50": 12,
+    "sub_8373D570 lib sites=43 IM_LOAD_IMMEDIA": 23,
+    "ENGINE INLINE after sub_8373D570": 8,
+    "sub_83744D90 lib sites=1": 12
+   },
+   "draws_by_bin_select": {
+    "0xffffffff": 5
+   }
+  },
+  {
+   "frame": 924,
+   "packets": 245,
+   "draws": 5,
+   "unattributed_packets": 0,
+   "unattributed_draws": 0,
+   "by_producer": {
+    "sub_837452C0 lib sites=1 VdGetSystemComma": 63,
+    "sub_8373A3D0 lib sites=6": 6,
+    "PRIMARY RING (library kick-off writer)": 4,
+    "sub_83734370 lib sites=3 SET_BIN_MASK_HI,": 7,
+    "ENGINE INLINE after sub_8373A3D0": 7,
+    "sub_83737180 lib sites=29": 2,
+    "sub_83736DC8 lib sites=6": 1,
+    "sub_83739188 lib sites=1": 32,
+    "sub_8373E5B8 lib sites=3 WAIT_REG_MEM": 27,
+    "sub_8373BD50 lib sites=49": 35,
+    "sub_83743268 lib sites=0 WAIT_REG_MEM": 6,
+    "ENGINE INLINE after sub_8373BD50": 12,
+    "sub_8373D570 lib sites=43 IM_LOAD_IMMEDIA": 23,
+    "ENGINE INLINE after sub_8373D570": 8,
+    "sub_83744D90 lib sites=1": 12
+   },
+   "draws_by_bin_select": {
+    "0xffffffff": 5
+   }
+  },
+  {
+   "frame": 925,
+   "packets": 245,
+   "draws": 5,
+   "unattributed_packets": 0,
+   "unattributed_draws": 0,
+   "by_producer": {
+    "sub_837452C0 lib sites=1 VdGetSystemComma": 63,
+    "sub_8373A3D0 lib sites=6": 6,
+    "PRIMARY RING (library kick-off writer)": 4,
+    "sub_83734370 lib sites=3 SET_BIN_MASK_HI,": 7,
+    "ENGINE INLINE after sub_8373A3D0": 7,
+    "sub_83737180 lib sites=29": 2,
+    "sub_83736DC8 lib sites=6": 1,
+    "sub_83739188 lib sites=1": 32,
+    "sub_8373E5B8 lib sites=3 WAIT_REG_MEM": 27,
+    "sub_8373BD50 lib sites=49": 35,
+    "sub_83743268 lib sites=0 WAIT_REG_MEM": 6,
+    "ENGINE INLINE after sub_8373BD50": 12,
+    "sub_8373D570 lib sites=43 IM_LOAD_IMMEDIA": 23,
+    "ENGINE INLINE after sub_8373D570": 8,
+    "sub_83744D90 lib sites=1": 12
+   },
+   "draws_by_bin_select": {
+    "0xffffffff": 5
+   }
+  },
+  {
+   "frame": 926,
+   "packets": 245,
+   "draws": 5,
+   "unattributed_packets": 0,
+   "unattributed_draws": 0,
+   "by_producer": {
+    "sub_837452C0 lib sites=1 VdGetSystemComma": 63,
+    "sub_8373A3D0 lib sites=6": 6,
+    "PRIMARY RING (library kick-off writer)": 4,
+    "sub_83734370 lib sites=3 SET_BIN_MASK_HI,": 7,
+    "ENGINE INLINE after sub_8373A3D0": 7,
+    "sub_83737180 lib sites=29": 2,
+    "sub_83736DC8 lib sites=6": 1,
+    "sub_83739188 lib sites=1": 32,
+    "sub_8373E5B8 lib sites=3 WAIT_REG_MEM": 27,
+    "sub_8373BD50 lib sites=49": 35,
+    "sub_83743268 lib sites=0 WAIT_REG_MEM": 6,
+    "ENGINE INLINE after sub_8373BD50": 12,
+    "sub_8373D570 lib sites=43 IM_LOAD_IMMEDIA": 23,
+    "ENGINE INLINE after sub_8373D570": 8,
+    "sub_83744D90 lib sites=1": 12
+   },
+   "draws_by_bin_select": {
+    "0xffffffff": 5
+   }
+  },
+  {
+   "frame": 927,
+   "packets": 245,
+   "draws": 5,
+   "unattributed_packets": 0,
+   "unattributed_draws": 0,
+   "by_producer": {
+    "sub_837452C0 lib sites=1 VdGetSystemComma": 63,
+    "sub_8373A3D0 lib sites=6": 6,
+    "PRIMARY RING (library kick-off writer)": 4,
+    "sub_83734370 lib sites=3 SET_BIN_MASK_HI,": 7,
+    "ENGINE INLINE after sub_8373A3D0": 7,
+    "sub_83737180 lib sites=29": 2,
+    "sub_83736DC8 lib sites=6": 1,
+    "sub_83739188 lib sites=1": 32,
+    "sub_8373E5B8 lib sites=3 WAIT_REG_MEM": 27,
+    "sub_8373BD50 lib sites=49": 35,
+    "sub_83743268 lib sites=0 WAIT_REG_MEM": 6,
+    "ENGINE INLINE after sub_8373BD50": 12,
+    "sub_8373D570 lib sites=43 IM_LOAD_IMMEDIA": 23,
+    "ENGINE INLINE after sub_8373D570": 8,
+    "sub_83744D90 lib sites=1": 12
+   },
+   "draws_by_bin_select": {
+    "0xffffffff": 5
+   }
+  },
+  {
+   "frame": 928,
+   "packets": 245,
+   "draws": 5,
+   "unattributed_packets": 0,
+   "unattributed_draws": 0,
+   "by_producer": {
+    "sub_837452C0 lib sites=1 VdGetSystemComma": 63,
+    "sub_8373A3D0 lib sites=6": 6,
+    "PRIMARY RING (library kick-off writer)": 4,
+    "sub_83734370 lib sites=3 SET_BIN_MASK_HI,": 7,
+    "ENGINE INLINE after sub_8373A3D0": 7,
+    "sub_83737180 lib sites=29": 2,
+    "sub_83736DC8 lib sites=6": 1,
+    "sub_83739188 lib sites=1": 32,
+    "sub_8373E5B8 lib sites=3 WAIT_REG_MEM": 27,
+    "sub_8373BD50 lib sites=49": 35,
+    "sub_83743268 lib sites=0 WAIT_REG_MEM": 6,
+    "ENGINE INLINE after sub_8373BD50": 12,
+    "sub_8373D570 lib sites=43 IM_LOAD_IMMEDIA": 23,
+    "ENGINE INLINE after sub_8373D570": 8,
+    "sub_83744D90 lib sites=1": 12
+   },
+   "draws_by_bin_select": {
+    "0xffffffff": 5
+   }
+  },
+  {
+   "frame": 929,
+   "packets": 245,
+   "draws": 5,
+   "unattributed_packets": 0,
+   "unattributed_draws": 0,
+   "by_producer": {
+    "sub_837452C0 lib sites=1 VdGetSystemComma": 63,
+    "sub_8373A3D0 lib sites=6": 6,
+    "PRIMARY RING (library kick-off writer)": 4,
+    "sub_83734370 lib sites=3 SET_BIN_MASK_HI,": 7,
+    "ENGINE INLINE after sub_8373A3D0": 7,
+    "sub_83737180 lib sites=29": 2,
+    "sub_83736DC8 lib sites=6": 1,
+    "sub_83739188 lib sites=1": 32,
+    "sub_8373E5B8 lib sites=3 WAIT_REG_MEM": 27,
+    "sub_8373BD50 lib sites=49": 35,
+    "sub_83743268 lib sites=0 WAIT_REG_MEM": 6,
+    "ENGINE INLINE after sub_8373BD50": 12,
+    "sub_8373D570 lib sites=43 IM_LOAD_IMMEDIA": 23,
+    "ENGINE INLINE after sub_8373D570": 8,
+    "sub_83744D90 lib sites=1": 12
+   },
+   "draws_by_bin_select": {
+    "0xffffffff": 5
+   }
+  },
+  {
+   "frame": 930,
+   "packets": 245,
+   "draws": 5,
+   "unattributed_packets": 0,
+   "unattributed_draws": 0,
+   "by_producer": {
+    "sub_837452C0 lib sites=1 VdGetSystemComma": 63,
+    "sub_8373A3D0 lib sites=6": 6,
+    "PRIMARY RING (library kick-off writer)": 4,
+    "sub_83734370 lib sites=3 SET_BIN_MASK_HI,": 7,
+    "ENGINE INLINE after sub_8373A3D0": 7,
+    "sub_83737180 lib sites=29": 2,
+    "sub_83736DC8 lib sites=6": 1,
+    "sub_83739188 lib sites=1": 32,
+    "sub_8373E5B8 lib sites=3 WAIT_REG_MEM": 27,
+    "sub_8373BD50 lib sites=49": 35,
+    "sub_83743268 lib sites=0 WAIT_REG_MEM": 6,
+    "ENGINE INLINE after sub_8373BD50": 12,
+    "sub_8373D570 lib sites=43 IM_LOAD_IMMEDIA": 23,
+    "ENGINE INLINE after sub_8373D570": 8,
+    "sub_83744D90 lib sites=1": 12
+   },
+   "draws_by_bin_select": {
+    "0xffffffff": 5
+   }
+  },
+  {
+   "frame": 931,
+   "packets": 245,
+   "draws": 5,
+   "unattributed_packets": 0,
+   "unattributed_draws": 0,
+   "by_producer": {
+    "sub_837452C0 lib sites=1 VdGetSystemComma": 63,
+    "sub_8373A3D0 lib sites=6": 6,
+    "PRIMARY RING (library kick-off writer)": 4,
+    "sub_83734370 lib sites=3 SET_BIN_MASK_HI,": 7,
+    "ENGINE INLINE after sub_8373A3D0": 7,
+    "sub_83737180 lib sites=29": 2,
+    "sub_83736DC8 lib sites=6": 1,
+    "sub_83739188 lib sites=1": 32,
+    "sub_8373E5B8 lib sites=3 WAIT_REG_MEM": 27,
+    "sub_8373BD50 lib sites=49": 35,
+    "sub_83743268 lib sites=0 WAIT_REG_MEM": 6,
+    "ENGINE INLINE after sub_8373BD50": 12,
+    "sub_8373D570 lib sites=43 IM_LOAD_IMMEDIA": 23,
+    "ENGINE INLINE after sub_8373D570": 8,
+    "sub_83744D90 lib sites=1": 12
+   },
+   "draws_by_bin_select": {
+    "0xffffffff": 5
+   }
+  },
+  {
+   "frame": 932,
+   "packets": 245,
+   "draws": 5,
+   "unattributed_packets": 0,
+   "unattributed_draws": 0,
+   "by_producer": {
+    "sub_837452C0 lib sites=1 VdGetSystemComma": 63,
+    "sub_8373A3D0 lib sites=6": 6,
+    "PRIMARY RING (library kick-off writer)": 4,
+    "sub_83734370 lib sites=3 SET_BIN_MASK_HI,": 7,
+    "ENGINE INLINE after sub_8373A3D0": 7,
+    "sub_83737180 lib sites=29": 2,
+    "sub_83736DC8 lib sites=6": 1,
+    "sub_83739188 lib sites=1": 32,
+    "sub_8373E5B8 lib sites=3 WAIT_REG_MEM": 27,
+    "sub_8373BD50 lib sites=49": 35,
+    "sub_83743268 lib sites=0 WAIT_REG_MEM": 6,
+    "ENGINE INLINE after sub_8373BD50": 12,
+    "sub_8373D570 lib sites=43 IM_LOAD_IMMEDIA": 23,
+    "ENGINE INLINE after sub_8373D570": 8,
+    "sub_83744D90 lib sites=1": 12
+   },
+   "draws_by_bin_select": {
+    "0xffffffff": 5
+   }
+  },
+  {
+   "frame": 933,
+   "packets": 245,
+   "draws": 5,
+   "unattributed_packets": 0,
+   "unattributed_draws": 0,
+   "by_producer": {
+    "sub_837452C0 lib sites=1 VdGetSystemComma": 63,
+    "sub_8373A3D0 lib sites=6": 6,
+    "PRIMARY RING (library kick-off writer)": 4,
+    "sub_83734370 lib sites=3 SET_BIN_MASK_HI,": 7,
+    "ENGINE INLINE after sub_8373A3D0": 7,
+    "sub_83737180 lib sites=29": 2,
+    "sub_83736DC8 lib sites=6": 1,
+    "sub_83739188 lib sites=1": 32,
+    "sub_8373E5B8 lib sites=3 WAIT_REG_MEM": 27,
+    "sub_8373BD50 lib sites=49": 35,
+    "sub_83743268 lib sites=0 WAIT_REG_MEM": 6,
+    "ENGINE INLINE after sub_8373BD50": 12,
+    "sub_8373D570 lib sites=43 IM_LOAD_IMMEDIA": 23,
+    "ENGINE INLINE after sub_8373D570": 8,
+    "sub_83744D90 lib sites=1": 12
+   },
+   "draws_by_bin_select": {
+    "0xffffffff": 5
+   }
+  },
+  {
+   "frame": 934,
+   "packets": 245,
+   "draws": 5,
+   "unattributed_packets": 0,
+   "unattributed_draws": 0,
+   "by_producer": {
+    "sub_837452C0 lib sites=1 VdGetSystemComma": 63,
+    "sub_8373A3D0 lib sites=6": 6,
+    "PRIMARY RING (library kick-off writer)": 4,
+    "sub_83734370 lib sites=3 SET_BIN_MASK_HI,": 7,
+    "ENGINE INLINE after sub_8373A3D0": 7,
+    "sub_83737180 lib sites=29": 2,
+    "sub_83736DC8 lib sites=6": 1,
+    "sub_83739188 lib sites=1": 32,
+    "sub_8373E5B8 lib sites=3 WAIT_REG_MEM": 27,
+    "sub_8373BD50 lib sites=49": 35,
+    "sub_83743268 lib sites=0 WAIT_REG_MEM": 6,
+    "ENGINE INLINE after sub_8373BD50": 12,
+    "sub_8373D570 lib sites=43 IM_LOAD_IMMEDIA": 23,
+    "ENGINE INLINE after sub_8373D570": 8,
+    "sub_83744D90 lib sites=1": 12
+   },
+   "draws_by_bin_select": {
+    "0xffffffff": 5
+   }
+  },
+  {
+   "frame": 935,
+   "packets": 245,
+   "draws": 5,
+   "unattributed_packets": 0,
+   "unattributed_draws": 0,
+   "by_producer": {
+    "sub_837452C0 lib sites=1 VdGetSystemComma": 63,
+    "sub_8373A3D0 lib sites=6": 6,
+    "PRIMARY RING (library kick-off writer)": 4,
+    "sub_83734370 lib sites=3 SET_BIN_MASK_HI,": 7,
+    "ENGINE INLINE after sub_8373A3D0": 7,
+    "sub_83737180 lib sites=29": 2,
+    "sub_83736DC8 lib sites=6": 1,
+    "sub_83739188 lib sites=1": 32,
+    "sub_8373E5B8 lib sites=3 WAIT_REG_MEM": 27,
+    "sub_8373BD50 lib sites=49": 35,
+    "sub_83743268 lib sites=0 WAIT_REG_MEM": 6,
+    "ENGINE INLINE after sub_8373BD50": 12,
+    "sub_8373D570 lib sites=43 IM_LOAD_IMMEDIA": 23,
+    "ENGINE INLINE after sub_8373D570": 8,
+    "sub_83744D90 lib sites=1": 12
+   },
+   "draws_by_bin_select": {
+    "0xffffffff": 5
+   }
+  },
+  {
+   "frame": 936,
+   "packets": 245,
+   "draws": 5,
+   "unattributed_packets": 0,
+   "unattributed_draws": 0,
+   "by_producer": {
+    "sub_837452C0 lib sites=1 VdGetSystemComma": 63,
+    "sub_8373A3D0 lib sites=6": 6,
+    "PRIMARY RING (library kick-off writer)": 4,
+    "sub_83734370 lib sites=3 SET_BIN_MASK_HI,": 7,
+    "ENGINE INLINE after sub_8373A3D0": 7,
+    "sub_83737180 lib sites=29": 2,
+    "sub_83736DC8 lib sites=6": 1,
+    "sub_83739188 lib sites=1": 32,
+    "sub_8373E5B8 lib sites=3 WAIT_REG_MEM": 27,
+    "sub_8373BD50 lib sites=49": 35,
+    "sub_83743268 lib sites=0 WAIT_REG_MEM": 6,
+    "ENGINE INLINE after sub_8373BD50": 12,
+    "sub_8373D570 lib sites=43 IM_LOAD_IMMEDIA": 23,
+    "ENGINE INLINE after sub_8373D570": 8,
+    "sub_83744D90 lib sites=1": 12
+   },
+   "draws_by_bin_select": {
+    "0xffffffff": 5
+   }
+  },
+  {
+   "frame": 937,
+   "packets": 245,
+   "draws": 5,
+   "unattributed_packets": 0,
+   "unattributed_draws": 0,
+   "by_producer": {
+    "sub_837452C0 lib sites=1 VdGetSystemComma": 63,
+    "sub_8373A3D0 lib sites=6": 6,
+    "PRIMARY RING (library kick-off writer)": 4,
+    "sub_83734370 lib sites=3 SET_BIN_MASK_HI,": 7,
+    "ENGINE INLINE after sub_8373A3D0": 7,
+    "sub_83737180 lib sites=29": 2,
+    "sub_83736DC8 lib sites=6": 1,
+    "sub_83739188 lib sites=1": 32,
+    "sub_8373E5B8 lib sites=3 WAIT_REG_MEM": 27,
+    "sub_8373BD50 lib sites=49": 35,
+    "sub_83743268 lib sites=0 WAIT_REG_MEM": 6,
+    "ENGINE INLINE after sub_8373BD50": 12,
+    "sub_8373D570 lib sites=43 IM_LOAD_IMMEDIA": 23,
+    "ENGINE INLINE after sub_8373D570": 8,
+    "sub_83744D90 lib sites=1": 12
+   },
+   "draws_by_bin_select": {
+    "0xffffffff": 5
+   }
+  },
+  {
+   "frame": 938,
+   "packets": 245,
+   "draws": 5,
+   "unattributed_packets": 0,
+   "unattributed_draws": 0,
+   "by_producer": {
+    "sub_837452C0 lib sites=1 VdGetSystemComma": 63,
+    "sub_8373A3D0 lib sites=6": 6,
+    "PRIMARY RING (library kick-off writer)": 4,
+    "sub_83734370 lib sites=3 SET_BIN_MASK_HI,": 7,
+    "ENGINE INLINE after sub_8373A3D0": 7,
+    "sub_83737180 lib sites=29": 2,
+    "sub_83736DC8 lib sites=6": 1,
+    "sub_83739188 lib sites=1": 32,
+    "sub_8373E5B8 lib sites=3 WAIT_REG_MEM": 27,
+    "sub_8373BD50 lib sites=49": 35,
+    "sub_83743268 lib sites=0 WAIT_REG_MEM": 6,
+    "ENGINE INLINE after sub_8373BD50": 12,
+    "sub_8373D570 lib sites=43 IM_LOAD_IMMEDIA": 23,
+    "ENGINE INLINE after sub_8373D570": 8,
+    "sub_83744D90 lib sites=1": 12
+   },
+   "draws_by_bin_select": {
+    "0xffffffff": 5
+   }
+  },
+  {
+   "frame": 939,
+   "packets": 245,
+   "draws": 5,
+   "unattributed_packets": 0,
+   "unattributed_draws": 0,
+   "by_producer": {
+    "sub_837452C0 lib sites=1 VdGetSystemComma": 63,
+    "sub_8373A3D0 lib sites=6": 6,
+    "PRIMARY RING (library kick-off writer)": 4,
+    "sub_83734370 lib sites=3 SET_BIN_MASK_HI,": 7,
+    "ENGINE INLINE after sub_8373A3D0": 7,
+    "sub_83737180 lib sites=29": 2,
+    "sub_83736DC8 lib sites=6": 1,
+    "sub_83739188 lib sites=1": 32,
+    "sub_8373E5B8 lib sites=3 WAIT_REG_MEM": 27,
+    "sub_8373BD50 lib sites=49": 35,
+    "sub_83743268 lib sites=0 WAIT_REG_MEM": 6,
+    "ENGINE INLINE after sub_8373BD50": 12,
+    "sub_8373D570 lib sites=43 IM_LOAD_IMMEDIA": 23,
+    "ENGINE INLINE after sub_8373D570": 8,
+    "sub_83744D90 lib sites=1": 12
+   },
+   "draws_by_bin_select": {
+    "0xffffffff": 5
+   }
+  },
+  {
+   "frame": 940,
+   "packets": 245,
+   "draws": 5,
+   "unattributed_packets": 0,
+   "unattributed_draws": 0,
+   "by_producer": {
+    "sub_837452C0 lib sites=1 VdGetSystemComma": 63,
+    "sub_8373A3D0 lib sites=6": 6,
+    "PRIMARY RING (library kick-off writer)": 4,
+    "sub_83734370 lib sites=3 SET_BIN_MASK_HI,": 7,
+    "ENGINE INLINE after sub_8373A3D0": 7,
+    "sub_83737180 lib sites=29": 2,
+    "sub_83736DC8 lib sites=6": 1,
+    "sub_83739188 lib sites=1": 32,
+    "sub_8373E5B8 lib sites=3 WAIT_REG_MEM": 27,
+    "sub_8373BD50 lib sites=49": 35,
+    "sub_83743268 lib sites=0 WAIT_REG_MEM": 6,
+    "ENGINE INLINE after sub_8373BD50": 12,
+    "sub_8373D570 lib sites=43 IM_LOAD_IMMEDIA": 23,
+    "ENGINE INLINE after sub_8373D570": 8,
+    "sub_83744D90 lib sites=1": 12
+   },
+   "draws_by_bin_select": {
+    "0xffffffff": 5
+   }
+  },
+  {
+   "frame": 941,
+   "packets": 245,
+   "draws": 5,
+   "unattributed_packets": 0,
+   "unattributed_draws": 0,
+   "by_producer": {
+    "sub_837452C0 lib sites=1 VdGetSystemComma": 63,
+    "sub_8373A3D0 lib sites=6": 6,
+    "PRIMARY RING (library kick-off writer)": 4,
+    "sub_83734370 lib sites=3 SET_BIN_MASK_HI,": 7,
+    "ENGINE INLINE after sub_8373A3D0": 7,
+    "sub_83737180 lib sites=29": 2,
+    "sub_83736DC8 lib sites=6": 1,
+    "sub_83739188 lib sites=1": 32,
+    "sub_8373E5B8 lib sites=3 WAIT_REG_MEM": 27,
+    "sub_8373BD50 lib sites=49": 35,
+    "sub_83743268 lib sites=0 WAIT_REG_MEM": 6,
+    "ENGINE INLINE after sub_8373BD50": 12,
+    "sub_8373D570 lib sites=43 IM_LOAD_IMMEDIA": 23,
+    "ENGINE INLINE after sub_8373D570": 8,
+    "sub_83744D90 lib sites=1": 12
+   },
+   "draws_by_bin_select": {
+    "0xffffffff": 5
+   }
+  },
+  {
+   "frame": 942,
+   "packets": 245,
+   "draws": 5,
+   "unattributed_packets": 0,
+   "unattributed_draws": 0,
+   "by_producer": {
+    "sub_837452C0 lib sites=1 VdGetSystemComma": 63,
+    "sub_8373A3D0 lib sites=6": 6,
+    "PRIMARY RING (library kick-off writer)": 4,
+    "sub_83734370 lib sites=3 SET_BIN_MASK_HI,": 7,
+    "ENGINE INLINE after sub_8373A3D0": 7,
+    "sub_83737180 lib sites=29": 2,
+    "sub_83736DC8 lib sites=6": 1,
+    "sub_83739188 lib sites=1": 32,
+    "sub_8373E5B8 lib sites=3 WAIT_REG_MEM": 27,
+    "sub_8373BD50 lib sites=49": 35,
+    "sub_83743268 lib sites=0 WAIT_REG_MEM": 6,
+    "ENGINE INLINE after sub_8373BD50": 12,
+    "sub_8373D570 lib sites=43 IM_LOAD_IMMEDIA": 23,
+    "ENGINE INLINE after sub_8373D570": 8,
+    "sub_83744D90 lib sites=1": 12
+   },
+   "draws_by_bin_select": {
+    "0xffffffff": 5
+   }
+  },
+  {
+   "frame": 943,
+   "packets": 245,
+   "draws": 5,
+   "unattributed_packets": 0,
+   "unattributed_draws": 0,
+   "by_producer": {
+    "sub_837452C0 lib sites=1 VdGetSystemComma": 63,
+    "sub_8373A3D0 lib sites=6": 6,
+    "PRIMARY RING (library kick-off writer)": 4,
+    "sub_83734370 lib sites=3 SET_BIN_MASK_HI,": 7,
+    "ENGINE INLINE after sub_8373A3D0": 7,
+    "sub_83737180 lib sites=29": 2,
+    "sub_83736DC8 lib sites=6": 1,
+    "sub_83739188 lib sites=1": 32,
+    "sub_8373E5B8 lib sites=3 WAIT_REG_MEM": 27,
+    "sub_8373BD50 lib sites=49": 35,
+    "sub_83743268 lib sites=0 WAIT_REG_MEM": 6,
+    "ENGINE INLINE after sub_8373BD50": 12,
+    "sub_8373D570 lib sites=43 IM_LOAD_IMMEDIA": 23,
+    "ENGINE INLINE after sub_8373D570": 8,
+    "sub_83744D90 lib sites=1": 12
+   },
+   "draws_by_bin_select": {
+    "0xffffffff": 5
+   }
+  },
+  {
+   "frame": 944,
+   "packets": 245,
+   "draws": 5,
+   "unattributed_packets": 0,
+   "unattributed_draws": 0,
+   "by_producer": {
+    "sub_837452C0 lib sites=1 VdGetSystemComma": 63,
+    "sub_8373A3D0 lib sites=6": 6,
+    "PRIMARY RING (library kick-off writer)": 4,
+    "sub_83734370 lib sites=3 SET_BIN_MASK_HI,": 7,
+    "ENGINE INLINE after sub_8373A3D0": 7,
+    "sub_83737180 lib sites=29": 2,
+    "sub_83736DC8 lib sites=6": 1,
+    "sub_83739188 lib sites=1": 32,
+    "sub_8373E5B8 lib sites=3 WAIT_REG_MEM": 27,
+    "sub_8373BD50 lib sites=49": 35,
+    "sub_83743268 lib sites=0 WAIT_REG_MEM": 6,
+    "ENGINE INLINE after sub_8373BD50": 12,
+    "sub_8373D570 lib sites=43 IM_LOAD_IMMEDIA": 23,
+    "ENGINE INLINE after sub_8373D570": 8,
+    "sub_83744D90 lib sites=1": 12
+   },
+   "draws_by_bin_select": {
+    "0xffffffff": 5
+   }
+  },
+  {
+   "frame": 945,
+   "packets": 245,
+   "draws": 5,
+   "unattributed_packets": 0,
+   "unattributed_draws": 0,
+   "by_producer": {
+    "sub_837452C0 lib sites=1 VdGetSystemComma": 63,
+    "sub_8373A3D0 lib sites=6": 6,
+    "PRIMARY RING (library kick-off writer)": 4,
+    "sub_83734370 lib sites=3 SET_BIN_MASK_HI,": 7,
+    "ENGINE INLINE after sub_8373A3D0": 7,
+    "sub_83737180 lib sites=29": 2,
+    "sub_83736DC8 lib sites=6": 1,
+    "sub_83739188 lib sites=1": 32,
+    "sub_8373E5B8 lib sites=3 WAIT_REG_MEM": 27,
+    "sub_8373BD50 lib sites=49": 35,
+    "sub_83743268 lib sites=0 WAIT_REG_MEM": 6,
+    "ENGINE INLINE after sub_8373BD50": 12,
+    "sub_8373D570 lib sites=43 IM_LOAD_IMMEDIA": 23,
+    "ENGINE INLINE after sub_8373D570": 8,
+    "sub_83744D90 lib sites=1": 12
+   },
+   "draws_by_bin_select": {
+    "0xffffffff": 5
+   }
+  },
+  {
+   "frame": 946,
+   "packets": 245,
+   "draws": 5,
+   "unattributed_packets": 0,
+   "unattributed_draws": 0,
+   "by_producer": {
+    "sub_837452C0 lib sites=1 VdGetSystemComma": 63,
+    "sub_8373A3D0 lib sites=6": 6,
+    "PRIMARY RING (library kick-off writer)": 4,
+    "sub_83734370 lib sites=3 SET_BIN_MASK_HI,": 7,
+    "ENGINE INLINE after sub_8373A3D0": 7,
+    "sub_83737180 lib sites=29": 2,
+    "sub_83736DC8 lib sites=6": 1,
+    "sub_83739188 lib sites=1": 32,
+    "sub_8373E5B8 lib sites=3 WAIT_REG_MEM": 27,
+    "sub_8373BD50 lib sites=49": 35,
+    "sub_83743268 lib sites=0 WAIT_REG_MEM": 6,
+    "ENGINE INLINE after sub_8373BD50": 12,
+    "sub_8373D570 lib sites=43 IM_LOAD_IMMEDIA": 23,
+    "ENGINE INLINE after sub_8373D570": 8,
+    "sub_83744D90 lib sites=1": 12
+   },
+   "draws_by_bin_select": {
+    "0xffffffff": 5
+   }
+  },
+  {
+   "frame": 947,
+   "packets": 245,
+   "draws": 5,
+   "unattributed_packets": 0,
+   "unattributed_draws": 0,
+   "by_producer": {
+    "sub_837452C0 lib sites=1 VdGetSystemComma": 63,
+    "sub_8373A3D0 lib sites=6": 6,
+    "PRIMARY RING (library kick-off writer)": 4,
+    "sub_83734370 lib sites=3 SET_BIN_MASK_HI,": 7,
+    "ENGINE INLINE after sub_8373A3D0": 7,
+    "sub_83737180 lib sites=29": 2,
+    "sub_83736DC8 lib sites=6": 1,
+    "sub_83739188 lib sites=1": 32,
+    "sub_8373E5B8 lib sites=3 WAIT_REG_MEM": 27,
+    "sub_8373BD50 lib sites=49": 35,
+    "sub_83743268 lib sites=0 WAIT_REG_MEM": 6,
+    "ENGINE INLINE after sub_8373BD50": 12,
+    "sub_8373D570 lib sites=43 IM_LOAD_IMMEDIA": 23,
+    "ENGINE INLINE after sub_8373D570": 8,
+    "sub_83744D90 lib sites=1": 12
+   },
+   "draws_by_bin_select": {
+    "0xffffffff": 5
+   }
+  },
+  {
+   "frame": 948,
+   "packets": 245,
+   "draws": 5,
+   "unattributed_packets": 0,
+   "unattributed_draws": 0,
+   "by_producer": {
+    "sub_837452C0 lib sites=1 VdGetSystemComma": 63,
+    "sub_8373A3D0 lib sites=6": 6,
+    "PRIMARY RING (library kick-off writer)": 4,
+    "sub_83734370 lib sites=3 SET_BIN_MASK_HI,": 7,
+    "ENGINE INLINE after sub_8373A3D0": 7,
+    "sub_83737180 lib sites=29": 2,
+    "sub_83736DC8 lib sites=6": 1,
+    "sub_83739188 lib sites=1": 32,
+    "sub_8373E5B8 lib sites=3 WAIT_REG_MEM": 27,
+    "sub_8373BD50 lib sites=49": 35,
+    "sub_83743268 lib sites=0 WAIT_REG_MEM": 6,
+    "ENGINE INLINE after sub_8373BD50": 12,
+    "sub_8373D570 lib sites=43 IM_LOAD_IMMEDIA": 23,
+    "ENGINE INLINE after sub_8373D570": 8,
+    "sub_83744D90 lib sites=1": 12
+   },
+   "draws_by_bin_select": {
+    "0xffffffff": 5
+   }
+  },
+  {
+   "frame": 949,
+   "packets": 245,
+   "draws": 5,
+   "unattributed_packets": 0,
+   "unattributed_draws": 0,
+   "by_producer": {
+    "sub_837452C0 lib sites=1 VdGetSystemComma": 63,
+    "sub_8373A3D0 lib sites=6": 6,
+    "PRIMARY RING (library kick-off writer)": 4,
+    "sub_83734370 lib sites=3 SET_BIN_MASK_HI,": 7,
+    "ENGINE INLINE after sub_8373A3D0": 7,
+    "sub_83737180 lib sites=29": 2,
+    "sub_83736DC8 lib sites=6": 1,
+    "sub_83739188 lib sites=1": 32,
+    "sub_8373E5B8 lib sites=3 WAIT_REG_MEM": 27,
+    "sub_8373BD50 lib sites=49": 35,
+    "sub_83743268 lib sites=0 WAIT_REG_MEM": 6,
+    "ENGINE INLINE after sub_8373BD50": 12,
+    "sub_8373D570 lib sites=43 IM_LOAD_IMMEDIA": 23,
+    "ENGINE INLINE after sub_8373D570": 8,
+    "sub_83744D90 lib sites=1": 12
+   },
+   "draws_by_bin_select": {
+    "0xffffffff": 5
+   }
+  },
+  {
+   "frame": 950,
+   "packets": 245,
+   "draws": 5,
+   "unattributed_packets": 0,
+   "unattributed_draws": 0,
+   "by_producer": {
+    "sub_837452C0 lib sites=1 VdGetSystemComma": 63,
+    "sub_8373A3D0 lib sites=6": 6,
+    "PRIMARY RING (library kick-off writer)": 4,
+    "sub_83734370 lib sites=3 SET_BIN_MASK_HI,": 7,
+    "ENGINE INLINE after sub_8373A3D0": 7,
+    "sub_83737180 lib sites=29": 2,
+    "sub_83736DC8 lib sites=6": 1,
+    "sub_83739188 lib sites=1": 32,
+    "sub_8373E5B8 lib sites=3 WAIT_REG_MEM": 27,
+    "sub_8373BD50 lib sites=49": 35,
+    "sub_83743268 lib sites=0 WAIT_REG_MEM": 6,
+    "ENGINE INLINE after sub_8373BD50": 12,
+    "sub_8373D570 lib sites=43 IM_LOAD_IMMEDIA": 23,
+    "ENGINE INLINE after sub_8373D570": 8,
+    "sub_83744D90 lib sites=1": 12
+   },
+   "draws_by_bin_select": {
+    "0xffffffff": 5
+   }
+  },
+  {
+   "frame": 951,
+   "packets": 245,
+   "draws": 5,
+   "unattributed_packets": 0,
+   "unattributed_draws": 0,
+   "by_producer": {
+    "sub_837452C0 lib sites=1 VdGetSystemComma": 63,
+    "sub_8373A3D0 lib sites=6": 6,
+    "PRIMARY RING (library kick-off writer)": 4,
+    "sub_83734370 lib sites=3 SET_BIN_MASK_HI,": 7,
+    "ENGINE INLINE after sub_8373A3D0": 7,
+    "sub_83737180 lib sites=29": 2,
+    "sub_83736DC8 lib sites=6": 1,
+    "sub_83739188 lib sites=1": 32,
+    "sub_8373E5B8 lib sites=3 WAIT_REG_MEM": 27,
+    "sub_8373BD50 lib sites=49": 35,
+    "sub_83743268 lib sites=0 WAIT_REG_MEM": 6,
+    "ENGINE INLINE after sub_8373BD50": 12,
+    "sub_8373D570 lib sites=43 IM_LOAD_IMMEDIA": 23,
+    "ENGINE INLINE after sub_8373D570": 8,
+    "sub_83744D90 lib sites=1": 12
+   },
+   "draws_by_bin_select": {
+    "0xffffffff": 5
+   }
+  },
+  {
+   "frame": 952,
+   "packets": 245,
+   "draws": 5,
+   "unattributed_packets": 0,
+   "unattributed_draws": 0,
+   "by_producer": {
+    "sub_837452C0 lib sites=1 VdGetSystemComma": 63,
+    "sub_8373A3D0 lib sites=6": 6,
+    "PRIMARY RING (library kick-off writer)": 4,
+    "sub_83734370 lib sites=3 SET_BIN_MASK_HI,": 7,
+    "ENGINE INLINE after sub_8373A3D0": 7,
+    "sub_83737180 lib sites=29": 2,
+    "sub_83736DC8 lib sites=6": 1,
+    "sub_83739188 lib sites=1": 32,
+    "sub_8373E5B8 lib sites=3 WAIT_REG_MEM": 27,
+    "sub_8373BD50 lib sites=49": 35,
+    "sub_83743268 lib sites=0 WAIT_REG_MEM": 6,
+    "ENGINE INLINE after sub_8373BD50": 12,
+    "sub_8373D570 lib sites=43 IM_LOAD_IMMEDIA": 23,
+    "ENGINE INLINE after sub_8373D570": 8,
+    "sub_83744D90 lib sites=1": 12
+   },
+   "draws_by_bin_select": {
+    "0xffffffff": 5
+   }
+  },
+  {
+   "frame": 953,
+   "packets": 245,
+   "draws": 5,
+   "unattributed_packets": 0,
+   "unattributed_draws": 0,
+   "by_producer": {
+    "sub_837452C0 lib sites=1 VdGetSystemComma": 63,
+    "sub_8373A3D0 lib sites=6": 6,
+    "PRIMARY RING (library kick-off writer)": 4,
+    "sub_83734370 lib sites=3 SET_BIN_MASK_HI,": 7,
+    "ENGINE INLINE after sub_8373A3D0": 7,
+    "sub_83737180 lib sites=29": 2,
+    "sub_83736DC8 lib sites=6": 1,
+    "sub_83739188 lib sites=1": 32,
+    "sub_8373E5B8 lib sites=3 WAIT_REG_MEM": 27,
+    "sub_8373BD50 lib sites=49": 35,
+    "sub_83743268 lib sites=0 WAIT_REG_MEM": 6,
+    "ENGINE INLINE after sub_8373BD50": 12,
+    "sub_8373D570 lib sites=43 IM_LOAD_IMMEDIA": 23,
+    "ENGINE INLINE after sub_8373D570": 8,
+    "sub_83744D90 lib sites=1": 12
+   },
+   "draws_by_bin_select": {
+    "0xffffffff": 5
+   }
+  },
+  {
+   "frame": 954,
+   "packets": 245,
+   "draws": 5,
+   "unattributed_packets": 0,
+   "unattributed_draws": 0,
+   "by_producer": {
+    "sub_837452C0 lib sites=1 VdGetSystemComma": 63,
+    "sub_8373A3D0 lib sites=6": 6,
+    "PRIMARY RING (library kick-off writer)": 4,
+    "sub_83734370 lib sites=3 SET_BIN_MASK_HI,": 7,
+    "ENGINE INLINE after sub_8373A3D0": 7,
+    "sub_83737180 lib sites=29": 2,
+    "sub_83736DC8 lib sites=6": 1,
+    "sub_83739188 lib sites=1": 32,
+    "sub_8373E5B8 lib sites=3 WAIT_REG_MEM": 27,
+    "sub_8373BD50 lib sites=49": 35,
+    "sub_83743268 lib sites=0 WAIT_REG_MEM": 6,
+    "ENGINE INLINE after sub_8373BD50": 12,
+    "sub_8373D570 lib sites=43 IM_LOAD_IMMEDIA": 23,
+    "ENGINE INLINE after sub_8373D570": 8,
+    "sub_83744D90 lib sites=1": 12
+   },
+   "draws_by_bin_select": {
+    "0xffffffff": 5
+   }
+  },
+  {
+   "frame": 955,
+   "packets": 245,
+   "draws": 5,
+   "unattributed_packets": 0,
+   "unattributed_draws": 0,
+   "by_producer": {
+    "sub_837452C0 lib sites=1 VdGetSystemComma": 63,
+    "sub_8373A3D0 lib sites=6": 6,
+    "PRIMARY RING (library kick-off writer)": 4,
+    "sub_83734370 lib sites=3 SET_BIN_MASK_HI,": 7,
+    "ENGINE INLINE after sub_8373A3D0": 7,
+    "sub_83737180 lib sites=29": 2,
+    "sub_83736DC8 lib sites=6": 1,
+    "sub_83739188 lib sites=1": 32,
+    "sub_8373E5B8 lib sites=3 WAIT_REG_MEM": 27,
+    "sub_8373BD50 lib sites=49": 35,
+    "sub_83743268 lib sites=0 WAIT_REG_MEM": 6,
+    "ENGINE INLINE after sub_8373BD50": 12,
+    "sub_8373D570 lib sites=43 IM_LOAD_IMMEDIA": 23,
+    "ENGINE INLINE after sub_8373D570": 8,
+    "sub_83744D90 lib sites=1": 12
+   },
+   "draws_by_bin_select": {
+    "0xffffffff": 5
+   }
+  },
+  {
+   "frame": 956,
+   "packets": 245,
+   "draws": 5,
+   "unattributed_packets": 0,
+   "unattributed_draws": 0,
+   "by_producer": {
+    "sub_837452C0 lib sites=1 VdGetSystemComma": 63,
+    "sub_8373A3D0 lib sites=6": 6,
+    "PRIMARY RING (library kick-off writer)": 4,
+    "sub_83734370 lib sites=3 SET_BIN_MASK_HI,": 7,
+    "ENGINE INLINE after sub_8373A3D0": 7,
+    "sub_83737180 lib sites=29": 2,
+    "sub_83736DC8 lib sites=6": 1,
+    "sub_83739188 lib sites=1": 32,
+    "sub_8373E5B8 lib sites=3 WAIT_REG_MEM": 27,
+    "sub_8373BD50 lib sites=49": 35,
+    "sub_83743268 lib sites=0 WAIT_REG_MEM": 6,
+    "ENGINE INLINE after sub_8373BD50": 12,
+    "sub_8373D570 lib sites=43 IM_LOAD_IMMEDIA": 23,
+    "ENGINE INLINE after sub_8373D570": 8,
+    "sub_83744D90 lib sites=1": 12
+   },
+   "draws_by_bin_select": {
+    "0xffffffff": 5
+   }
+  },
+  {
+   "frame": 957,
+   "packets": 245,
+   "draws": 5,
+   "unattributed_packets": 0,
+   "unattributed_draws": 0,
+   "by_producer": {
+    "sub_837452C0 lib sites=1 VdGetSystemComma": 63,
+    "sub_8373A3D0 lib sites=6": 6,
+    "PRIMARY RING (library kick-off writer)": 4,
+    "sub_83734370 lib sites=3 SET_BIN_MASK_HI,": 7,
+    "ENGINE INLINE after sub_8373A3D0": 7,
+    "sub_83737180 lib sites=29": 2,
+    "sub_83736DC8 lib sites=6": 1,
+    "sub_83739188 lib sites=1": 32,
+    "sub_8373E5B8 lib sites=3 WAIT_REG_MEM": 27,
+    "sub_8373BD50 lib sites=49": 35,
+    "sub_83743268 lib sites=0 WAIT_REG_MEM": 6,
+    "ENGINE INLINE after sub_8373BD50": 12,
+    "sub_8373D570 lib sites=43 IM_LOAD_IMMEDIA": 23,
+    "ENGINE INLINE after sub_8373D570": 8,
+    "sub_83744D90 lib sites=1": 12
+   },
+   "draws_by_bin_select": {
+    "0xffffffff": 5
+   }
+  },
+  {
+   "frame": 958,
+   "packets": 245,
+   "draws": 5,
+   "unattributed_packets": 0,
+   "unattributed_draws": 0,
+   "by_producer": {
+    "sub_837452C0 lib sites=1 VdGetSystemComma": 63,
+    "sub_8373A3D0 lib sites=6": 6,
+    "PRIMARY RING (library kick-off writer)": 4,
+    "sub_83734370 lib sites=3 SET_BIN_MASK_HI,": 7,
+    "ENGINE INLINE after sub_8373A3D0": 7,
+    "sub_83737180 lib sites=29": 2,
+    "sub_83736DC8 lib sites=6": 1,
+    "sub_83739188 lib sites=1": 32,
+    "sub_8373E5B8 lib sites=3 WAIT_REG_MEM": 27,
+    "sub_8373BD50 lib sites=49": 35,
+    "sub_83743268 lib sites=0 WAIT_REG_MEM": 6,
+    "ENGINE INLINE after sub_8373BD50": 12,
+    "sub_8373D570 lib sites=43 IM_LOAD_IMMEDIA": 23,
+    "ENGINE INLINE after sub_8373D570": 8,
+    "sub_83744D90 lib sites=1": 12
+   },
+   "draws_by_bin_select": {
+    "0xffffffff": 5
+   }
+  },
+  {
+   "frame": 959,
+   "packets": 245,
+   "draws": 5,
+   "unattributed_packets": 0,
+   "unattributed_draws": 0,
+   "by_producer": {
+    "sub_837452C0 lib sites=1 VdGetSystemComma": 61,
+    "sub_8373A3D0 lib sites=6": 6,
+    "PRIMARY RING (library kick-off writer)": 4,
+    "sub_83734370 lib sites=3 SET_BIN_MASK_HI,": 7,
+    "ENGINE INLINE after sub_8373A3D0": 7,
+    "sub_83737180 lib sites=29": 2,
+    "sub_83736DC8 lib sites=6": 1,
+    "sub_83739188 lib sites=1": 32,
+    "sub_8373E5B8 lib sites=3 WAIT_REG_MEM": 27,
+    "sub_8373BD50 lib sites=49": 35,
+    "sub_83743268 lib sites=0 WAIT_REG_MEM": 6,
+    "ENGINE INLINE after sub_8373BD50": 12,
+    "sub_8373D570 lib sites=43 IM_LOAD_IMMEDIA": 23,
+    "ENGINE INLINE after sub_8373D570": 8,
+    "sub_83744D90 lib sites=1": 12,
+    "ENGINE INLINE after sub_83744D90": 2
+   },
+   "draws_by_bin_select": {
+    "0xffffffff": 5
+   }
+  }
+ ],
+ "totals": {
+  "packets": 14700,
+  "draws": 300,
+  "unattributed_packets": 0,
+  "unattributed_draws": 0,
+  "by_producer": {
+   "sub_837452C0 lib sites=1 VdGetSystemComma": 3778,
+   "sub_8373A3D0 lib sites=6": 360,
+   "PRIMARY RING (library kick-off writer)": 240,
+   "sub_83734370 lib sites=3 SET_BIN_MASK_HI,": 420,
+   "ENGINE INLINE after sub_8373A3D0": 420,
+   "sub_83737180 lib sites=29": 120,
+   "sub_83736DC8 lib sites=6": 60,
+   "sub_83739188 lib sites=1": 1920,
+   "sub_8373E5B8 lib sites=3 WAIT_REG_MEM": 1620,
+   "sub_8373BD50 lib sites=49": 2100,
+   "sub_83743268 lib sites=0 WAIT_REG_MEM": 360,
+   "ENGINE INLINE after sub_8373BD50": 720,
+   "sub_8373D570 lib sites=43 IM_LOAD_IMMEDIA": 1380,
+   "ENGINE INLINE after sub_8373D570": 480,
+   "sub_83744D90 lib sites=1": 720,
+   "ENGINE INLINE after sub_83744D90": 2
+  },
+  "field": "cur"
+ }
+}

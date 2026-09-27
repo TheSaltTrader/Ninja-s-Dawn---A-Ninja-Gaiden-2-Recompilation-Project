@@ -1,0 +1,84 @@
+P2 CENSUS: 60 frames (900..959), 12000 call ranges (attributing by field cur: 1920 usable, cur2: 0), 14700 packets, 300 draws
+METRIC 1  unattributed packets: 0 of 14700 (0.0%)   unattributed draws: 0 of 300 (0.0%)
+METRIC 2  draws not issued by a native front end: n/a (no front end yet; the bridge draws them all)
+          attributed through the last-writer map (buffers recorded before the window and replayed): 5098 packets, top: sub_8373BD50=1620, sub_837390C8=1560, sub_837452C0=778, sub_8373D570=660
+
+by producer (whole run): packets  draws  producer
+      3778       0  sub_837452C0 lib sites=1 VdGetSystemComma
+      2100       0  sub_8373BD50 lib sites=49
+      1920      60  sub_83739188 lib sites=1
+      1620       0  sub_8373E5B8 lib sites=3 WAIT_REG_MEM
+      1380      60  sub_8373D570 lib sites=43 IM_LOAD_IMMEDIA
+       720     180  ENGINE INLINE after sub_8373BD50
+       720       0  sub_83744D90 lib sites=1
+       480       0  ENGINE INLINE after sub_8373D570
+       420       0  sub_83734370 lib sites=3 SET_BIN_MASK_HI,
+       420       0  ENGINE INLINE after sub_8373A3D0
+       360       0  sub_8373A3D0 lib sites=6
+       360       0  sub_83743268 lib sites=0 WAIT_REG_MEM
+       240       0  PRIMARY RING (library kick-off writer)
+
+unattributed packets by type/opcode:
+
+per frame: frame  packets  draws  unattributed(packets/draws)  type0/2/3  bins(draws by bin select)
+     900      245      5       0/0      127/60/58  ffffffff:5
+     901      245      5       0/0      127/60/58  ffffffff:5
+     902      245      5       0/0      127/60/58  ffffffff:5
+     903      245      5       0/0      127/60/58  ffffffff:5
+     904      245      5       0/0      127/60/58  ffffffff:5
+     905      245      5       0/0      127/60/58  ffffffff:5
+     906      245      5       0/0      127/60/58  ffffffff:5
+     907      245      5       0/0      127/60/58  ffffffff:5
+     908      245      5       0/0      127/60/58  ffffffff:5
+     909      245      5       0/0      127/60/58  ffffffff:5
+     910      245      5       0/0      127/60/58  ffffffff:5
+     911      245      5       0/0      127/60/58  ffffffff:5
+     912      245      5       0/0      127/60/58  ffffffff:5
+     913      245      5       0/0      127/60/58  ffffffff:5
+     914      245      5       0/0      127/60/58  ffffffff:5
+     915      245      5       0/0      127/60/58  ffffffff:5
+     916      245      5       0/0      127/60/58  ffffffff:5
+     917      245      5       0/0      127/60/58  ffffffff:5
+     918      245      5       0/0      127/60/58  ffffffff:5
+     919      245      5       0/0      127/60/58  ffffffff:5
+     920      245      5       0/0      127/60/58  ffffffff:5
+     921      245      5       0/0      127/60/58  ffffffff:5
+     922      245      5       0/0      127/60/58  ffffffff:5
+     923      245      5       0/0      127/60/58  ffffffff:5
+     924      245      5       0/0      127/60/58  ffffffff:5
+     925      245      5       0/0      127/60/58  ffffffff:5
+     926      245      5       0/0      127/60/58  ffffffff:5
+     927      245      5       0/0      127/60/58  ffffffff:5
+     928      245      5       0/0      127/60/58  ffffffff:5
+     929      245      5       0/0      127/60/58  ffffffff:5
+     930      245      5       0/0      127/60/58  ffffffff:5
+     931      245      5       0/0      127/60/58  ffffffff:5
+     932      245      5       0/0      127/60/58  ffffffff:5
+     933      245      5       0/0      127/60/58  ffffffff:5
+     934      245      5       0/0      127/60/58  ffffffff:5
+     935      245      5       0/0      127/60/58  ffffffff:5
+     936      245      5       0/0      127/60/58  ffffffff:5
+     937      245      5       0/0      127/60/58  ffffffff:5
+     938      245      5       0/0      127/60/58  ffffffff:5
+     939      245      5       0/0      127/60/58  ffffffff:5
+     940      245      5       0/0      127/60/58  ffffffff:5
+     941      245      5       0/0      127/60/58  ffffffff:5
+     942      245      5       0/0      127/60/58  ffffffff:5
+     943      245      5       0/0      127/60/58  ffffffff:5
+     944      245      5       0/0      127/60/58  ffffffff:5
+     945      245      5       0/0      127/60/58  ffffffff:5
+     946      245      5       0/0      127/60/58  ffffffff:5
+     947      245      5       0/0      127/60/58  ffffffff:5
+     948      245      5       0/0      127/60/58  ffffffff:5
+     949      245      5       0/0      127/60/58  ffffffff:5
+     950      245      5       0/0      127/60/58  ffffffff:5
+     951      245      5       0/0      127/60/58  ffffffff:5
+     952      245      5       0/0      127/60/58  ffffffff:5
+     953      245      5       0/0      127/60/58  ffffffff:5
+     954      245      5       0/0      127/60/58  ffffffff:5
+     955      245      5       0/0      127/60/58  ffffffff:5
+     956      245      5       0/0      127/60/58  ffffffff:5
+     957      245      5       0/0      127/60/58  ffffffff:5
+     958      245      5       0/0      127/60/58  ffffffff:5
+     959      245      5       0/0      127/60/58  ffffffff:5
+json -> D:/ng2_frameinterp/ng2recomp-worktree/docs/native_gpu/p2/p2_census5_menu.json
