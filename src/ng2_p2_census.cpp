@@ -122,6 +122,17 @@ bool g_p5 = false;
 FILE* g_p5_f = nullptr;
 uint64_t g_p5_n = 0;
 uint32_t g_fe_swap_counter = 0;   // XE_SWAP packets decoded since start (the plugin's counter_)
+// [p5 exec] NG2_P5EXEC=1: the side effects of each kick, pushed to the plugin's executor at the kick's end.
+bool g_p5exec = false;
+std::vector<uint32_t> g_px;
+std::mutex g_kick_mu;
+using PushFn = void (*)(const uint32_t*, uint32_t);
+PushFn g_push = nullptr;
+std::atomic<uint64_t> g_px_recs{0}, g_px_regs{0}, g_px_waits{0}, g_px_unhandled{0};
+inline void Px(uint32_t k, uint32_t a, uint32_t b = 0, uint32_t c = 0) {
+  g_px.push_back(k); g_px.push_back(a); g_px.push_back(b); g_px.push_back(c);
+  g_px_recs.fetch_add(1, std::memory_order_relaxed);
+}
 inline uint32_t FeGpuSwap(uint32_t v, uint32_t endian) {
   switch (endian & 3) {
     case 1: return ((v & 0x00FF00FFu) << 8) | ((v >> 8) & 0x00FF00FFu);
@@ -141,10 +152,17 @@ bool g_fe_vs_inline = false, g_fe_ps_inline = false;
 std::vector<uint8_t> g_fe_imm_vs, g_fe_imm_ps;
 uint64_t g_fe_dirty[(0x5000 + 63) / 64];
 std::atomic<uint64_t> g_fe_draws_issued{0}, g_fe_swaps_issued{0};
+inline void Px(uint32_t k, uint32_t a, uint32_t b, uint32_t c);
+extern bool g_p5exec;
+extern std::atomic<uint64_t> g_px_regs;
 inline void FeSet(uint32_t reg, uint32_t v) {
   g_fe_regs[reg] = v;
   g_fe_src[reg] = 0;
   g_fe_dirty[reg >> 6] |= uint64_t(1) << (reg & 63);
+  if (g_p5exec && !((reg >= 0x2000 && reg < 0x2400) || (reg >= 0x4000 && reg < 0x4928))) {
+    Px(7, reg, v, 0);   // [p5 exec] outside the draw ranges: the plugin's register file keeps it (scratch, gamma port)
+    g_px_regs.fetch_add(1, std::memory_order_relaxed);
+  }
 }
 // [p3 src] SOURCE CENSUS (NG2_P3SRC=<guest frame>): every hooked call's r3-r10 plus 256 bytes behind each
 // pointer-like argument, and every draw the front end decodes in that frame with its register file and the IB
@@ -219,7 +237,7 @@ uint32_t FeDecode(const uint8_t* body, uint32_t n, uint32_t phys_base) {
         auto* ksm = ks ? ks->memory() : nullptr;
         if (op == 0x3D && cnt >= 2) {                                 // MEM_WRITE
           const uint32_t a0 = be(i + 1);
-          for (uint32_t k = 0; k + 1 < cnt; ++k) P5Note(1, a0 + 4 * k, be(i + 2 + k));
+          for (uint32_t k = 0; k + 1 < cnt; ++k) { P5Note(1, a0 + 4 * k, be(i + 2 + k)); if (g_p5exec) Px(1, a0 + 4 * k, be(i + 2 + k)); }
         } else if (op == 0x45 && cnt >= 6) {                          // COND_WRITE
           const uint32_t wi = be(i + 1), poll = be(i + 2), ref = be(i + 3), mask = be(i + 4), wa = be(i + 5), wd = be(i + 6);
           uint32_t v = 0;
@@ -244,20 +262,26 @@ uint32_t FeDecode(const uint8_t* body, uint32_t n, uint32_t phys_base) {
           }
           if (m) {
             P5Note((wi & 0x100) ? 2 : 3, wa, wd);
+            if (g_p5exec && (wi & 0x100)) Px(1, wa, wd);   // a register write goes through FeSet below
             if (!(wi & 0x100) && wa < 0x5000) FeSet(wa, wd);
           }
         } else if (op == 0x58 && cnt >= 3) {                          // EVENT_WRITE_SHD
           const uint32_t ini = be(i + 1);
           P5Note((ini >> 31) ? 5 : 4, be(i + 2), (ini >> 31) ? g_fe_swap_counter : be(i + 3));
+          if (g_p5exec) { if (ini >> 31) Px(2, be(i + 2)); else Px(1, be(i + 2), be(i + 3)); }
         } else if (op == 0x5A && cnt >= 2) {                          // EVENT_WRITE_EXT
           P5Note(6, be(i + 2), 0);
+          if (g_p5exec) g_px_unhandled.fetch_add(1, std::memory_order_relaxed);
         } else if (op == 0x5B && cnt >= 1) {                          // EVENT_WRITE_ZPD
           P5Note(7, g_fe_regs[0x2325], be(i + 1));
+          if (g_p5exec) g_px_unhandled.fetch_add(1, std::memory_order_relaxed);
         } else if (op == 0x3E && cnt >= 2) {                          // REG_TO_MEM
           const uint32_t r = be(i + 1);
           P5Note(8, be(i + 2), r < 0x5000 ? g_fe_regs[r] : 0);
+          if (g_p5exec) Px(1, be(i + 2), r < 0x5000 ? g_fe_regs[r] : 0);
         } else if (op == 0x54 && cnt >= 1) {                          // INTERRUPT
           P5Note(9, 0, be(i + 1));
+          if (g_p5exec) Px(4, be(i + 1));
         } else if (op == 0x21 && cnt >= 3) {                          // REG_RMW
           const uint32_t info = be(i + 1), am = be(i + 2), om = be(i + 3), r = info & 0x1FFF;
           uint32_t v = r < 0x5000 ? g_fe_regs[r] : 0;
@@ -267,9 +291,41 @@ uint32_t FeDecode(const uint8_t* body, uint32_t n, uint32_t phys_base) {
           if (r < 0x5000) FeSet(r, v);
         } else if (op == 0x64 && cnt >= 4) {                          // XE_SWAP
           P5Note(12, be(i + 2), g_fe_swap_counter);
+          if (g_p5exec) Px(5, be(i + 2), be(i + 3), be(i + 4));
           ++g_fe_swap_counter;
         } else if (op == 0x3C && cnt >= 3) {                          // WAIT_REG_MEM
           P5Note(13, be(i + 2), be(i + 3));
+          if (g_p5exec && cnt >= 4 && (be(i + 1) & 0x10)) {   // memory waits: the executor honours them in order
+            Px(6, be(i + 1), be(i + 2), be(i + 3));
+            Px(0, be(i + 4));
+            g_px_waits.fetch_add(1, std::memory_order_relaxed);
+          }
+          // [p5] would this wait block if the front end executed it now (at the kick)? kind 14 = NOT satisfied at
+          // decode (addr = poll, value = what the poll reads now): the cut-over must honour these on its executor.
+          if (cnt >= 4) {
+            const uint32_t wi = be(i + 1), poll = be(i + 2), ref = be(i + 3), mask = be(i + 4);
+            uint32_t v = 0;
+            if (wi & 0x10) {
+              const uint8_t* pp = ksm ? ksm->TranslatePhysical<const uint8_t*>(poll & ~3u) : nullptr;
+              uint32_t raw = 0;
+              if (pp) std::memcpy(&raw, pp, 4);
+              v = FeGpuSwap(raw, poll & 3);
+            } else {
+              v = poll < 0x5000 ? g_fe_regs[poll] : 0;
+            }
+            bool m = false;
+            switch (wi & 7) {
+              case 1: m = (v & mask) < ref; break;
+              case 2: m = (v & mask) <= ref; break;
+              case 3: m = (v & mask) == ref; break;
+              case 4: m = (v & mask) != ref; break;
+              case 5: m = (v & mask) >= ref; break;
+              case 6: m = (v & mask) > ref; break;
+              case 7: m = true; break;
+              default: break;
+            }
+            if (!m) P5Note(14, poll, v);
+          }
         }
       }
       // Predicated tiling, as the GPU (and the plugin) apply it: SET_BIN_MASK/SELECT LO/HI keep the bin state; a
@@ -400,6 +456,7 @@ uint32_t g_fe_rptr = 0;
 std::vector<uint8_t> g_fe_ringcopy;
 void FeKick(uint32_t ring_ptr, uint32_t ring_bytes, uint32_t wptr) {
   if (!g_fe) return;
+  std::lock_guard<std::mutex> kick_lock(g_kick_mu);   // kicks from different guest threads decode one at a time
   if (wptr == 0xFFFFFFFFu) {   // the ring was (re)initialised: both hardware pointers are 0 again
     g_fe_rptr = 0;
     g_fe_stuck_pos = 0xFFFFFFFFu;
@@ -422,6 +479,11 @@ void FeKick(uint32_t ring_ptr, uint32_t ring_bytes, uint32_t wptr) {
   const uint32_t base = ring_ptr + g_fe_rptr * 4;   // exact for draws before a wrap; ring-resident draws are rare
   const uint32_t used = FeDecode(g_fe_ringcopy.data(), uint32_t(g_fe_ringcopy.size()), base);
   if (g_p5) P5Note(11, 0, (g_fe_rptr + used / 4) % nd);   // [p5] where the front end's read index lands
+  if (g_p5exec && g_push) {
+    Px(3, (g_fe_rptr + used / 4) % nd);   // the read pointer the game polls; the plugin stamps the ring epoch
+    g_push(g_px.data(), uint32_t(g_px.size() / 4));
+    g_px.clear();
+  }
   if (used == 0 && !g_fe_ringcopy.empty()) {   // no progress: stuck on a dword that is not a header
     if (g_fe_stuck_pos == g_fe_rptr) {
       if (++g_fe_stuck_n >= 16) {
@@ -533,6 +595,19 @@ void Init() {
     HMODULE m = GetModuleHandleA("rexgpu-xenos.dll");
     auto f = m ? reinterpret_cast<SetKickFn>(GetProcAddress(m, "RexNgpuSetKickCallback")) : nullptr;
     if (f) { f(&FeKick); g_fe_kick_mode = true; }
+    if (f) {
+      if (const char* x = std::getenv("NG2_P5EXEC"); x && *x && *x != '0') {
+        auto setx = reinterpret_cast<void (*)(int)>(GetProcAddress(m, "RexNgpuSetExecMode"));
+        g_push = reinterpret_cast<PushFn>(GetProcAddress(m, "RexNgpuPushSideEffects"));
+        if (setx && g_push && g_p3draw) {
+          g_p5exec = true;
+          setx(1);
+          REXLOG_INFO("[p5x] EXECUTOR MODE: the plugin no longer parses the ring; the front end hands it each kick's side effects");
+        } else {
+          REXLOG_INFO("[p5x] NG2_P5EXEC refused: {}", !g_p3draw ? "needs NG2_P3DRAW=1" : "the plugin has no executor exports");
+        }
+      }
+    }
     REXLOG_INFO("[p3fe] kick callback {}", f ? "registered - the hardware ring drives the front end (execution order)"
                                             : "MISSING - the cursor high-water mark drives it");
   }
@@ -586,6 +661,9 @@ void P5Note(uint32_t kind, uint32_t addr, uint32_t value) {
 }
 
 void FeReport(const char* why) {
+  if (g_p5exec)
+    REXLOG_INFO("[p5x] front end handed the executor {} records ({} register writes, {} memory waits); {} side effects it cannot hand (EXT/ZPD)",
+                g_px_recs.load(), g_px_regs.load(), g_px_waits.load(), g_px_unhandled.load());
   std::vector<std::pair<uint32_t, uint32_t>> top;
   uint32_t regs_bad = 0;
   for (uint32_t r = 0; r < 0x5000; ++r)
@@ -616,6 +694,7 @@ void Write() {
     std::fclose(g_p5_f);
     g_p5_f = nullptr;
     REXLOG_INFO("[p5] wrote p5_fe.bin: {} side effects", g_p5_n);
+    g_p5 = false;   // closed for good: a later note must not reopen (and truncate) the file
   }
   if (g_src) {
     std::lock_guard<std::mutex> lock2(g_src_mu);

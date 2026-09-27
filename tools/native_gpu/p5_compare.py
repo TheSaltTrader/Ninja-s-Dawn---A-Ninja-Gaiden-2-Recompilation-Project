@@ -11,7 +11,7 @@ import collections, struct, sys
 
 KIND = {1: "MEM_WRITE", 2: "COND_WRITE mem", 3: "COND_WRITE reg", 4: "EVENT_WRITE_SHD value", 5: "EVENT_WRITE_SHD counter",
         6: "EVENT_WRITE_EXT", 7: "EVENT_WRITE_ZPD", 8: "REG_TO_MEM", 9: "INTERRUPT", 10: "REG_RMW",
-        11: "read-pointer write-back", 12: "XE_SWAP", 13: "WAIT_REG_MEM"}
+        11: "read-pointer write-back", 12: "XE_SWAP", 13: "WAIT_REG_MEM", 14: "WAIT unsatisfied at decode"}
 
 
 def load(path):
@@ -54,6 +54,9 @@ for k in kinds:
     if k == 11:
         va, vb = set(v for _, v in a), set(v for _, v in b)
         print("%-26s %9d %9d  values: plugin-only %d, front-end-only %d, common %d" % (name, len(a), len(b), len(va - vb), len(vb - va), len(va & vb)))
+        continue
+    if not a or not b:
+        print("%-26s %9d %9d  %s" % (name, len(a), len(b), "ONE SIDE EMPTY"))
         continue
     aa, bb = align(a, b)
     diffs = [(i, x, y) for i, (x, y) in enumerate(zip(aa, bb)) if x != y]
