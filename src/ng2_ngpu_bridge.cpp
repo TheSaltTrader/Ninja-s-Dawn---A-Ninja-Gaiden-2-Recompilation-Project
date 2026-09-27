@@ -157,6 +157,7 @@ GetDeviceFn g_get_device = nullptr;
 PresentStatsFn g_present_stats = nullptr;
 StorageFn g_get_storage = nullptr;
 bool g_storage_open = false;
+void SyncSwapPostEffect(bool force);   // defined with OnSwap below
 bool g_one_window = false;       // ONE WINDOW: the backend on the plugin's device, its frames through the presenter
 bool g_hold_this_swap = false;   // the reveal hold's verdict at the last swap; the provider reads it
 uint64_t g_provider_calls = 0, g_provider_held = 0, g_provider_waits_timed_out = 0, g_provider_no_output = 0;
