@@ -337,3 +337,14 @@ plugin alone with the same pack as the control (does it log `hashed files indexe
 carry4 still replaces nothing, the difference is in the memexport range computation under the transplant
 (`memexport_ranges_` empty where the plugin's are not), which is a DLL / vendored-code fix, not a setting.
 Fable never saw this: Fable has no texture pack, so the gate never mattered there.
+
+**Correction from the control (packbase, 19:04, plugin alone with the same pack):** the plugin ALSO logs the
+`left alone: memory written by the GPU` counter at the same pace (39,000 in two minutes vs the DLL's 38,000) - it
+counts render-target loads, which dominate on this title, and was never the discriminator. My "every load is
+skipped" reading above was an inference from one arm; the control killed it. The real discriminator is the INDEX
+line `[texpack] '<pack>': 24670 hashed files indexed; 198 ... IGNORED`: present in the plugin-alone leg and in
+the DLL leg with hoist / fast_valid / async_submit / upload_skip ALL off (carry4, 19:02:42), absent in every
+optimised DLL leg (carry1-3). So one of the four optimisations stops the pack lookup before it can build its index;
+upload_skip alone is excluded (carry3). Bisect queued: hoist, fast_valid, async_submit off one at a time, 60 s
+legs (the index line lands by the title screen). Also: the pack does replace once indexed - the DLL's cache is
+the plugin's cache; the gap is the optimisation, not the pack code.
