@@ -77,6 +77,17 @@ for i in range(n):
         by_field[field] += 1
 for f in ranges:
     ranges[f].sort()
+INLINE = 100000        # producer key offset for "engine code writing right after this hooked call returned"
+INLINE_BEFORE = 200000 # ... "engine code writing right before this hooked call" (register set-up before a draw)
+IBVIA = 300000         # ... "executed from an indirect buffer issued by this hooked call" (library templates)
+INLINE_GAP = 256       # bytes past a range's end (or ahead of a start) that still count as that call's inline
+range_ends = {}        # frame -> ([end addresses sorted], [hook per end])
+range_starts = {}      # frame -> ([start addresses sorted], [hook per start])
+for f, rs in ranges.items():
+    ends = sorted((hi, hook) for lo, hi, hook, fld in rs if fld == "cur")
+    range_ends[f] = ([e for e, h in ends], [h for e, h in ends])
+    starts = sorted((lo, hook) for lo, hi, hook, fld in rs if fld == "cur")
+    range_starts[f] = ([s for s, h in starts], [h for s, h in starts])
 # format version 2: the LAST WRITER of every 64-byte block any hooked call wrote since the first frame
 blocks = {}
 pos = 32 + n * rec_size
@@ -119,6 +130,16 @@ def find(frame, addr, field):
     if w is not None:
         via_blocks[w[1]] += 1
         return w[1]
+    # ENGINE INLINE: written by the caller right after a hooked call returned (NG2 Chapter 1: 32 DRAW_INDX per
+    # frame sit exactly 56 bytes past the end of a sub_8373BD50 range - the state flush before a draw - with the
+    # draw packet built by engine code). Named after that call, in its own bucket (hook + INLINE).
+    for f in (frame, frame - 1, frame + 1):
+        ends = range_ends.get(f)
+        if not ends:
+            continue
+        k = bisect.bisect_right(ends[0], addr)
+        if k and addr - ends[0][k - 1] <= INLINE_GAP:
+            return INLINE + ends[1][k - 1]
     return None
 
 
@@ -136,12 +157,36 @@ def census(field):
         d = collections.Counter()
         t = collections.Counter()
         bins = collections.Counter()
+        ib_ranges = []        # the most recent indirect buffers executed: (lo, hi, key of the issuing call)
+        last_ib_key = -1      # the producer of the last INDIRECT_BUFFER packet seen
         for addr, header, binsel in packets[f]:
+            if header == 0x7FFFFFFF:   # the plugin's marker: an indirect buffer [addr, addr + count*4) starts now
+                ib_ranges.append((addr, addr + binsel * 4, last_ib_key))
+                if len(ib_ranges) > 8:
+                    ib_ranges.pop(0)
+                continue
             ptype = header >> 30
             t[ptype] += 1
             is_draw = ptype == 3 and ((header >> 8) & 0x7F) in DRAW_OPCODES
             hook = find(f, addr, field)
+            if hook is None:
+                # Executed from an indirect buffer no hooked call wrote (the library's persistent templates, or a
+                # buffer built by engine code): credited to the call that issued the INDIRECT_BUFFER packet.
+                for lo, hi, ib_key in reversed(ib_ranges):
+                    if lo <= addr < hi:
+                        hook = (IBVIA + ib_key) if ib_key != -1 else None
+                        break
+            if hook is None:
+                # Engine inline BEFORE a hooked call: the packet sits just ahead of a range start (register set-up
+                # written by the caller before it calls the library's draw).
+                starts = range_starts.get(f)
+                if starts:
+                    k = bisect.bisect_left(starts[0], addr)
+                    if k < len(starts[0]) and starts[0][k] - addr <= INLINE_GAP:
+                        hook = INLINE_BEFORE + starts[1][k]
             key = hook if hook is not None else -1
+            if ptype == 3 and ((header >> 8) & 0x7F) == 0x3F:
+                last_ib_key = key if (key != -1 and key < INLINE) else -1
             c[key] += 1
             if is_draw:
                 d[key] += 1
@@ -170,6 +215,12 @@ per_frame, tot, tot_draws, unattr_ops, unattr_draw_ops = results[best]
 def name(h):
     if h == -1:
         return "UNATTRIBUTED"
+    if h >= IBVIA:
+        return "via INDIRECT_BUFFER issued by %s" % hooks[h - IBVIA][0]
+    if h >= INLINE_BEFORE:
+        return "ENGINE INLINE before %s" % hooks[h - INLINE_BEFORE][0]
+    if h >= INLINE:
+        return "ENGINE INLINE after %s" % hooks[h - INLINE][0]
     fn, label = hooks[h]
     return "%s %s" % (fn, label.split()[0] if label.startswith("Set") else label[:28])
 
