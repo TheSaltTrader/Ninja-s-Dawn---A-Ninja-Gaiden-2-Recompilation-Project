@@ -22,6 +22,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
 #include <string>
 
@@ -33,6 +34,11 @@
 #include "ng2_native_backend.h"
 #include "ngpu_backend_api.h"
 #include "rtc_d3d12/facade.h"
+
+// The in-exe backend's own copies of the pack counters (accessor-only statics
+// at global scope in src/native_gpu_xlat/rtc_d3d12/texture_cache.cpp).
+int32_t& FLAGS_texture_pack_replaced_storage_();
+int32_t& FLAGS_texture_pack_original_storage_();
 
 // The vendored backend's own copies (src/native_gpu_xlat/rtc_d3d12/flags.cpp; declared in the vendored
 // include/rex/graphics/flags.h). Declared here by their storage names so this file does not depend on which
@@ -494,6 +500,39 @@ void OnDraw(const RexNgpuDraw* d) {
   }
 }
 
+// The texture-pack counters have TWO HOMES too (see the header on ng2_uw_mode):
+// the backend's accessor copy, which its texture cache writes, and the runtime
+// registry, which the F10 menu and the notify overlay read (REXCVAR_QUERY -
+// the plugin owns those cvars, and under offload the plugin's own texture cache
+// loads nothing, so the registry copy stays 0 unless the backend publishes).
+// The DLL publishes its copy into the registry at every swap (Fable 012fcf3).
+// Printing both side by side is the check that the publish lands; a registry
+// 0 beside a backend N is the overlay lying, not the pack failing (2026-09-26
+// evening: an evening was spent bisecting "0 enhanced" against the backend's
+// optimisations before the instrument was checked).
+int32_t BackendPackCounter(const char* name) {
+  if (g_use_dll) {
+    char buf[32] = {};
+    if (g_dll.GetSetting && g_dll.GetSetting(name, buf, sizeof(buf))) return std::atoi(buf);
+    return -1;
+  }
+  if (std::strcmp(name, "texture_pack_replaced") == 0) return FLAGS_texture_pack_replaced_storage_();
+  if (std::strcmp(name, "texture_pack_original") == 0) return FLAGS_texture_pack_original_storage_();
+  return -1;
+}
+
+void LogPackHomes() {
+  const int32_t reg_r = rex::cvar::Query<int32_t>("texture_pack_replaced");
+  const int32_t reg_o = rex::cvar::Query<int32_t>("texture_pack_original");
+  const int32_t be_r = BackendPackCounter("texture_pack_replaced");
+  const int32_t be_o = BackendPackCounter("texture_pack_original");
+  REXLOG_INFO("[ngpu] PACK COUNTERS: registry (what the overlay reads) replaced {} original {} | backend copy "
+              "replaced {} original {}{}",
+              reg_r, reg_o, be_r, be_o,
+              (be_r > 0 && reg_r == 0) ? " - THE REGISTRY IS NOT PUBLISHED: the overlay would read 0 enhanced"
+                                       : "");
+}
+
 void LogPeriodic() {
   static uint32_t n = 0;
   if ((++n % 300) != 1) return;
@@ -510,6 +549,7 @@ void LogPeriodic() {
                 g_draws_seen.load(), st.draws, st.draw_failed, st.swaps, st.selfcheck_runs, st.selfcheck_mismatches,
                 st.frames_presented, st.frames_held, mode, k, ws.presented, ws.requests, ws.skipped_no_output,
                 ws.waits_timed_out);
+    LogPackHomes();
     return;
   }
   const auto st = backend::GetStats();
@@ -523,6 +563,7 @@ void LogPeriodic() {
               g_nocode[0][0], g_nocode[0][1], g_nocode[0][2], g_nocode[0][3],
               g_nocode[1][0], g_nocode[1][1], g_nocode[1][2], g_nocode[1][3],
               ws.presented, ws.requests, ws.skipped_no_output, ws.waits_timed_out, ws.last_mode);
+  LogPackHomes();
 }
 
 void OnSwap(uint32_t fb, uint32_t fb_w, uint32_t fb_h) {

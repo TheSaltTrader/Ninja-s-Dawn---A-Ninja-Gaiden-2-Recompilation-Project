@@ -146,6 +146,16 @@ bool CreateNativeWindow() {
     x = game_origin.x + 40; y = game_origin.y + 40;
     REXLOG_INFO("[ngpu-window] mirroring the game window's client {}x{} at {},{}", game_client.right,
                 game_client.bottom, game_origin.x, game_origin.y);
+  } else if (g_spec.fullscreen && mirror) {
+    // Borderless over the game's own fullscreen window: its rectangle, its monitor (leg carry1, 18:52: the monitor
+    // index alone put this window on the leftmost 3440x1440 screen while the game filled the primary 3840x1600).
+    // Under offload the game's window is black, so covering it is what a player wants to see.
+    RECT gr = {};
+    GetWindowRect(game.hwnd, &gr);
+    style = WS_POPUP;
+    x = gr.left; y = gr.top;
+    w = gr.right - gr.left; h = gr.bottom - gr.top;
+    REXLOG_INFO("[ngpu-window] mirroring the game's fullscreen rectangle {}x{} at {},{}", w, h, x, y);
   } else if (g_spec.fullscreen) {
     // Borderless on the whole monitor - the same shape the game's own fullscreen takes.
     style = WS_POPUP;

@@ -52,6 +52,8 @@ LEDGER = [
     ("texpack: per-stage warm",             "plugin",  b"warmed stage",        "v1.0.0 warm + bar"),
     ("texpack: mip compute pass",           "plugin",  b"texpack_mip",         "texpack_mip.cs.hlsl"),
     ("texpack: pack path cvar",             "plugin",  b"texture_pack_path",   "cvar the tuning sets"),
+    ("texpack: indicator counts resolve-at-load", "plugin", b"texpack registry replaced", "2026-09-26 counter fix + [swap] line"),
+    ("native: pack counters, both homes",   "exe",     b"PACK COUNTERS",       "bridge LogPackHomes 2026-09-26"),
     ("upscale: Real-ESRGAN path",           "exe",     b"Real-ESRGAN",         "ng2_textool / menu"),
     ("upscale: only-missing",               "exe",     b"only-missing",        "v1.0.2"),
     # 1.2 ultrawide

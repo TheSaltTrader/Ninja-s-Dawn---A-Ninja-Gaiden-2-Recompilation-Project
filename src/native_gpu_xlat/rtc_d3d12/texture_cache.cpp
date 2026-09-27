@@ -2832,6 +2832,12 @@ void D3D12TextureCache::ApplyTexpackResolve(D3D12Texture& texture, const Texture
   {
     static std::atomic<uint32_t> built{0};
     const uint32_t n = ++built;
+    // The indicator's count. The old superseding-replacement block in the load
+    // path is the only other writer, and resolve-at-load (the default) skips
+    // that block by design, so without this line the F10 menu read "nothing on
+    // this screen is in the pack yet" and the overlay "0 enhanced loaded" on
+    // every path while the pack was replacing hundreds of textures (2026-09-26).
+    REXCVAR_SET(texture_pack_replaced, int32_t(n));
     if (n == 1 || n % 1000 == 0)
       REXLOG_INFO("[texpack] {} upscaled textures resolved at load", n);
   }

@@ -6,12 +6,27 @@
 #include <cstring>
 #include <memory>
 
+#include <rex/cvar.h>
 #include <rex/logging.h>
 #include <rex/system/kernel_state.h>
+
+#include <string>
 
 #include "rtc_d3d12/command_processor.h"
 #include "rtc_d3d12/facade.h"
 #include "rtc_d3d12/graphics_system_standin.h"
+
+// Vendored accessor storage defined in rtc_d3d12/command_processor.cpp, texture_cache.cpp and flags.cpp (global
+// scope). Read by PublishStatCvars - the kit's native_gpu_backend.cpp does the same (Fable 012fcf3).
+int32_t& FLAGS_guest_fps_x10_storage_();
+int32_t& FLAGS_gpu_frame_draws_storage_();
+int32_t& FLAGS_gpu_frame_depth_draws_storage_();
+int32_t& FLAGS_ng2_uw_mode_storage_();
+double& FLAGS_ng2_fov_k_storage_();
+int32_t& FLAGS_texture_pack_original_storage_();
+int32_t& FLAGS_texture_pack_replaced_storage_();
+int32_t& FLAGS_texture_warm_total_storage_();
+int32_t& FLAGS_texture_warm_done_storage_();
 
 namespace ng2::ngpu::backend {
 
@@ -120,10 +135,45 @@ class Driver {
     }
     ++stats_.swaps;
     cp_->IssueSwap(fb, w, h);
+    PublishStatCvars();
     ::ng2::ngpu::rtc::NoteSwapSubmission(cp_->LastQueuedSubmission());   // [async submit] the frame waits for it
   }
 
   void EndFrameNoSwap() { cp_->EndSubmission(false); }
+  // PUBLISHED VALUES (ported from the kit's native_gpu_backend.cpp, Fable 012fcf3): settings the backend WRITES
+  // (REXCVAR_SET in the vendored code) land in this module's accessor storage, not in the runtime registry other
+  // modules read by name. Under offload the plugin no longer computes them, so at each swap the changed ones are
+  // copied into the registry: the app's HUD (guest_fps_x10, gpu_frame_draws), texture warming / pack counters
+  // (the F10 menu's "ON and in use" and the notify overlay's "N enhanced loaded" read texture_pack_replaced), and
+  // the ultrawide presenter half (ng2_uw_mode / ng2_fov_k). In lockstep the plugin publishes its own. The DLL
+  // route has the same code inside the DLL; this is the in-exe fallback's copy (2026-09-26 inexe1: registry 0
+  // beside a backend count without it).
+  void PublishStatCvars() {
+    if (!::ng2::ngpu::rtc::NativeOwnsGuestMemory()) return;
+    struct IntPub { const char* name; int32_t& (*get)(); int32_t last; };
+    static IntPub ints[] = {
+        {"guest_fps_x10", &FLAGS_guest_fps_x10_storage_, INT32_MIN},
+        {"gpu_frame_draws", &FLAGS_gpu_frame_draws_storage_, INT32_MIN},
+        {"gpu_frame_depth_draws", &FLAGS_gpu_frame_depth_draws_storage_, INT32_MIN},
+        {"ng2_uw_mode", &FLAGS_ng2_uw_mode_storage_, INT32_MIN},
+        {"texture_pack_original", &FLAGS_texture_pack_original_storage_, INT32_MIN},
+        {"texture_pack_replaced", &FLAGS_texture_pack_replaced_storage_, INT32_MIN},
+        {"texture_warm_total", &FLAGS_texture_warm_total_storage_, INT32_MIN},
+        {"texture_warm_done", &FLAGS_texture_warm_done_storage_, INT32_MIN},
+    };
+    for (auto& p : ints) {
+      const int32_t v = p.get();
+      if (v == p.last) continue;
+      p.last = v;
+      rex::cvar::SetFlagByName(p.name, std::to_string(v));
+    }
+    static double last_k = -1.0;
+    const double k = FLAGS_ng2_fov_k_storage_();
+    if (k != last_k) {
+      last_k = k;
+      rex::cvar::SetFlagByName("ng2_fov_k", std::to_string(k));
+    }
+  }
   Readiness GetReadiness() {
     Readiness r;
     if (!cp_) return r;

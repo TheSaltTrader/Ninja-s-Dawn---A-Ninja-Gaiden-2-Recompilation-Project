@@ -348,3 +348,85 @@ optimised DLL leg (carry1-3). So one of the four optimisations stops the pack lo
 upload_skip alone is excluded (carry3). Bisect queued: hoist, fast_valid, async_submit off one at a time, 60 s
 legs (the index line lands by the title screen). Also: the pack does replace once indexed - the DLL's cache is
 the plugin's cache; the gap is the optimisation, not the pack code.
+
+### Texture pack under offload: CARRIED - the "NOT CARRIED" and "hoist is the blocker" readings above are RETRACTED (19:25)
+
+Two readings above were wrong, and both were the instrument, not the pack:
+
+1. **"absent in every optimised DLL leg (carry1-3)"** came from `grep ... | tail -8` of the run log: the index line
+   sits 21 s into every leg (ng2_019 18:52:21, ng2_020 18:55:21, ng2_021 19:00:15) and the `left alone` counter,
+   which logs every ~2 s, had pushed it out of the eight-line window. Re-grepping the same three logs for the line
+   finds it in all three, and the `1 upscaled textures resolved at load` line (the counter logs at 1 and every
+   1000) beside it. The all-optimisations-ON control on the bisect's own 55 s route (ng2_027 19:11:44, ng2_029)
+   indexed with `HOIST: 4 upload batches per frame` live; so did three hoist-off repeats. Every arm indexes. The
+   bisect "result" sent to the Fable session at 19:08 was retracted to them at 19:16; the tuning pin
+   (`ngpu_backend_hoist_uploads=false`) was reverted before it was ever built. The Fable session's code reading
+   agrees: the hoist path calls `MakeRangeValid(..., written_by_gpu=false)` on the line both paths share and never
+   writes the flags `AnyPageGpuWritten` reads.
+2. **"the settings overlay (F10, read in combat) says nothing on this screen is in the pack"** was the overlay
+   reading the wrong HOME. `ng2_menu.cpp` / `ng2_texnotify.cpp` read `texture_pack_replaced` from the runtime
+   cvar REGISTRY (`REXCVAR_QUERY`), which the plugin owns and writes from its own texture cache; under offload
+   that cache loads nothing, so the registry copy is 0 while the DLL's copy (accessor-only storage, behind
+   `NgpuBackendGetSetting("texture_pack_replaced")`) counts the real replacements. Same class as ng2_uw_mode
+   (two homes). The Fable session says the DLL publishes its copies into the registry at every swap
+   (`PublishStatCvars`, Fable 012fcf3, gated on the native backend owning guest memory); whether that publish
+   lands in NG2 is what the new `[ngpu] PACK COUNTERS: registry ... | backend copy ...` line in
+   `ng2_ngpu_bridge.cpp` (LogPeriodic, every 300 swaps) measures - see the verification leg below.
+
+**The content proof (FABLE2_TEXPACK_TRACE=1: one log line per resolve-at-load decision; parsed by
+`tools/native_gpu/texpack_trace_table.py`, the same parser wrote this table):**
+
+| leg (150 s, pad script `22:start,34:start,40:a,46:a,52:a,58:a,64:start,70:start`, the user's settings, pack at 2x) | index at | replace decisions | distinct ids replaced | distinct pack files served | `none` (content not in the pack, once per id) | retire | first replacement | `left alone` (GPU-written pages) at end |
+|---|---|---|---|---|---|---|---|---|
+| ng2_032 trace_off1: DLL cc620728 under offload, all optimisations ON | 19:17:57 | 752 | 752 | 729 | 263 | 0 | 19:18:39 | 48000 |
+| ng2_033 trace_base1: plugin drawing + DLL in LOCKSTEP (not `-Baseline`; both caches trace), same route | 19:20:37 | 1490 | 745 | 722 | 524 | 0 | 19:21:19 | 47000 |
+
+Both homes replace the same population on the same route: 752 vs 745 distinct ids, 729 vs 722 distinct pack
+files. CORRECTION (19:33): ng2_033 was NOT the plugin alone - the launcher's `-Baseline` switch was not passed, so
+it ran the plugin drawing WITH the DLL in lockstep (`Tuning: ngpu_backend = true`, `LOCKSTEP (dll)` in its log),
+and both texture caches traced in the same process: 1490 = 745 ids x two homes, each logging every id ONCE. The
+sentence that first stood here ("the plugin resolves each id twice") was wrong. A true plugin-alone leg (pair1,
+`-Baseline`) is in the counter-verification table below. The first replacement lands on gameplay arrival in
+both homes, and no retire / no-file / hash-mismatch line appears in either. The DLL leg ran with every optimisation ON (hoist 4 batches per
+frame, fast_valid, async_submit, upload_skip). The pack under offload is the plugin's pack.
+
+### The replaced counter: the indicator counted the retired path on EVERY route (19:24-19:45)
+
+The two-homes check landed and read the same in both homes: ng2_034 (DLL cc620728 under offload, all
+optimisations on, 150 s gameplay) printed `[ngpu] PACK COUNTERS: registry replaced R original O | backend copy
+replaced R original O` in 30 windows with the two homes NEVER differing (last: registry 0 / backend 0 replaced,
+original climbing to the same value in both). So the DLL's publish (Fable 012fcf3, `PublishStatCvars` at every swap)
+reaches the registry. But both homes said **replaced 0** on the route where the trace had counted 752 replacements.
+
+The cause is the counter's own semantics, in every copy of `texture_cache.cpp` including the shipped v1.0.24 plugin:
+`texture_pack_replaced` was incremented only inside the old superseding-replacement block of the load path (the
+`replaced` / `SetTexpackReplacement` branch), which `texture_pack_resolve_at_load = true` (the default) skips by
+design ("Nothing to size here"); `ApplyTexpackResolve` counted its builds in a private static (the `N upscaled
+textures resolved at load` line at 1 / 1000). So the F10 line has read "nothing on this screen is in the pack yet"
+and the notify overlay "0 enhanced loaded" on the PLUGIN path too, since resolve-at-load became the default - a
+shipped-product instrument defect, not a native-layer one. (The 18:53 F10 reading was real; it was never evidence
+about the native layer.)
+
+Fix, one line in `ApplyTexpackResolve` after `const uint32_t n = ++built;`: `REXCVAR_SET(texture_pack_replaced,
+int32_t(n));` - applied to NG2's vendored in-exe copy (this branch), the fork plugin (ng2-rexglue a58ae2c5, which
+also puts `texpack registry replaced R original O` on the plugin's 5-second `[swap]` line), and by the Fable session
+to their tree (rexglue-src febe384 / Fable f029a49, DLL b7a5a524 in the kit). NG2's in-exe driver also gained the
+kit's `PublishStatCvars` (it had none: ng2_036 read registry 0 / 0 beside a backend `original` of 32590).
+
+| leg (offload unless said; 150 s gameplay route; the user's settings; pack at 2x) | registry replaced (last) | backend copy replaced (last) | homes differ in N of M windows | first window with a replacement | `resolved at load` counter (last, logs at 1 / 1000) |
+|---|---|---|---|---|---|
+| ng2_034 DLL cc620728 (before the fix) | 0 | 0 | 0 of 30 | never | 1 |
+| ng2_035 PLUGIN ALONE (`-Baseline`), fork pair with the fix; value from the `[swap]` line | 746 | (the plugin's own) | - | 19:33:09 | 1 |
+| ng2_036 in-exe copy, exe WITHOUT the publisher; the route never reached gameplay in 150 s (33 fps fallback) | 0 | 0 | 15 of 15 | never | None |
+| ng2_037.log DLL b7a5a524 (Fable's fix), exe with the publisher | 751 | 751 | 0 of 30 | 19:40:05 | 1 |
+| ng2_038.log in-exe copy WITH the publisher, 200 s | 0 | 0 | 0 of 18 | never | None |
+
+The in-exe fallback route (ng2_036 / ng2_038) ran at ~27-33 fps on this machine (5,101 swaps in 200 s against the DLL's 8,701 in 150 s) and never reached gameplay on the wall-clock pad script, so its REPLACED count is UNMEASURED; what ng2_038 does show is the ported publisher working: `original` agreed between the homes in 0-differing windows (18 of 18) where ng2_036 without it differed in 15 of 15. Why the in-exe copy is slower than the DLL built from the same code is an open item (not the product route).
+
+Reading the table: a registry count above 0 in a leg is what the F10 menu's "ON and in use" and the overlay's "N
+enhanced loaded" would show at that moment. `[swap]` under offload is printed by the BACKEND's own copy of the
+printer (vendored command_processor.cpp / the DLL), not the plugin's, so the registry text on that line appears
+only on the plugin path; under offload the `PACK COUNTERS` line is the instrument.
+
+**Pending for main (NOT this branch):** the shipped v1.0.24 indicator has the same hole; the one-line counter fix
+belongs in rexglue-src's texture_cache.cpp and a v1.0.25. That is a public release and the user's call.
