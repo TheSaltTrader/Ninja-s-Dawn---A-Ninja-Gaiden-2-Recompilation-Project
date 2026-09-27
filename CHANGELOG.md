@@ -60,6 +60,12 @@ only shaders compiled after the change, so it now carries the restart note.
 Everything else on the screen reaches what it should, live or at launch as
 labelled.
 
+The anisotropic filtering labels were one level high: "1x" turned filtering
+off, "16x" gave 8x, and true 16x could not be chosen (the Fable II team found
+the same in its own menu). The row now offers Default (4x), Off, 2x, 4x, 8x
+and 16x, and a saved value keeps the strength it always had - a saved "16x"
+was 8x and now reads "8x".
+
 ### Improved - Far less stutter when a scene streams in with the texture pack on
 
 When a scene loads, the game asks for hundreds of textures in one frame. With

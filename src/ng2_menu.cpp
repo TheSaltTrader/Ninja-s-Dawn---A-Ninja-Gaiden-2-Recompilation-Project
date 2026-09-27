@@ -740,10 +740,20 @@ bool DrawSettings(Ng2Settings& s, const PageOptions& opts) {
     RowStart("Anisotropic filtering",
              "Forces a filtering level on every texture the game samples. "
              "\"Game default\" leaves the title's own sampler settings alone.");
-    const char* aniso[] = {"Game default", "1x", "2x", "4x", "8x", "16x"};
-    int aniso_index = std::clamp(s.anisotropic + 1, 0, 5);
+    // The plugin's anisotropic_override: -1 no override (its own default then
+    // applies, which is 3 = forced 4x), 0 off, 1 = 1x, 2 = 2x, 3 = 4x, 4 = 8x,
+    // 5 = 16x. The row used to send index-1, so "1x" sent off, "16x" sent 8x and
+    // real 16x could not be chosen (F10 census, 2026-09-27, found on Fable II
+    // first). The stored value keeps the plugin's meaning: a saved 4 is 8x and
+    // now says so.
+    static const int aniso_values[] = {-1, 0, 2, 3, 4, 5};
+    const char* aniso[] = {"Default (4x)", "Off", "2x", "4x", "8x", "16x"};
+    int aniso_index = 0;
+    for (int i = 0; i < 6; ++i)
+      if (aniso_values[i] == s.anisotropic) aniso_index = i;
+    if (s.anisotropic == 1) aniso_index = 1;  // a saved "1x" (which sent off) reads as Off
     if (ImGui::Combo("##aniso", &aniso_index, aniso, 6)) {
-      s.anisotropic = aniso_index - 1;
+      s.anisotropic = aniso_values[aniso_index];
       changed = true;
     }
     RestartTag();  // always: the row is restart-bound whether or not it is editable (2026-09-27)

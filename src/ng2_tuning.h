@@ -144,7 +144,7 @@ struct Ng2Tuning {
     // setting; nothing else belongs inside it.
     if (s.anisotropic >= 0) {
       out.push_back({"anisotropic_override", std::to_string(s.anisotropic),
-                     "forced anisotropic filtering level, 0=1x .. 4=16x"});
+                     "forced anisotropic filtering level: 0 off, 1 = 1x, 2 = 2x, 3 = 4x, 4 = 8x, 5 = 16x"});
     }
 
     // Texture pack. These are GPU PLUGIN cvars, so this file is the only way

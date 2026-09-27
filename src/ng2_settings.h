@@ -424,7 +424,7 @@ struct Ng2Settings {
     vsync = true;
     monitor = std::clamp(monitor, 0, 16);
     resolution_scale = std::clamp(resolution_scale, 1, 8);
-    anisotropic = std::clamp(anisotropic, -1, 4);
+    anisotropic = std::clamp(anisotropic, -1, 5);  // 5 = 16x
     texture_cache_mb = std::clamp(texture_cache_mb, 0, 8192);
     // Only the three the tool and the menu actually offer.
     if (texture_scale != 2 && texture_scale != 4 && texture_scale != 8)
