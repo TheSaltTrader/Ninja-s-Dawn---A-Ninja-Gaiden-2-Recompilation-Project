@@ -35,6 +35,7 @@
 #include <rex/system/kernel_state.h>
 
 #include "ng2_native_backend.h"
+#include "ng2_p2_census.h"
 #include "ngpu_backend_api.h"
 #include "rtc_d3d12/facade.h"
 
@@ -127,6 +128,9 @@ struct RexNgpuDraw {
   const uint8_t* vs_code;
   const uint8_t* ps_code;
   uint32_t vs_code_dwords, ps_code_dwords;
+  // (size >= offsetof end; fork plugin from 2026-09-27, Fable f7d77fd) the guest address of this draw's PM4
+  // packet - ties a bridge draw to the guest call whose cursor range wrote it (P3 map / front-end check).
+  uint32_t packet_addr;
 };
 }
 using DrawFn = void (*)(const RexNgpuDraw*);
@@ -462,7 +466,7 @@ void LockstepDraw(const RexNgpuDraw* d) {
     if (!p || !SafeCopyGuest(buf.data(), p, size_t(dwords) * 4)) { ++g_nocode[stage][2]; return nullptr; }
     return reinterpret_cast<const uint32_t*>(buf.data());
   };
-  const bool has_inline = d->size >= sizeof(RexNgpuDraw);
+  const bool has_inline = d->size >= offsetof(RexNgpuDraw, packet_addr);
   backend::DrawRecord br;
   br.draw_initiator = d->draw_initiator;
   br.index_addr = d->index_addr;
@@ -548,12 +552,14 @@ bool RevealHold() {
 // The callbacks, on the plugin's GPU thread.
 // ---------------------------------------------------------------------------------------------------------------------
 void OnDraw(const RexNgpuDraw* d) {
-  // Older plugins end at bin_select (no inline-microcode fields).
-  if (!d || (d->size != sizeof(RexNgpuDraw) && d->size != offsetof(RexNgpuDraw, vs_code))) {
+  // Older plugins end at bin_select (no inline-microcode fields) or at the inline-microcode fields (no packet_addr).
+  if (!d || (d->size != sizeof(RexNgpuDraw) && d->size != offsetof(RexNgpuDraw, packet_addr) &&
+             d->size != offsetof(RexNgpuDraw, vs_code))) {
     g_draws_bad_size.fetch_add(1, std::memory_order_relaxed);
     return;
   }
   g_draws_seen.fetch_add(1, std::memory_order_relaxed);
+  if (d->size >= sizeof(RexNgpuDraw)) ng2::p2::BridgeDraw(d->packet_addr, d->regs, d->reg_count);   // [p3]
   if (g_use_dll) {
     g_dll.OnDraw(d);   // the DLL does its own register sync, self-check and coverage
     return;

@@ -31,6 +31,14 @@ void Exit(int hook);
 // From the frame marker hook (the swap entry point), once per guest frame; r3 = the device.
 void FrameMarker(uint32_t r3);
 
+// P3 (full-native stage 1). NG2_P3MAP=<guest frame>:<max calls> (needs NG2_P2 on): at the exit of every call in
+// that frame whose cursor advanced (up to max), the XDK device object (0x5000 bytes) and the call's own packets go
+// to p3_guest.bin; every bridge draw whose packet address falls in a recorded range writes its register file
+// (0x2000-0x23FF, 0x4000-0x4927) to p3_bridge.bin. tools/native_gpu/p3_flush.py maps registers to device words.
+// NG2_P3FE=<N>: the guest-thread front end decodes each call's packets into its own register file and every Nth
+// draw is compared with the bridge's file at that packet ([p3fe] log lines). Called from the bridge's OnDraw.
+void BridgeDraw(uint32_t packet_addr, const uint32_t* regs, uint32_t reg_count);
+
 }  // namespace ng2::p2
 
 extern "C" void ng2_p2_exit(int hook);

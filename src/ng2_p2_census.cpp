@@ -3,6 +3,7 @@
 
 #include <windows.h>
 
+#include <algorithm>
 #include <atomic>
 #include <cstdio>
 #include <cstdlib>
@@ -64,6 +65,97 @@ uint32_t g_p3_frame = 0, g_p3_max = 0, g_p3_recorded = 0;
 FILE* g_p3_guest = nullptr;
 constexpr uint32_t kDevBytes = 0x5000;
 
+std::mutex g_p3_mu;
+std::vector<std::pair<uint32_t, uint32_t>> g_p3_ranges;   // physical [lo, hi) of the recorded calls
+uint32_t g_p3_bridge = 0;
+FILE* g_p3_bridge_f = nullptr;
+
+// [p3 fe] FULL-NATIVE P3 STAGE 1, VALIDATION (NG2_P3FE=<sample every N draws>, needs NG2_P2 on; ported from
+// Fable's fable2_p2_census.cpp): a front end on the GAME thread. At the outermost exit of every hooked call, the
+// packets that call wrote are decoded into a native register file (type 0 / type 1 writes, SET_CONSTANT,
+// LOAD_ALU_CONSTANT). At every Nth DRAW packet the file is snapshotted, keyed by the packet's physical address;
+// when the bridge executes that packet (BridgeDraw, RexNgpuDraw::packet_addr), the plugin's register file is
+// compared register by register. Mismatch counts per register are logged - the gate for letting the front end
+// draw is 0 outside the registers a later pass explains.
+bool g_fe = false;
+uint32_t g_fe_every = 64;
+uint32_t g_fe_regs[0x5000];
+struct FeSnap { uint32_t r2[0x400]; uint32_t r4[0x928]; };
+std::unordered_map<uint32_t, FeSnap*> g_fe_snaps;
+std::atomic<uint64_t> g_fe_calls{0}, g_fe_skipped{0}, g_fe_draws{0}, g_fe_compared{0}, g_fe_unmatched{0};
+uint32_t g_fe_mis[0x5000];
+std::atomic<uint64_t> g_fe_ops[128];
+std::mutex g_fe_mu;
+
+void FeDecode(const uint8_t* body, uint32_t n, uint32_t phys_base) {
+  auto be = [&](uint32_t i) {
+    const uint8_t* p = body + i * 4;
+    return (uint32_t(p[0]) << 24) | (uint32_t(p[1]) << 16) | (uint32_t(p[2]) << 8) | uint32_t(p[3]);
+  };
+  const uint32_t w = n / 4;
+  auto* ks = rex::system::kernel_state();
+  uint32_t i = 0;
+  while (i < w) {
+    const uint32_t h = be(i);
+    if (h == 0xFFFFFFFFu) { ++i; continue; }   // filler at the start of a call's reserved space
+    const uint32_t t = h >> 30;
+    if (t == 0) {
+      const uint32_t base = h & 0x7FFF, cnt = ((h >> 16) & 0x3FFF) + 1, one = (h >> 15) & 1;
+      for (uint32_t k = 0; k < cnt && i + 1 + k < w; ++k) {
+        const uint32_t reg = one ? base : base + k;
+        if (reg < 0x5000) g_fe_regs[reg] = be(i + 1 + k);
+      }
+      i += 1 + cnt;
+    } else if (t == 1) {
+      if (i + 2 < w) { g_fe_regs[h & 0x7FF] = be(i + 1); g_fe_regs[(h >> 11) & 0x7FF] = be(i + 2); }
+      i += 3;
+    } else if (t == 2) {
+      ++i;
+    } else {
+      const uint32_t op = (h >> 8) & 0x7F, cnt = ((h >> 16) & 0x3FFF) + 1;
+      g_fe_ops[op].fetch_add(1, std::memory_order_relaxed);
+      static const uint32_t kSpace[5] = {0x4000, 0x4800, 0x4900, 0x4908, 0x2000};
+      if (op == 0x2D && i + 1 < w) {                       // SET_CONSTANT
+        const uint32_t d = be(i + 1), idx = d & 0x7FF, typ = (d >> 16) & 0xFF;
+        if (typ < 5)
+          for (uint32_t k = 0; k + 1 < cnt && i + 2 + k < w; ++k) {
+            const uint32_t reg = kSpace[typ] + idx + k;
+            if (reg < 0x5000) g_fe_regs[reg] = be(i + 2 + k);
+          }
+      } else if (op == 0x2F && i + 3 < w && ks && ks->memory()) {   // LOAD_ALU_CONSTANT: from guest memory
+        const uint32_t addr = be(i + 1) & 0x3FFFFFFF, d = be(i + 2), size = be(i + 3) & 0xFFF;
+        const uint32_t idx = d & 0x7FF, typ = (d >> 16) & 0xFF;
+        const uint8_t* src = ks->memory()->TranslatePhysical<const uint8_t*>(addr);
+        if (src && typ < 5)
+          for (uint32_t k = 0; k < size; ++k) {
+            const uint32_t reg = kSpace[typ] + idx + k;
+            const uint8_t* p = src + k * 4;
+            if (reg < 0x5000)
+              g_fe_regs[reg] = (uint32_t(p[0]) << 24) | (uint32_t(p[1]) << 16) | (uint32_t(p[2]) << 8) | uint32_t(p[3]);
+          }
+      } else if (op == 0x22 || op == 0x36) {                         // DRAW_INDX / DRAW_INDX_2
+        const uint64_t nd = g_fe_draws.fetch_add(1, std::memory_order_relaxed) + 1;
+        if (nd % g_fe_every == 0) {
+          // Snapshot the front end's registers for this draw, keyed by the packet's physical address.
+          auto* s = new FeSnap;
+          std::memcpy(s->r2, g_fe_regs + 0x2000, sizeof(s->r2));
+          std::memcpy(s->r4, g_fe_regs + 0x4000, sizeof(s->r4));
+          const uint32_t addr = (phys_base + i * 4) & 0x1FFFFFFFu;
+          std::lock_guard<std::mutex> lock(g_fe_mu);
+          if (g_fe_snaps.size() > 4096) {   // stale entries (the bridge never reached them): drop all
+            for (auto& kv : g_fe_snaps) delete kv.second;
+            g_fe_snaps.clear();
+          }
+          auto& slot = g_fe_snaps[addr];
+          delete slot;
+          slot = s;
+        }
+      }
+      i += 1 + cnt;
+    }
+  }
+}
+
 bool SafeRead32(const uint8_t* p, uint32_t* out) {
   __try {
     *out = (uint32_t(p[0]) << 24) | (uint32_t(p[1]) << 16) | (uint32_t(p[2]) << 8) | uint32_t(p[3]);
@@ -105,6 +197,11 @@ void Init() {
       g_p3 = true;
       REXLOG_INFO("[p3] register-map discovery ON: guest frame {}, up to {} calls -> p3_guest.bin", f, n);
     }
+  }
+  if (const char* m = std::getenv("NG2_P3FE"); m && *m) {
+    g_fe_every = std::max<uint32_t>(1, uint32_t(std::strtoul(m, nullptr, 0)));
+    g_fe = true;
+    REXLOG_INFO("[p3fe] guest-thread front end ON (validation): every {}th draw compared with the bridge", g_fe_every);
   }
   g_recs.reserve(1u << 20);
   g_on = true;
@@ -242,6 +339,23 @@ void Exit(int hook) {
   r.cur2_in = o.cur2_in;
   if (!ReadGuest(dev + g_cursor_off, &r.cur_out)) r.cur_out = 0;
   if (!ReadGuest(dev + g_cursor2_off, &r.cur2_out)) r.cur2_out = 0;
+  // [p3 fe] decode what this call wrote into the front end's register file (every call, from the device on).
+  // Only at the OUTERMOST exit on this thread: an outer call's range contains its inner calls' bytes, so decoding at
+  // every exit would apply them twice (and count their draws twice).
+  if (g_fe && t_depth == 0 && r.cur_out > r.cur_in && r.cur_in) {
+    const uint32_t len = r.cur_out - r.cur_in;
+    auto* ks = rex::system::kernel_state();
+    const uint8_t* q = (len <= 65536u && ks && ks->memory()) ? ks->memory()->TranslateVirtual<const uint8_t*>(r.cur_in)
+                                                             : nullptr;
+    if (q) {
+      FeDecode(q, len, r.cur_in);
+      g_fe_calls.fetch_add(1, std::memory_order_relaxed);
+    } else {
+      g_fe_skipped.fetch_add(1, std::memory_order_relaxed);
+    }
+  } else if (g_fe && t_depth == 0 && r.cur_out != r.cur_in) {
+    g_fe_skipped.fetch_add(1, std::memory_order_relaxed);   // a range that crossed a buffer switch
+  }
   std::lock_guard<std::mutex> lock(g_mu);
   if (recording) g_recs.push_back(r);
   // [p3 map] the device object at the exit of a call that wrote packets, in the discovery frame.
@@ -260,6 +374,11 @@ void Exit(int hook) {
       if (q) n = r.cur_out - r.cur_in;
       std::fwrite(&n, 4, 1, g_p3_guest);
       if (n) std::fwrite(q, n, 1, g_p3_guest);
+      {
+        const uint32_t lo = r.cur_in & 0x1FFFFFFFu, hi = r.cur_out & 0x1FFFFFFFu;
+        std::lock_guard<std::mutex> lock3(g_p3_mu);
+        if (hi > lo) g_p3_ranges.push_back({lo, hi});
+      }
       if (++g_p3_recorded == g_p3_max) {
         std::fclose(g_p3_guest);
         g_p3_guest = nullptr;
@@ -287,6 +406,67 @@ void FrameMarker(uint32_t r3) {
   }
   const uint32_t f = g_frame.fetch_add(1, std::memory_order_relaxed) + 1;
   if (f == g_start + g_count) Write();
+}
+
+
+void BridgeDraw(uint32_t packet_addr, const uint32_t* regs, uint32_t reg_count) {
+  if (g_fe && regs && reg_count >= 0x4928) {
+    FeSnap* s = nullptr;
+    {
+      std::lock_guard<std::mutex> lock(g_fe_mu);
+      auto it = g_fe_snaps.find(packet_addr & 0x1FFFFFFFu);
+      if (it != g_fe_snaps.end()) {
+        s = it->second;
+        g_fe_snaps.erase(it);   // one comparison per snapshot
+      }
+    }
+    if (!s) {
+      g_fe_unmatched.fetch_add(1, std::memory_order_relaxed);
+    } else {
+      for (uint32_t k = 0; k < 0x400; ++k)
+        if (s->r2[k] != regs[0x2000 + k]) ++g_fe_mis[0x2000 + k];
+      for (uint32_t k = 0; k < 0x928; ++k)
+        if (s->r4[k] != regs[0x4000 + k]) ++g_fe_mis[0x4000 + k];
+      delete s;
+      const uint64_t c = g_fe_compared.fetch_add(1, std::memory_order_relaxed) + 1;
+      if (c % 500 == 0) {
+        std::vector<std::pair<uint32_t, uint32_t>> top;
+        uint32_t regs_bad = 0;
+        for (uint32_t r = 0; r < 0x5000; ++r)
+          if (g_fe_mis[r]) { ++regs_bad; top.push_back({g_fe_mis[r], r}); }
+        std::sort(top.rbegin(), top.rend());
+        std::string s2;
+        for (size_t k = 0; k < top.size() && k < 24; ++k) s2 += fmt::format(" {:04X}:{}", top[k].second, top[k].first);
+        std::string ops;
+        for (int o = 0; o < 128; ++o)
+          if (const uint64_t v = g_fe_ops[o].load()) ops += fmt::format(" {:02X}:{}", o, v);
+        REXLOG_INFO("[p3fe] {} draws compared ({} bridge draws had no snapshot); front end decoded {} calls, skipped {} "
+                    "ranges, saw {} draws; {} registers ever differ, worst:{} | type-3 ops:{}",
+                    c, g_fe_unmatched.load(), g_fe_calls.load(), g_fe_skipped.load(), g_fe_draws.load(), regs_bad,
+                    s2, ops);
+      }
+    }
+  }
+  if (!g_p3 || !regs || reg_count < 0x4928) return;
+  const uint32_t a = packet_addr & 0x1FFFFFFFu;
+  std::lock_guard<std::mutex> lock(g_p3_mu);
+  if (g_p3_ranges.empty() || g_p3_bridge >= 4 * g_p3_max) return;
+  bool hit = false;
+  for (const auto& rg : g_p3_ranges) {
+    if (a >= rg.first && a < rg.second) { hit = true; break; }
+  }
+  if (!hit) return;
+  if (!g_p3_bridge_f) g_p3_bridge_f = std::fopen("p3_bridge.bin", "wb");
+  if (!g_p3_bridge_f) return;
+  std::fwrite(&packet_addr, 4, 1, g_p3_bridge_f);
+  std::fwrite(regs + 0x2000, 4, 0x400, g_p3_bridge_f);
+  std::fwrite(regs + 0x4000, 4, 0x928, g_p3_bridge_f);
+  if (++g_p3_bridge % 64 == 0) std::fflush(g_p3_bridge_f);
+  if (g_p3_bridge == 4 * g_p3_max) {
+    std::fclose(g_p3_bridge_f);
+    g_p3_bridge_f = nullptr;
+    REXLOG_INFO("[p3] wrote p3_bridge.bin: {} bridge draws inside recorded call ranges", g_p3_bridge);
+  }
 }
 
 }  // namespace ng2::p2
