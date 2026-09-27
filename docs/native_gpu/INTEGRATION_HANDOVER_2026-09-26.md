@@ -174,3 +174,30 @@ cost, measured as GPU TIME / CPU COST / p99 / worst beside a plugin-alone baseli
 
 Also learned: the eye tool's "stable for 4 s" fired on the intro's slow fog shot while the swap counter
 kept advancing - on this title a stability capture is not a freeze without the counter beside it.
+
+### The picture, decided (18:03-18:05, leg pause2, lockstep, DLL cc620728)
+
+Route by NG2's own pad script (no desktop input): START 22 s, START 34 s (menu), A 40/46/52/58 (new
+game, difficulty), START 64/70 (cutscene skip); the chapter card auto-proceeds; Chapter 1 gameplay from
+about +75 s; START through the live pad file pauses (the weapons screen). Native window mirrored the
+game's client (1273x720 both) on the same monitor. `windiff2.py`, captures 0-1 ms apart:
+
+| subject | native vs game mean abs diff | pixels over 0.1 | same-window floor across ~2.3 s |
+|---|---|---|---|
+| Chapter 1 gameplay, in combat (moving) | 0.0053, 0.0110 | 1.8%, 3.6% | 0.0805 / 0.0830 (32-33%) |
+| pause screen (weapons; animated background) | 0.0002, 0.0010 | 0.0%, 0.1% | 0.0258 / 0.0251 (26%) |
+
+Read: on the pause screen the two windows show THE SAME FRAME to within 0.0002-0.0010 - below Fable
+II's 0.0030 (theirs carried a client-size resampling term; these clients are identical). In moving
+gameplay the simultaneous pairs sit far below the motion floor, so the at-most-one-frame present offset
+is all that separates them. Captures in `D:/ng2_frameinterp/captures/play1_*`, `wmenu1_*`.
+
+Chapter 1 itself: 11.3 M draws fed in the first ~2 min of gameplay (about 2,700 per frame), 0 failed,
+11,048 self-checks / 0 mismatches, 8,382 of 8,382 presents, 18 frames held by the DLL's reveal hold at
+the card -> gameplay transition (the card's capture read black on the native side for that reason: the
+hold kept the fade's last frame; not a capture fault - the gameplay captures read the native window
+fine). FIRST NATIVE NG2 GAMEPLAY: HUD, blood, blossoms, the Tokyo rooftops, enemies - all through the
+transplanted backend, beside the plugin.
+
+Route trap: the chapter card does NOT wait for A here (it auto-proceeds), so a static-card diff has to
+be taken during "NOW LOADING" (the flower animates in one corner) or not at all.

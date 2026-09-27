@@ -90,13 +90,17 @@ BOOL CALLBACK PickGameWindow(HWND h, LPARAM lp) {
   DWORD pid = 0;
   GetWindowThreadProcessId(h, &pid);
   if (pid != GetCurrentProcessId() || !IsWindowVisible(h)) return TRUE;
-  char title[128] = {};
-  GetWindowTextA(h, title, sizeof(title));
-  if (std::strstr(title, "Ninja Gaiden II") && !std::strstr(title, "native")) {
-    pick->hwnd = h;
-    return FALSE;
-  }
-  return TRUE;
+  // NOT GetWindowText: on a window owned by another thread of this process it sends WM_GETTEXT synchronously,
+  // and the game's main thread does not pump messages during OnPostSetup - the 17:59 leg's window thread sat in
+  // that call for the whole 10 s start timeout and the native path stayed off. GetClassName reads without a
+  // message; the game's window is the only visible top-level window of this process that is not ours.
+  char cls[64] = {};
+  GetClassNameA(h, cls, sizeof(cls));
+  if (std::strcmp(cls, "NG2NativeGpu") == 0) return TRUE;
+  RECT r = {};
+  if (!GetClientRect(h, &r) || r.right < 320 || r.bottom < 200) return TRUE;   // not a tooltip or a hidden helper
+  pick->hwnd = h;
+  return FALSE;
 }
 BOOL CALLBACK PickMonitor(HMONITOR mon, HDC, LPRECT rect, LPARAM lp) {
   auto* pick = reinterpret_cast<MonitorPick*>(lp);
