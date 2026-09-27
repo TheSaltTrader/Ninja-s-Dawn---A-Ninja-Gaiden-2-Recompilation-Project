@@ -166,12 +166,25 @@ void Write() {
 
 }  // namespace
 
-void Enter(int hook, uint32_t r3) {
+void Enter(int hook, uint32_t r3, bool lib) {
   Init();
   if (!g_on) return;
-  const uint32_t dev = g_device.load(std::memory_order_relaxed);
-  if (!dev) return;
-  (void)r3;   // the device comes from the frame marker; r3 is not the device for every hooked site
+  uint32_t dev = g_device.load(std::memory_order_relaxed);
+  if (!dev) {
+    // The first library call with a device-shaped first argument: the write cursor at +0x30 and its limit at
+    // +0x38 both point into the CPU's view of physical memory, limit above cursor, within 16 MB. The library
+    // writes its persistent packet templates at device creation - before the first swap - so waiting for the
+    // frame marker missed them (census 2: 1416 replayed draws/frame with no writer).
+    if (!lib || r3 < 0x40000000u || r3 >= 0x90000000u) return;
+    uint32_t cur = 0, lim = 0;
+    if (!ReadGuest(r3 + g_cursor_off, &cur) || !ReadGuest(r3 + 0x38, &lim)) return;
+    const uint32_t hi = cur >> 28;
+    if (!(hi >= 0xA && hi <= 0xE) || lim <= cur || lim - cur > 0x1000000u) return;
+    g_device.store(r3, std::memory_order_relaxed);
+    dev = r3;
+    REXLOG_INFO("[p2] device object at {:08X} (first library entry, hook {}; cursor {:08X} limit {:08X})", r3, hook,
+                cur, lim);
+  }
   if (g_discover) Discover(hook, dev);
   // Every call from the first frame on feeds the last-writer map; the per-call records only inside the window.
   if (Recording()) g_enters.fetch_add(1, std::memory_order_relaxed);
