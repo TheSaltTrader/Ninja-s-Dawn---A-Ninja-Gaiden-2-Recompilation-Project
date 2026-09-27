@@ -139,7 +139,7 @@ using OutputFn = int (*)(ID3D12Resource**, uint32_t*, uint32_t*, int*);   // ONE
 using SetOutputFn = void (*)(OutputFn);
 using GetDeviceFn = int (*)(ID3D12Device**, ID3D12CommandQueue**);
 using PresentStatsFn = void (*)(uint64_t*);
-using StorageFn = int (*)(char*, uint32_t, uint32_t*);   // RexNgpuGetShaderStorage (fork, 2026-09-27)
+using StorageFn = int (*)(wchar_t*, uint32_t, uint32_t*);   // RexNgpuGetShaderStorage (fork, 2026-09-27), UTF-16 root
 
 constexpr uint32_t kRegisterFileCount = 0x5000;   // >= the plugin's RegisterFile::kRegisterCount (0x4928 forwarded)
 constexpr uint32_t kForwardedEnd = 0x4928;
@@ -417,12 +417,13 @@ bool LockstepReady() {
     // The pipeline storage: the plugin recorded the runtime's cache root and title id and, under offload, left the
     // files to this backend (else every launch recompiled every pipeline on demand: 29-52 ms pipeline waits on the
     // arrival frames, ng2_044, and nothing persisted).
-    char root[1024] = {};
+    wchar_t root[1024] = {};
     uint32_t title = 0;
-    if (g_get_storage && g_get_storage(root, sizeof(root), &title) && root[0] && title) {
-      backend::InitShaderStorage(std::filesystem::path(reinterpret_cast<const char8_t*>(root)), title);
+    if (g_get_storage && g_get_storage(root, uint32_t(std::size(root)), &title) && root[0] && title) {
+      const std::filesystem::path cache_root(root);
+      backend::InitShaderStorage(cache_root, title);
       g_storage_open = true;
-      REXLOG_INFO("[ngpu] BACKEND: pipeline storage loaded from {} (title {:08X})", root, title);
+      REXLOG_INFO("[ngpu] BACKEND: pipeline storage loaded from {} (title {:08X})", cache_root.string(), title);
     } else {
       REXLOG_INFO("[ngpu] BACKEND: no pipeline storage from the plugin ({}) - pipelines are created on demand this run",
                   g_get_storage ? "not initialised yet" : "no RexNgpuGetShaderStorage export");
