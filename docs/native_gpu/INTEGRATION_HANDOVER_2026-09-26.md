@@ -205,7 +205,8 @@ be taken during "NOW LOADING" (the flower animates in one corner) or not at all.
 ### Corrections to the two sections above (claudecode-76's review, 18:12)
 
 **The boot-sequence pair, read properly.** "fps mean 42.00" is the MEAN OF 5-SECOND WINDOW RATES over a
-bimodal sequence - 8 windows at 60 (title) and 13 at 30 (cutscene) in every leg - and the "p50 33.2 ms"
+bimodal sequence - 8 windows at 60 (title), 12 at 30 (cutscene) and one 42.4 transition window, in every leg:
+(480 + 360 + 42.4) / 21 = 42.02 - and the "p50 33.2 ms"
 is the median of the windows' own p50s. Two statistics over windows, not one frame distribution.
 Phase-separated (`abfps2.py` now prints this):
 
@@ -226,3 +227,12 @@ and the native window). The claim that holds: the native-vs-plugin difference is
 frame of the plugin's own animation, so no observer could attribute it to the renderer rather than to the
 animation. A same-instant plugin-vs-plugin pair cannot exist (one plugin window); Fable's cross-RUN floor at
 a paused scene is the honest substitute and needs a scene NG2 can hold still - open.
+
+**Page-state coherency, a number to test against (from Fable II via claudecode-76, 18:15).** Fable's
+`nocleanpg` A/B (same plugin, same offload, one cvar; n=1 per arm, unscreened for third-party GPU load):
+plugin GPU thread CPU 15.99 -> 13.80 ms median (ranges 14.95-16.93 vs 13.23-14.64, no overlap), stutters
+37 -> 6, worst frame 85.9 -> 54.5 ms. NOT transferable as a default: on NG2 `clear_memory_page_state` is a
+coherency REQUIREMENT (`ng2_tuning.h`: without it Team Ninja titles lose character models; the pool race only
+became reachable through it). It says roughly what NG2 pays for that coherency. An NG2 A/B of it must be
+judged on the PICTURE (character models present, `windiff2` pairs) before any millisecond is read, and only
+once the native backend's own coherency under offload is understood. Pin stays true.
