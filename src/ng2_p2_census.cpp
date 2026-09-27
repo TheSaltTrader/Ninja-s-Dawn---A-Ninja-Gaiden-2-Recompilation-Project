@@ -103,6 +103,8 @@ std::atomic<uint64_t> g_fe_kicks{0};
 // draws, and the template draw's constants paired one animation step apart).
 std::atomic<uint64_t> g_fe_stop_unfilled_ring{0}, g_fe_stop_unfilled_ib{0}, g_fe_stop_short_ring{0}, g_fe_stop_short_ib{0}, g_fe_ib_unreadable{0}, g_fe_ib_deep{0};
 std::atomic<int> g_fe_stop_logged{0};
+std::atomic<uint64_t> g_fe_ring_resets{0}, g_fe_resyncs{0};
+uint32_t g_fe_stuck_pos = 0xFFFFFFFFu, g_fe_stuck_n = 0;
 
 // Decodes [body, body + n) whose first byte lives at guest physical phys_base; returns the bytes consumed (a packet
 // that runs past the end, or an unfilled 0xFFFFFFFF header, stops the decode there - the next call resumes).
@@ -129,9 +131,12 @@ uint32_t FeDecode(const uint8_t* body, uint32_t n, uint32_t phys_base) {
     const uint32_t need = t == 0 ? ((h >> 16) & 0x3FFF) + 2 : t == 1 ? 3 : t == 2 ? 1 : ((h >> 16) & 0x3FFF) + 2;
     if (i + need > w) {   // a packet that runs past what has been written yet: stop BEFORE it
       (t_fe_depth ? g_fe_stop_short_ib : g_fe_stop_short_ring).fetch_add(1, std::memory_order_relaxed);
-      if (g_fe_stop_logged.fetch_add(1) < 6)
-        REXLOG_INFO("[p3fe] decode stopped before a packet past the end: {} at {:08X} header {:08X} needs {} of {} left",
-                    t_fe_depth ? "IB" : "ring", phys_base + i * 4, h, need, w - i);
+      if (g_fe_stop_logged.fetch_add(1) < 6) {
+        std::string ctx;
+        for (uint32_t k = (i >= 12 ? i - 12 : 0); k < w && k < i + 8; ++k) ctx += fmt::format("{}{:08X}", k == i ? " |" : " ", be(k));
+        REXLOG_INFO("[p3fe] decode stopped before a packet past the end: {} at {:08X} header {:08X} needs {} of {} left; dwords:{}",
+                    t_fe_depth ? "IB" : "ring", phys_base + i * 4, h, need, w - i, ctx);
+      }
       break;
     }
     if (t == 0) {
@@ -231,6 +236,14 @@ uint32_t g_fe_rptr = 0;
 std::vector<uint8_t> g_fe_ringcopy;
 void FeKick(uint32_t ring_ptr, uint32_t ring_bytes, uint32_t wptr) {
   if (!g_fe) return;
+  if (wptr == 0xFFFFFFFFu) {   // the ring was (re)initialised: both hardware pointers are 0 again
+    g_fe_rptr = 0;
+    g_fe_stuck_pos = 0xFFFFFFFFu;
+    g_fe_stuck_n = 0;
+    if (g_fe_ring_resets.fetch_add(1, std::memory_order_relaxed) < 4)
+      REXLOG_INFO("[p3fe] ring reset: {:08X} x{} - the front end restarts its read index", ring_ptr, ring_bytes);
+    return;
+  }
   auto* ks = rex::system::kernel_state();
   if (!ks || !ks->memory() || !ring_bytes) return;
   const uint8_t* ring = ks->memory()->TranslatePhysical<const uint8_t*>(ring_ptr);
@@ -244,6 +257,23 @@ void FeKick(uint32_t ring_ptr, uint32_t ring_bytes, uint32_t wptr) {
     g_fe_ringcopy.insert(g_fe_ringcopy.end(), ring + k * 4, ring + k * 4 + 4);
   const uint32_t base = ring_ptr + g_fe_rptr * 4;   // exact for draws before a wrap; ring-resident draws are rare
   const uint32_t used = FeDecode(g_fe_ringcopy.data(), uint32_t(g_fe_ringcopy.size()), base);
+  if (used == 0 && !g_fe_ringcopy.empty()) {   // no progress: stuck on a dword that is not a header
+    if (g_fe_stuck_pos == g_fe_rptr) {
+      if (++g_fe_stuck_n >= 16) {
+        g_fe_resyncs.fetch_add(1, std::memory_order_relaxed);
+        REXLOG_INFO("[p3fe] stuck at ring index {} for {} kicks: resynchronising at the write index {}", g_fe_rptr,
+                    g_fe_stuck_n, wptr);
+        g_fe_rptr = wptr;
+        g_fe_stuck_n = 0;
+        return;
+      }
+    } else {
+      g_fe_stuck_pos = g_fe_rptr;
+      g_fe_stuck_n = 1;
+    }
+  } else {
+    g_fe_stuck_n = 0;
+  }
   g_fe_rptr = (g_fe_rptr + used / 4) % nd;
   g_fe_calls.fetch_add(1, std::memory_order_relaxed);
 }
@@ -382,12 +412,13 @@ void FeReport(const char* why) {
   REXLOG_INFO("[p3fe] {} ({}): bridge draws seen {}, compared {}, without a snapshot {}; front end {} kicks / {} decode windows, "
               "skipped {}, saw {} draws, predicated skips {}, {} snapshots pending; constant mismatches {} from memory loads "
               "({} whose source now holds the bridge value), {} from packets; {} registers ever differ (21F9-21FC excluded), "
-              "worst:{} | early stops: unfilled ring {} ib {}, short ring {} ib {}, ib unreadable {}, ib too deep {} | type-3 ops:{}",
+              "worst:{} | early stops: unfilled ring {} ib {}, short ring {} ib {}, ib unreadable {}, ib too deep {}; ring resets {}, resyncs {} | type-3 ops:{}",
               why, g_fe_kick_mode.load() ? "kick mode" : "cursor mode", g_fe_seen.load(), g_fe_compared.load(),
               g_fe_unmatched.load(), g_fe_kicks.load(), g_fe_calls.load(), g_fe_skipped.load(), g_fe_draws.load(),
               g_fe_predicated_skips.load(), pending, g_fe_mis_memsrc, g_fe_mis_memsrc_now_bridge, g_fe_mis_packet,
               regs_bad, s2, g_fe_stop_unfilled_ring.load(), g_fe_stop_unfilled_ib.load(), g_fe_stop_short_ring.load(),
-              g_fe_stop_short_ib.load(), g_fe_ib_unreadable.load(), g_fe_ib_deep.load(), ops);
+              g_fe_stop_short_ib.load(), g_fe_ib_unreadable.load(), g_fe_ib_deep.load(), g_fe_ring_resets.load(),
+              g_fe_resyncs.load(), ops);
 }
 
 void Write() {
