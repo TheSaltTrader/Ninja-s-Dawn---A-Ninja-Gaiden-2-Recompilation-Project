@@ -156,3 +156,23 @@ texture_precreate_mb (512): 1,178 resources planned, 1,030 textures took a ready
 The 72 ms frame left on the route is a 28-texture frame at the chapter-card-to-scene cut with 0 creations and 0
 load time in every leg tonight (sync and async alike); it is not a texture-creation cost and is the next thing to
 name.
+
+### 4.7 Everything together, pack ON (ng2_019, 00:43; plugin v1025h 4B3D8F32, exe 11E146EE)
+
+| leg (chapter 1, same route) | arrival frame | second burst | route worst | windows > 100 ms | load CPU (route) |
+|---|---|---|---|---|---|
+| shipped v1.0.24 plugin (sync1 / sync2) | 1230 / 1221 ms | 798 / 718 ms | 1230 ms | 7 / 9 | 4303 / 3764 ms |
+| async + cap + spares + hold (final, ng2_015) | 286 ms | 170 ms | 286 ms | 2 | 434 ms |
+| + GPU-ready stage prebuild (ng2_016) | 212 ms | 132 ms | 212 ms | 3 | 356 ms |
+| + game textures pre-created (packon1, ng2_019) | **106 ms** | **49 ms** | **106 ms** | **1** | 274 ms |
+
+The pack-on arrival frame is now 106 ms against 1230 ms shipped (11.6x), the second burst 49 against 798; with the
+pack off (4.6) the arrival frame is 38 ms against 145. The release plugin is v1025h (rexglue-v1025 ceaecfb).
+
+### 4.8 Supersampling 1x vs 2x: the title screen is not a subject (00:45-00:47)
+
+scale1 (draw_resolution_scale 1) and scale2 (2) captured the same 600x300 region of the title logo at native pixels
+at +40 s: identical edge softness - the logo is a low-resolution 2D texture, so a larger render target cannot add
+detail to it. The plugin logs nothing about the scale beyond the tuning line. A pair of 95-s legs capturing the 3D
+shop cinematic at +75 s (scale1b / scale2b) follows the Fable window; until then "2x is visibly different from 1x
+on this title" is UNMEASURED, not confirmed.
