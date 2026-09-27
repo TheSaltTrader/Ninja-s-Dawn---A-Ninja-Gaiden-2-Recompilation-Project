@@ -336,7 +336,7 @@ appeared. Next (queued): carry4 with hoist / fast_valid / async_submit / upload_
 plugin alone with the same pack as the control (does it log `hashed files indexed`, how many `left alone`). If
 carry4 still replaces nothing, the difference is in the memexport range computation under the transplant
 (`memexport_ranges_` empty where the plugin's are not), which is a DLL / vendored-code fix, not a setting.
-Fable never saw this: Fable has no texture pack, so the gate never mattered there.
+CORRECTED 19:10 by the Fable session: Fable DOES run a pack (fable2tex2/pack, 55,848 hashed files) and indexes it with hoist on in every DLL leg, including two with clear_memory_page_state on - so the fault is NG2-specific under hoist. Their guess, worth testing first: NG2 re-uploads ~17 MB a frame under page-state clearing, so nearly every page passes through the hoist prologue; if that path marks its pages GPU-written, every title-screen load fails the AnyPageGpuWritten gate before the lazy index can build.
 
 **Correction from the control (packbase, 19:04, plugin alone with the same pack):** the plugin ALSO logs the
 `left alone: memory written by the GPU` counter at the same pace (39,000 in two minutes vs the DLL's 38,000) - it
