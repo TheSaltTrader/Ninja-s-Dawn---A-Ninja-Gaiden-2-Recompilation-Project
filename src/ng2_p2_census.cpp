@@ -594,7 +594,16 @@ void Exit(int hook) {
         const bool ptr_like = (a >= 0x40000000u && a < 0x90000000u) || (a >= 0xA0000000u && a < 0xE1000000u);
         if (!ptr_like || !ks || !ks->memory()) continue;
         const uint8_t* p = ks->memory()->TranslateVirtual<const uint8_t*>(a & ~3u);
-        if (p && SafeCopy(sample[n], p, 256)) which[n++] = k;
+        // The runtime's guest access-violation handler runs before a structured-exception guard here (leg ng2_081
+        // died reading 0x81000008), so the host pages are checked first: committed and readable, both pages the
+        // 256 bytes may span.
+        auto readable = [](const void* q) {
+          MEMORY_BASIC_INFORMATION mbi;
+          if (!VirtualQuery(q, &mbi, sizeof(mbi)) || mbi.State != MEM_COMMIT) return false;
+          const DWORD pr = mbi.Protect & 0xFF;
+          return pr == PAGE_READONLY || pr == PAGE_READWRITE || pr == PAGE_EXECUTE_READ || pr == PAGE_EXECUTE_READWRITE;
+        };
+        if (p && readable(p) && readable(p + 255) && SafeCopy(sample[n], p, 256)) which[n++] = k;
       }
       const uint32_t hdr[13] = {uint32_t(o.hook), r.tid, r.cur_in, r.cur_out, o.args[0], o.args[1], o.args[2], o.args[3],
                                 o.args[4], o.args[5], o.args[6], o.args[7], n};
