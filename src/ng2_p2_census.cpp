@@ -275,10 +275,12 @@ uint32_t FeDecode(const uint8_t* body, uint32_t n, uint32_t phys_base) {
           if (g_p5exec) { if (ini >> 31) Px(2, be(i + 2)); else Px(1, be(i + 2), be(i + 3)); }
         } else if (op == 0x5A && cnt >= 2) {                          // EVENT_WRITE_EXT
           P5Note(6, be(i + 2), 0);
-          if (g_p5exec) g_px_unhandled.fetch_add(1, std::memory_order_relaxed);
+          if (g_p5exec) Px(9, be(i + 2));   // screen extents: the executor writes the plugin's fixed full-screen box
         } else if (op == 0x5B && cnt >= 1) {                          // EVENT_WRITE_ZPD
           P5Note(7, g_fe_regs[0x2325], be(i + 1));
-          if (g_p5exec) g_px_unhandled.fetch_add(1, std::memory_order_relaxed);
+          // Occlusion query: the executor fakes the result as the plugin does (a finished query reports samples
+          // passed). Plugin parity only: NG2's census has no ZPD or EXT packets.
+          if (g_p5exec) Px(8, g_fe_regs[0x2325]);   // RB_SAMPLE_COUNT_ADDR as of this packet
         } else if (op == 0x3E && cnt >= 2) {                          // REG_TO_MEM
           const uint32_t r = be(i + 1);
           P5Note(8, be(i + 2), r < 0x5000 ? g_fe_regs[r] : 0);

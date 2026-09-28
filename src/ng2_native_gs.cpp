@@ -257,7 +257,7 @@ class NativeGraphicsSystem final : public rex::system::IGraphicsSystem {
 
   void ExecutorMain() {
     std::vector<uint32_t> batch;
-    uint64_t batches = 0, irqs = 0, fences = 0, swaps = 0, stale = 0, timeouts = 0, regs = 0;
+    uint64_t batches = 0, irqs = 0, fences = 0, swaps = 0, stale = 0, timeouts = 0, regs = 0, queries = 0;
     while (running_) {
       {
         std::unique_lock<std::mutex> lock(q_mu_);
@@ -296,8 +296,9 @@ class NativeGraphicsSystem final : public rex::system::IGraphicsSystem {
           case 5:
             counter_.fetch_add(1, std::memory_order_relaxed);   // the swap (the picture is presented on the guest thread)
             if ((++swaps % 600) == 0)
-              REXLOG_INFO("[gs] executor: {} batches, {} swaps, {} interrupts, {} fences, {} register writes; stale read "
-                          "pointers {}, wait timeouts {}", batches, swaps, irqs, fences, regs, stale, timeouts);
+              REXLOG_INFO("[gs] executor: {} batches, {} swaps, {} interrupts, {} fences, {} register writes, {} "
+                          "occlusion queries; stale read pointers {}, wait timeouts {}", batches, swaps, irqs, fences,
+                          regs, queries, stale, timeouts);
             break;
           case 6: {
             const uint32_t wi = e[1], poll = e[2], ref = e[3];
@@ -328,6 +329,25 @@ class NativeGraphicsSystem final : public rex::system::IGraphicsSystem {
           case 7:
             WriteGuestRegister(e[1], e[2]);
             ++regs;
+            break;
+          case 8:   // EVENT_WRITE_ZPD: the plugin's occlusion-query workaround (query_occlusion_fake_sample_count 1000)
+            if (auto* sc = memory_->TranslatePhysical<uint32_t*>(e[1])) {
+              // Little endian (D3D swaps it); 0xFFFFFEED in a ZPass or ZFail slot marks D3DISSUE_END.
+              constexpr uint32_t kFinished = 0xEDFEFFFFu;   // byte_swap(0xFFFFFEED)
+              const bool end = sc[4] == kFinished || sc[5] == kFinished || sc[2] == kFinished || sc[3] == kFinished;
+              std::memset(sc, 0, 32);
+              if (end) { sc[4] = 1000; sc[0] = 1000; }   // ZPass_A, Total_A
+              ++queries;
+            }
+            break;
+          case 9:   // EVENT_WRITE_EXT: screen extents, the plugin's fixed box (0..8192 >> 3, z 0..1), 16-bit swapped
+            if (auto* p = memory_->TranslatePhysical<uint8_t*>(e[1] & ~3u)) {
+              const uint16_t ext[6] = {0, 8192 >> 3, 0, 8192 >> 3, 0, 1};
+              for (int k = 0; k < 6; ++k) {
+                const uint16_t raw = _byteswap_ushort(ext[k]);
+                std::memcpy(p + k * 2, &raw, 2);
+              }
+            }
             break;
           default:
             break;
