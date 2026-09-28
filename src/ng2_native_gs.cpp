@@ -21,6 +21,7 @@
 #include <rex/system/kernel_state.h>
 #include <rex/system/xmemory.h>
 #include <rex/system/xthread.h>
+#include <rex/thread.h>
 #include <rex/ui/d3d12/d3d12_provider.h>
 #include <rex/ui/presenter.h>
 #include <rex/ui/windowed_app_context.h>
@@ -251,7 +252,9 @@ class NativeGraphicsSystem final : public rex::system::IGraphicsSystem {
         Dispatch(0, 2);
         last += iv;
       }
-      Sleep(1);
+      // The plugin's vblank worker sleeps with rex::thread::Sleep, not Win32 Sleep(1) (whose granularity is the
+      // system timer's); on Fable the Win32 sleep cost 1-3 fps of pacing (their port of this class, 2026-09-27).
+      rex::thread::Sleep(std::chrono::milliseconds(1));
     }
   }
 
