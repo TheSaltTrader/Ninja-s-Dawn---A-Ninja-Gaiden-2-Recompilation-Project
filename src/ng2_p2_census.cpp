@@ -153,6 +153,7 @@ bool g_fe_compare = true;   // per-address ordinals and snapshots for the plugin
 uint32_t g_fe_vs = 0, g_fe_vs_dwords = 0, g_fe_ps = 0, g_fe_ps_dwords = 0;
 bool g_fe_vs_inline = false, g_fe_ps_inline = false;
 std::vector<uint8_t> g_fe_imm_vs, g_fe_imm_ps;
+uint32_t g_fe_imm_vs_gen = 0, g_fe_imm_ps_gen = 0;   // [split] bumped at each IM_LOAD_IMMEDIATE
 uint64_t g_fe_dirty[(0x5000 + 63) / 64];
 std::atomic<uint64_t> g_fe_draws_issued{0}, g_fe_swaps_issued{0};
 inline void Px(uint32_t k, uint32_t a, uint32_t b, uint32_t c);
@@ -405,6 +406,7 @@ uint32_t FeDecode(const uint8_t* body, uint32_t n, uint32_t phys_base) {
         const uint32_t dwords = std::min<uint32_t>(be(i + 2) & 0xFFFF, cnt - 2);
         std::vector<uint8_t>& dst = ps ? g_fe_imm_ps : g_fe_imm_vs;
         dst.assign(body + (i + 3) * 4, body + (i + 3 + dwords) * 4);   // raw big-endian bytes as the guest wrote them
+        ++(ps ? g_fe_imm_ps_gen : g_fe_imm_vs_gen);
         (ps ? g_fe_ps_inline : g_fe_vs_inline) = true;
         (ps ? g_fe_ps_dwords : g_fe_vs_dwords) = dwords;
       } else if (op == 0x64 && cnt >= 4 && g_p3draw) {                // XE_SWAP: magic, front buffer, width, height
@@ -425,6 +427,7 @@ uint32_t FeDecode(const uint8_t* body, uint32_t n, uint32_t phys_base) {
           d.vs_code = g_fe_imm_vs.empty() ? nullptr : g_fe_imm_vs.data();
           d.ps_code = g_fe_imm_ps.empty() ? nullptr : g_fe_imm_ps.data();
           d.vs_code_dwords = uint32_t(g_fe_imm_vs.size() / 4); d.ps_code_dwords = uint32_t(g_fe_imm_ps.size() / 4);
+          d.vs_code_gen = g_fe_imm_vs_gen; d.ps_code_gen = g_fe_imm_ps_gen;
           ::ng2::ngpu::FrontEndDraw(g_fe_regs, g_fe_dirty, d);
           g_fe_draws_issued.fetch_add(1, std::memory_order_relaxed);
         }
@@ -485,6 +488,8 @@ void FeKick(uint32_t ring_ptr, uint32_t ring_bytes, uint32_t wptr) {
   const uint32_t nd = ring_bytes / 4;
   wptr %= nd;
   g_fe_kicks.fetch_add(1, std::memory_order_relaxed);
+  // [split] own graphics system, no census or comparison: the ng2_opt_split switch applies at this kick boundary
+  if (g_push == &ng2::gs::PushSideEffects && !g_fe_compare && !g_src) ::ng2::ngpu::FrontEndSplitUpdate();
   if (g_fe_rptr == wptr) return;
   g_fe_ringcopy.clear();
   for (uint32_t k = g_fe_rptr; k != wptr; k = (k + 1) % nd)
@@ -494,7 +499,9 @@ void FeKick(uint32_t ring_ptr, uint32_t ring_bytes, uint32_t wptr) {
   if (g_p5) P5Note(11, 0, (g_fe_rptr + used / 4) % nd);   // [p5] where the front end's read index lands
   if (g_p5exec && g_push) {
     Px(3, (g_fe_rptr + used / 4) % nd);   // the read pointer the game polls; the plugin stamps the ring epoch
-    g_push(g_px.data(), uint32_t(g_px.size() / 4));
+    // [split] queued behind this kick's draws (the draw thread pushes them once it has recorded those)
+    if (!::ng2::ngpu::FrontEndBatchEnd(g_px.data(), uint32_t(g_px.size() / 4), g_push))
+      g_push(g_px.data(), uint32_t(g_px.size() / 4));
     g_px.clear();
   }
   if (used == 0 && !g_fe_ringcopy.empty()) {   // no progress: stuck on a dword that is not a header

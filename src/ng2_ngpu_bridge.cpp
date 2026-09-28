@@ -29,6 +29,10 @@
 #include <filesystem>
 #include <string>
 #include <vector>
+#include <condition_variable>
+#include <deque>
+#include <mutex>
+#include <thread>
 
 #include <rex/cvar.h>
 #include <rex/logging.h>
@@ -65,6 +69,10 @@ REXCVAR_DEFINE_BOOL(ngpu_backend_dll, true, "GPU",
 REXCVAR_DEFINE_BOOL(ngpu_backend_lockstep, true, "GPU",
                     "Feed the transplanted backend INSIDE the plugin's draw / swap callbacks (its GPU thread, the "
                     "same instant) - guest memory is exactly what the plugin reads");
+REXCVAR_DEFINE_BOOL(ng2_opt_split, true, "GPU",
+                    "Native-GPU: decode (the game's thread) and draw recording (a draw thread) on two threads (Fable II "
+                    "816e8f9 ported 2026-09-28; default on: Chapter 4 fight 0 failed of 16M draws, 4.4 ms a frame off the "
+                    "game thread, the game thread never waits); live, switched at a kick boundary");
 REXCVAR_DEFINE_BOOL(ngpu_backend_async_submit, true, "GPU",
                     "The backend's submissions (deferred command list replay + ExecuteCommandLists) run on their "
                     "own thread instead of the plugin's GPU thread (Fable II: 48.5 -> 54.4 fps)");
@@ -461,10 +469,12 @@ bool LockstepReady() {
 // [p3 draw] The front end's register file: only the registers it wrote since the last draw (its dirty bitmap)
 // reach the backend, compared against what the backend has (g_prev, shared with the plugin path - which no
 // longer writes the backend while the front end draws).
-void FrontEndSync(const uint32_t* regs, uint64_t* dirty) {
+// [split] FrontEndDiffEach: the pairs to send, to the backend at once (FrontEndSync) or into the draw thread's stream.
+template <class Emit>
+void FrontEndDiffEach(const uint32_t* regs, uint64_t* dirty, Emit&& emit) {
   if (!g_prev_valid) {   // the first sync: everything in the ranges, so the backend starts from the file
     for (const auto& r : kRanges)
-      for (uint32_t k = r[0]; k < r[1]; ++k) { g_prev[k] = regs[k]; backend::WriteRegister(k, regs[k]); }
+      for (uint32_t k = r[0]; k < r[1]; ++k) { g_prev[k] = regs[k]; emit(k, regs[k]); }
     g_prev_valid = true;
     std::memset(dirty, 0, sizeof(uint64_t) * ((0x5000 + 63) / 64));
     return;
@@ -481,11 +491,14 @@ void FrontEndSync(const uint32_t* regs, uint64_t* dirty) {
         bits &= bits - 1;
         if (k < r[0] || k >= r[1] || g_prev[k] == regs[k]) continue;
         g_prev[k] = regs[k];
-        backend::WriteRegister(k, regs[k]);
+        emit(k, regs[k]);
         ++g_regs_written;
       }
     }
   }
+}
+void FrontEndSync(const uint32_t* regs, uint64_t* dirty) {
+  FrontEndDiffEach(regs, dirty, [](uint32_t k, uint32_t v) { backend::WriteRegister(k, v); });
 }
 
 void LockstepDraw(const RexNgpuDraw* d) {
@@ -972,9 +985,8 @@ void Stop() {
 
 // [p3 draw] The front end's draw, on the guest thread at a DRAW packet it decoded: its register file (dirty part)
 // into the backend, then the draw exactly as LockstepDraw records the plugin's.
-void FrontEndDraw(const uint32_t* regs, uint64_t* dirty, const FeDrawInfo& d) {
-  if (!LockstepReady()) return;
-  FrontEndSync(regs, dirty);
+// FrontEndDrawCore: the draw after its registers (on the game's thread, or the draw thread in split mode).
+void FrontEndDrawCore(const FeDrawInfo& d) {
   auto code = [](int stage, uint32_t addr, uint32_t& dwords, bool inl, const uint8_t* inline_code,
                  uint32_t inline_dwords) -> const uint32_t* {
     if (inl) {
@@ -1001,15 +1013,7 @@ void FrontEndDraw(const uint32_t* regs, uint64_t* dirty, const FeDrawInfo& d) {
   if (!backend::Draw(br)) ++(br.vs_code ? g_fail_withcode : g_fail_nocode);
   g_draws_lockstep.fetch_add(1, std::memory_order_relaxed);
 }
-
-// [p3 draw] The front end's swap, on the guest thread at the XE_SWAP packet: the backend's swap from the front
-// end's file (fetch constant 0 from it; the gamma ramp arrives through the plugin's callback), then the same
-// hold / letterbox / present logic as the plugin path's.
-void FrontEndSwap(uint32_t fb, uint32_t w, uint32_t h, const uint32_t* regs, uint64_t* dirty) {
-  if (!g_backend_on || !g_lockstep || !LockstepReady()) return;
-  FrontEndSync(regs, dirty);
-  uint32_t fetch0[6];
-  for (uint32_t i = 0; i < 6; ++i) fetch0[i] = regs[0x4800 + i];
+void FrontEndSwapCore(uint32_t fb, uint32_t w, uint32_t h, const uint32_t* fetch0) {
   {
     static uint32_t swaps = 0;
     if ((++swaps % 30) == 0) SyncSwapPostEffect(false);
@@ -1017,10 +1021,231 @@ void FrontEndSwap(uint32_t fb, uint32_t w, uint32_t h, const uint32_t* regs, uin
   backend::Swap(fb, w, h, fetch0, nullptr, nullptr);
   AfterSwap();
 }
+extern bool g_split_on;
+void SplitDraw(const uint32_t* regs, uint64_t* dirty, const FeDrawInfo& d);
+void SplitSwap(uint32_t fb, uint32_t w, uint32_t h, const uint32_t* regs, uint64_t* dirty);
+bool SplitRegisterNow(uint32_t reg, uint32_t value);
+void FrontEndDraw(const uint32_t* regs, uint64_t* dirty, const FeDrawInfo& d) {
+  if (!LockstepReady()) return;
+  if (g_split_on) { SplitDraw(regs, dirty, d); return; }
+  FrontEndSync(regs, dirty);
+  FrontEndDrawCore(d);
+}
+
+// [p3 draw] The front end's swap, on the guest thread at the XE_SWAP packet: the backend's swap from the front
+// end's file (fetch constant 0 from it; the gamma ramp arrives through the plugin's callback), then the same
+// hold / letterbox / present logic as the plugin path's.
+void FrontEndSwap(uint32_t fb, uint32_t w, uint32_t h, const uint32_t* regs, uint64_t* dirty) {
+  if (!g_backend_on || !g_lockstep || !LockstepReady()) return;
+  if (g_split_on) { SplitSwap(fb, w, h, regs, dirty); return; }
+  FrontEndSync(regs, dirty);
+  uint32_t fetch0[6];
+  for (uint32_t i = 0; i < 6; ++i) fetch0[i] = regs[0x4800 + i];
+  FrontEndSwapCore(fb, w, h, fetch0);
+}
 
 void FrontEndRegisterNow(uint32_t reg, uint32_t value) {
+  if (SplitRegisterNow(reg, value)) return;   // [split] queued behind the draws
   if (g_backend_on) backend::WriteRegister(reg, value);
   else if (g_pending_now.size() < 65536) g_pending_now.push_back({reg, value});
+}
+
+// ---- [split] (2026-09-28, Fable II 816e8f9 ported, ng2_opt_split) DECODE (game thread) / DRAW thread ---------------
+// Direct mode records every draw on the game's thread inside its kick. In split mode the kick only decodes and diffs
+// registers; a draw thread applies the pairs and records the draws from one ordered stream of uint32 records. Every
+// call that reaches the backend goes through the stream in decode order, and a kick's side effects are its last record,
+// so every fence, interrupt and read-pointer update still follows the recording of the draws before it (the game cannot
+// reuse memory the draw thread has not read yet). Unlike Fable (a recorder thread with a queue to look ahead), NG2
+// decodes on the game's thread, so a kick's chunk is handed over at the kick's end, never held for the next kick.
+// LOAD_ALU_CONSTANT is read at the kick as in direct mode (the values reach the draw thread as register pairs).
+enum : uint32_t { kSpDraw = 1, kSpSwap, kSpRegNow, kSpPx, kSpCodeVS, kSpCodePS };
+bool g_split_on = false;                          // decode side (under the kick lock)
+static bool g_sp_thread_started = false;
+static thread_local bool t_sp_draw_thread = false;
+static std::mutex g_sp_mu;
+static std::condition_variable g_sp_cv, g_sp_room_cv, g_sp_idle_cv;
+static std::deque<std::vector<uint32_t>> g_sp_q;             // under g_sp_mu
+static std::vector<std::vector<uint32_t>> g_sp_free;         // under g_sp_mu
+static bool g_sp_busy = false;                               // under g_sp_mu
+static std::vector<uint32_t> g_sp_cur;                       // decode side: the chunk being written
+static uint32_t g_sp_cur_draws = 0;
+static uint32_t g_sp_vs_gen = ~0u, g_sp_ps_gen = ~0u;        // decode side: inline microcode last sent
+static void (*g_sp_push)(const uint32_t*, uint32_t) = nullptr;
+// Backpressure: the decode side runs at most this far ahead. Fable's 8 suits a decoder on its own thread; NG2 decodes on
+// the GAME's thread, and 8 chunks (~380 draws) made it wait for the draw thread ~17% of the time in the Chapter 4 fight
+// (~65 chunks a frame, leg ng2_202). 128 holds a whole frame; the fences still follow their draws.
+constexpr size_t kSpMaxQueued = 128;
+constexpr uint32_t kSpDrawsPerChunk = 48;
+static std::atomic<uint64_t> g_sp_chunks{0}, g_sp_records{0}, g_sp_wait_qpc{0};
+
+static void SpPublish() {
+  if (g_sp_cur.empty()) return;
+  std::unique_lock<std::mutex> lock(g_sp_mu);
+  if (g_sp_q.size() >= kSpMaxQueued) {   // the draw thread is behind: this wait is not decode work (logged apart)
+    LARGE_INTEGER w0, w1;
+    QueryPerformanceCounter(&w0);
+    g_sp_room_cv.wait(lock, [] { return g_sp_q.size() < kSpMaxQueued; });
+    QueryPerformanceCounter(&w1);
+    g_sp_wait_qpc.fetch_add(uint64_t(w1.QuadPart - w0.QuadPart), std::memory_order_relaxed);
+  }
+  g_sp_q.push_back(std::move(g_sp_cur));
+  if (!g_sp_free.empty()) { g_sp_cur = std::move(g_sp_free.back()); g_sp_free.pop_back(); }
+  else g_sp_cur = std::vector<uint32_t>();
+  g_sp_cur.clear();
+  g_sp_cur_draws = 0;
+  lock.unlock();
+  g_sp_cv.notify_one();
+  g_sp_chunks.fetch_add(1, std::memory_order_relaxed);
+}
+// [tag, n, (reg, value) x n] - the registers written since the last record, against what the backend will have.
+static void SpPairs(uint32_t tag, const uint32_t* regs, uint64_t* dirty) {
+  g_sp_cur.push_back(tag);
+  const size_t at = g_sp_cur.size();
+  g_sp_cur.push_back(0);
+  uint32_t n = 0;
+  FrontEndDiffEach(regs, dirty, [&](uint32_t k, uint32_t v) { g_sp_cur.push_back(k); g_sp_cur.push_back(v); ++n; });
+  g_sp_cur[at] = n;
+}
+static void SpCode(uint32_t tag, const uint8_t* code, uint32_t dwords) {
+  g_sp_cur.push_back(tag);
+  g_sp_cur.push_back(code ? dwords : 0);
+  if (code && dwords) {
+    const size_t at = g_sp_cur.size();
+    g_sp_cur.resize(at + dwords);
+    std::memcpy(&g_sp_cur[at], code, size_t(dwords) * 4);
+  }
+}
+void SplitDraw(const uint32_t* regs, uint64_t* dirty, const FeDrawInfo& d) {
+  if (d.vs_inline && d.vs_code_gen != g_sp_vs_gen) { SpCode(kSpCodeVS, d.vs_code, d.vs_code_dwords); g_sp_vs_gen = d.vs_code_gen; }
+  if (d.ps_inline && d.ps_code_gen != g_sp_ps_gen) { SpCode(kSpCodePS, d.ps_code, d.ps_code_dwords); g_sp_ps_gen = d.ps_code_gen; }
+  SpPairs(kSpDraw, regs, dirty);
+  const uint32_t f[8] = {d.draw_initiator, d.index_addr, d.index_size, d.vs_addr, d.vs_dwords, d.ps_addr, d.ps_dwords,
+                         uint32_t(d.vs_inline) | (uint32_t(d.ps_inline) << 1)};
+  g_sp_cur.insert(g_sp_cur.end(), f, f + 8);
+  if (++g_sp_cur_draws >= kSpDrawsPerChunk) SpPublish();
+}
+void SplitSwap(uint32_t fb, uint32_t w, uint32_t h, const uint32_t* regs, uint64_t* dirty) {
+  SpPairs(kSpSwap, regs, dirty);
+  g_sp_cur.push_back(fb); g_sp_cur.push_back(w); g_sp_cur.push_back(h);
+  for (uint32_t i = 0; i < 6; ++i) g_sp_cur.push_back(regs[0x4800 + i]);   // fetch constant 0, as direct mode reads it
+  SpPublish();
+}
+bool SplitRegisterNow(uint32_t reg, uint32_t value) {
+  if (!g_split_on || t_sp_draw_thread) return false;   // the draw thread applies it for real
+  g_sp_cur.push_back(kSpRegNow); g_sp_cur.push_back(reg); g_sp_cur.push_back(value);
+  return true;
+}
+static void SplitDrawThread() {
+  SetThreadDescription(GetCurrentThread(), L"ng2 draw thread");
+  t_sp_draw_thread = true;
+  std::vector<uint8_t> vs_code, ps_code;
+  LARGE_INTEGER qf, win0;
+  QueryPerformanceFrequency(&qf);
+  QueryPerformanceCounter(&win0);
+  uint64_t busy = 0;
+  for (;;) {
+    std::vector<uint32_t> c;
+    {
+      std::unique_lock<std::mutex> lock(g_sp_mu);
+      g_sp_cv.wait(lock, [] { return !g_sp_q.empty(); });
+      c = std::move(g_sp_q.front());
+      g_sp_q.pop_front();
+      g_sp_busy = true;
+    }
+    g_sp_room_cv.notify_one();
+    LARGE_INTEGER b0, b1;
+    QueryPerformanceCounter(&b0);
+    auto apply = [&](size_t at, uint32_t n) {
+      for (uint32_t k = 0; k < n; ++k) backend::WriteRegister(c[at + 2 * k], c[at + 2 * k + 1]);
+    };
+    size_t i = 0;
+    while (i < c.size()) {
+      const uint32_t tag = c[i];
+      g_sp_records.fetch_add(1, std::memory_order_relaxed);
+      if (tag == kSpDraw) {
+        const uint32_t n = c[i + 1];
+        apply(i + 2, n);
+        const uint32_t* f = &c[i + 2 + 2 * size_t(n)];
+        FeDrawInfo d{};
+        d.draw_initiator = f[0]; d.index_addr = f[1]; d.index_size = f[2];
+        d.vs_addr = f[3]; d.vs_dwords = f[4]; d.ps_addr = f[5]; d.ps_dwords = f[6];
+        d.vs_inline = (f[7] & 1) != 0; d.ps_inline = (f[7] & 2) != 0;
+        d.vs_code = vs_code.empty() ? nullptr : vs_code.data();
+        d.ps_code = ps_code.empty() ? nullptr : ps_code.data();
+        d.vs_code_dwords = uint32_t(vs_code.size() / 4); d.ps_code_dwords = uint32_t(ps_code.size() / 4);
+        FrontEndDrawCore(d);
+        i += 2 + 2 * size_t(n) + 8;
+      } else if (tag == kSpSwap) {
+        const uint32_t n = c[i + 1];
+        apply(i + 2, n);
+        const uint32_t* f = &c[i + 2 + 2 * size_t(n)];
+        FrontEndSwapCore(f[0], f[1], f[2], f + 3);
+        i += 2 + 2 * size_t(n) + 9;
+      } else if (tag == kSpRegNow) {
+        FrontEndRegisterNow(c[i + 1], c[i + 2]);
+        i += 3;
+      } else if (tag == kSpPx) {
+        const uint32_t n4 = c[i + 1];
+        if (g_sp_push && n4) g_sp_push(&c[i + 2], n4);
+        i += 2 + 4 * size_t(n4);
+      } else if (tag == kSpCodeVS || tag == kSpCodePS) {
+        const uint32_t nd = c[i + 1];
+        std::vector<uint8_t>& dst = tag == kSpCodeVS ? vs_code : ps_code;
+        dst.assign(reinterpret_cast<const uint8_t*>(&c[i + 2]), reinterpret_cast<const uint8_t*>(&c[i + 2]) + size_t(nd) * 4);
+        i += 2 + size_t(nd);
+      } else {
+        static std::atomic<int> logged{0};
+        if (logged.fetch_add(1) < 5) REXLOG_ERROR("[split] unknown record {} at {} of {} - chunk dropped", tag, i, c.size());
+        break;
+      }
+    }
+    QueryPerformanceCounter(&b1);
+    busy += uint64_t(b1.QuadPart - b0.QuadPart);
+    if (b1.QuadPart - win0.QuadPart >= 5 * qf.QuadPart) {
+      const uint64_t waited = g_sp_wait_qpc.exchange(0);
+      REXLOG_INFO("[split] draw thread busy {:.1f}% of the last {:.1f} s; the game's thread waited on a full queue {:.1f}% "
+                  "({} chunks, {} records so far)",
+                  100.0 * double(busy) / double(b1.QuadPart - win0.QuadPart),
+                  double(b1.QuadPart - win0.QuadPart) / double(qf.QuadPart),
+                  100.0 * double(waited) / double(b1.QuadPart - win0.QuadPart), g_sp_chunks.load(), g_sp_records.load());
+      busy = 0;
+      win0 = b1;
+    }
+    {
+      std::lock_guard<std::mutex> lock(g_sp_mu);
+      c.clear();
+      if (g_sp_free.size() < 16) g_sp_free.push_back(std::move(c));
+      g_sp_busy = false;
+      if (g_sp_q.empty()) g_sp_idle_cv.notify_all();
+    }
+  }
+}
+// Game thread, at a kick boundary (under the kick lock).
+void FrontEndSplitUpdate() {
+  const bool want = REXCVAR_GET(ng2_opt_split) && g_backend_on;
+  if (want == g_split_on) return;
+  if (want) {
+    if (!g_sp_thread_started) { g_sp_thread_started = true; std::thread(SplitDrawThread).detach(); }
+    g_split_on = true;
+    REXLOG_INFO("[split] ON: kicks decoded on the game's thread, draws recorded on the draw thread");
+  } else {
+    SpPublish();
+    std::unique_lock<std::mutex> lock(g_sp_mu);
+    g_sp_idle_cv.wait(lock, [] { return g_sp_q.empty() && !g_sp_busy; });
+    g_split_on = false;
+    REXLOG_INFO("[split] off: the game's thread draws again (stream drained)");
+  }
+}
+// Game thread, at a kick's end: its side effects behind its draws, and the chunk handed over now - the game may wait
+// on a fence in it right after the kick.
+bool FrontEndBatchEnd(const uint32_t* recs, uint32_t count4, void (*push)(const uint32_t*, uint32_t)) {
+  if (!g_split_on) return false;
+  g_sp_push = push;
+  g_sp_cur.push_back(kSpPx);
+  g_sp_cur.push_back(count4);
+  g_sp_cur.insert(g_sp_cur.end(), recs, recs + size_t(count4) * 4);
+  SpPublish();
+  return true;
 }
 
 void SetFovK(double k) {

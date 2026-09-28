@@ -46,11 +46,20 @@ struct FeDrawInfo {
   const uint8_t* vs_code;   // inline microcode (big-endian dwords), valid for the call
   const uint8_t* ps_code;
   uint32_t vs_code_dwords, ps_code_dwords;
+  uint32_t vs_code_gen, ps_code_gen;   // [split] bumped at each IM_LOAD_IMMEDIATE, so inline code is sent once per change
 };
 void FrontEndDraw(const uint32_t* regs, uint64_t* dirty, const FeDrawInfo& d);
 void FrontEndSwap(uint32_t fb, uint32_t w, uint32_t h, const uint32_t* regs, uint64_t* dirty);
 // [gs] A register the backend must see in order at once (the gamma port); buffered until the backend is up.
 void FrontEndRegisterNow(uint32_t reg, uint32_t value);
+// [split] (2026-09-28, Fable II 816e8f9 ported, ng2_opt_split) decode and draw recording on two threads: the game's
+// thread decodes each kick and diffs registers; a DRAW thread applies them and records the D3D12 draws from one ordered
+// stream, and each kick's side effects (fences, interrupts, read pointer) are queued behind its draws, so a fence
+// still follows the recording of the draws before it. LOAD_ALU_CONSTANT stays read at the kick (NG2's proven timing).
+// At the start of a kick (own graphics system, no census): applies the switch; turning it off drains the stream.
+void FrontEndSplitUpdate();
+// At the end of a kick: its side effects (4-dword records), queued behind its draws in split mode (true), else false.
+bool FrontEndBatchEnd(const uint32_t* recs, uint32_t count4, void (*push)(const uint32_t*, uint32_t));
 
 // Binds the plugin's RexNgpu* exports and installs the lockstep consumer;
 // starts the native window when ngpu_backend is on. Call once the plugin is
