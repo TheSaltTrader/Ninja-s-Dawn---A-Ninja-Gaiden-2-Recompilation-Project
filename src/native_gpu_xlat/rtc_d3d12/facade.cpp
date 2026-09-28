@@ -89,6 +89,13 @@ void NoteSubmissionExecuted(uint64_t submission) {
 std::atomic<uint64_t> g_swaps_noted{0};
 void NoteSwapSubmission(uint64_t submission) { g_swap_submission.store(submission); g_swaps_noted.fetch_add(1); }
 uint64_t SwapSubmissionsNoted() { return g_swaps_noted.load(); }
+// [gs present thread] Wait until the async submit thread has handed submission `want` to the queue.
+bool WaitSubmitted(uint64_t want, uint32_t timeout_ms) {
+  if (!AsyncSubmitEnabled()) return true;
+  std::unique_lock<std::mutex> lk(g_exec_mu);
+  return g_exec_cv.wait_for(lk, std::chrono::milliseconds(timeout_ms), [want] { return g_executed.load() >= want; });
+}
+uint64_t SwapSubmission() { return g_swap_submission.load(); }
 bool WaitSwapSubmitted(uint32_t timeout_ms) {
   if (!AsyncSubmitEnabled()) return true;
   const uint64_t want = g_swap_submission.load();

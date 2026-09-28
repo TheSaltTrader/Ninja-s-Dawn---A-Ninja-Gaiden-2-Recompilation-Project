@@ -54,6 +54,8 @@ void NoteSubmissionExecuted(uint64_t submission);
 void NoteSwapSubmission(uint64_t submission);
 uint64_t SwapSubmissionsNoted();   // how many swaps have been noted (frames, for per-frame reports)
 bool WaitSwapSubmitted(uint32_t timeout_ms);
+bool WaitSubmitted(uint64_t want, uint32_t timeout_ms);   // [gs present thread]
+uint64_t SwapSubmission();
 }  // namespace ng2::ngpu::rtc
 
 namespace rex::ui::ngpu_d3d12 {

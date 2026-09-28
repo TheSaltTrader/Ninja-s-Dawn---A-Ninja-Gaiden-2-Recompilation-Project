@@ -18,6 +18,7 @@
 #include <intrin.h>
 
 #include <algorithm>
+#include <chrono>
 #include <atomic>
 #include <cstddef>
 #include <cstdint>
@@ -799,7 +800,30 @@ void AfterSwap() {
     }
   }
   if (ng2::gs::Active()) {
-    if (!g_hold_this_swap) backend::PresentInto(ng2::gs::Presenter());   // [gs] into the game's own presenter
+    // [gs present thread] (Fable II GS4 port, 2026-09-27): the copy into the game's own presenter runs on a present
+    // thread so the guest thread no longer waits for the async submit; NG2_PRESENT_THREAD=0 keeps it synchronous.
+    static const bool present_thread = [] {
+      const char* e = std::getenv("NG2_PRESENT_THREAD");
+      const bool on = !(e && *e == '0');
+      REXLOG_INFO("[gs] present: {}", on ? "present thread (the guest thread hands over the frame)"
+                                        : "synchronous on the guest thread (NG2_PRESENT_THREAD=0)");
+      return on;
+    }();
+    if (!g_hold_this_swap) {
+      // What the present costs the guest thread (the time the present thread gives back), per 600 presents.
+      static uint64_t n = 0, sum_us = 0, max_us = 0;
+      const auto t0 = std::chrono::steady_clock::now();
+      present_thread ? backend::PresentAsync(ng2::gs::Presenter()) : backend::PresentInto(ng2::gs::Presenter());
+      const uint64_t us = uint64_t(
+          std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now() - t0).count());
+      sum_us += us;
+      max_us = std::max(max_us, us);
+      if (++n % 600 == 0) {
+        REXLOG_INFO("[gs] present cost on the guest thread: {:.3f} ms mean, {:.3f} ms max over 600 frames ({})",
+                    double(sum_us) / 600000.0, double(max_us) / 1000.0, present_thread ? "present thread" : "synchronous");
+        sum_us = max_us = 0;
+      }
+    }
   } else if (!g_one_window && !g_hold_this_swap) {
     render::RequestPresent();
   }
