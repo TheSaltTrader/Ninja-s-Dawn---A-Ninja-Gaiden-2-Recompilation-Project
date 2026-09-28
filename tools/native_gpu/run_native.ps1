@@ -179,6 +179,13 @@ try {
     Stop-Process -Id $pid_started -Force -ErrorAction SilentlyContinue
     Write-Host "stopped pid $pid_started"
   }
+  # 2026-09-28 (Fable team: an NG2 window on top during their leg): the lock is released only once the game has
+  # really gone - a stopped process can take a while to tear down its GPU device and window.
+  $gone = $false
+  for ($w = 0; $w -lt 60 -and -not $gone; $w++) {
+    if (-not (Get-Process -Id $pid_started -ErrorAction SilentlyContinue)) { $gone = $true } else { Start-Sleep -Seconds 1 }
+  }
+  if (-not $gone) { Write-Host "WARNING: pid $pid_started still present 60 s after stopping" }
   Start-Sleep -Seconds 3
   # The newest log is the run's.
   $log = Get-ChildItem (Join-Path $bin "logs") -Filter "ng2_*.log" -ErrorAction SilentlyContinue | Sort-Object Name | Select-Object -Last 1

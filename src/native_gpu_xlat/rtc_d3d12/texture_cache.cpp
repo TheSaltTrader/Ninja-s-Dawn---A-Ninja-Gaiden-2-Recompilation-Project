@@ -136,7 +136,11 @@ REXCVAR_DEFINE_INT32(texture_precreate_mb, 512, "GPU",
                      "Video memory for the pre-created game textures of a chapter (texture_precreate)")
     .lifecycle(rex::cvar::Lifecycle::kHotReload);
 // [no-dll] registered here since rexgpu-xenos.dll is gone (gen_gpu_cvars.py, verbatim from the fork)
-REXCVAR_DEFINE_INT32(texture_pack_prebuild_mb, 1536, "GPU",
+// 2026-09-28: 1536 -> 4096. The VRAM rule (30% of the card's budget, 512-4096 MB, TexpackVramBudgetBytes) still
+// sizes it on smaller cards; 1536 capped even large cards below a whole stage (Chapter 14: 666 files = 2206 MB).
+// Chapter 14 walks, pack on: 4 and 3 in-play hitches (worst 154 / 196 ms) at 1536, 0 and 0 (worst 46 / 42 ms)
+// at 4096 (work/walkab tex_base*, tex_pb*).
+REXCVAR_DEFINE_INT32(texture_pack_prebuild_mb, 4096, "GPU",
                      "Video memory for pack replacements built GPU-ready at a stage change from the "
                      "stage's list (stages/chNN.txt), keyed by file id and content hash: a streamed "
                      "texture whose content matches swaps to the finished resource with no read, "

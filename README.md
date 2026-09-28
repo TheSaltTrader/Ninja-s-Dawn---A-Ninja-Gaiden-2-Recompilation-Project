@@ -7,6 +7,10 @@ It is not an emulator. The game's PowerPC code is translated ahead of time into
 native x86-64, so there is no interpreter and no JIT warm-up: the game runs as a
 Windows program, at 60 fps, with PC settings in front of it.
 
+The graphics are native too (since v1.1.2): there is no GPU plugin. The game's
+Xbox 360 GPU commands are decoded on its own thread and drawn by a Direct3D 12
+renderer compiled into `ng2.exe`, with the draw recording on a thread of its own.
+
 **Getting it:** download the latest `ng2recomp-vX.Y.Z-win-amd64.zip` from the
 [Releases](https://github.com/TheSaltTrader/Ninja-s-Dawn---A-Ninja-Gaiden-2-Recompilation-Project/releases)
 page, unzip it anywhere, and run `ng2.exe`. It needs nothing installed; it does
@@ -87,9 +91,9 @@ make your own from your copy of the game.
 1. **Tools.** Visual Studio 2022 Build Tools, LLVM/Clang in `C:\Program
    Files\LLVM`, Ninja and CMake, Python 3.12. The [ReXGlue](https://github.com/)
    SDK goes beside this folder as `..\RexBlue\win-amd64` (that is where
-   `tools\build.cmd` looks); this port needs the runtime and the Xenos GPU
-   plugin built from a tree that carries the fixes listed under
-   *What this is built on*.
+   `tools\build.cmd` looks); this port needs the runtime built from a tree
+   that carries the fixes listed under *What this is built on*. The renderer is
+   part of this repository (`src/native_gpu_xlat`) and is built into `ng2.exe`.
 
 2. **Inputs.** Put the game's `default.xex` in `assets\` and the extracted disc
    in `game\`. Both folders are ignored by git and must stay that way.
@@ -185,7 +189,7 @@ An **Autodetect** button re-runs the first-launch hardware detection and picks s
 | Upscale factor | 2× | 2×, 4× or 8×. |
 | Upscaler | Lanczos | **Lanczos** is a high-quality resample built in and needs nothing extra. **Real-ESRGAN AI** is a trained model that adds detail, and needs the 43 MB download plus a Vulkan-capable GPU. The AI entry only appears once the upscaler is installed. |
 | Detail strength | 0.75 | How much of the model's **fine detail** is laid over the original. Not a cross-fade: the tone and colour stay the game's. Real-ESRGAN is photo-trained and denoises hard — on a smoke texture it cut mean brightness by 40%, because faint wisps against black are exactly what it treats as noise. Only the detail is taken. |
-| Texture cache | plugin default | How much host memory the GPU plugin may hold textures in, up to 8 GB. |
+| Texture cache | renderer default | How much host memory the renderer may hold textures in, up to 8 GB. |
 
 Making a pack: set a folder, turn dumping on, play through the areas you care
 about, turn dumping off, then press **Process textures**. The tools run in a
@@ -307,9 +311,11 @@ are written up in `docs/`:
 
 ## What this is built on
 
-[ReXGlue](https://github.com/) static recompilation SDK. The runtime and the
-Xenos GPU plugin shipped here are built from source rather than taken from a
-stock SDK drop, because this port depends on fixes made in that tree:
+[ReXGlue](https://github.com/) static recompilation SDK. The runtime shipped
+here is built from source rather than taken from a stock SDK drop, because this
+port depends on fixes made in that tree (the GPU fixes below now live in the
+renderer compiled into `ng2.exe`, which replaced the SDK's Xenos GPU plugin in
+v1.1.2):
 
 - **VMX128 registers v64–v127 were being localised into zero-initialised
   variables**, so the video codec's inverse-transform kernels read their permute

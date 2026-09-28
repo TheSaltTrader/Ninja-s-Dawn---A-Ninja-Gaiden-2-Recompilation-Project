@@ -3,6 +3,33 @@
 Versions are cut with `tools/make_release.py`, which refuses to package a
 version that has no section here.
 
+## v1.1.2 - 2026-09-28
+
+### Changed - drawing moved off the game's thread
+
+The game's graphics commands are still read on the game's own thread, but the
+Direct3D 12 recording of its draws now happens on a thread of its own, fed in
+order, with every fence and interrupt kept behind the draws before it. In the
+heaviest scene measured (the Chapter 4 boss fight, about 3,000 draws a frame)
+that takes about 4.4 ms a frame off the game's thread, and the game never
+waits for the drawing thread. The frame rate was already a steady 60; this is
+headroom for high internal resolutions and busy fights.
+
+### Fixed - hitches when a stage streams in new enhanced textures
+
+With the texture pack on, walking into a new area could freeze the picture
+for 50-200 ms (3-4 times in four minutes of Chapter 14). The pack prepares a
+stage's textures ahead of time, but only up to 1.5 GB, and a whole stage can
+need more (Chapter 14: 2.2 GB), so the rest were built during play. The limit
+now follows the graphics card - 30% of its video memory, up to 4 GB - so a
+card with enough memory prepares the whole stage: 0 such hitches in the same
+walks. Cards with less memory get the same budget as before.
+
+### Changed - fully native, now also in the documentation
+
+The README no longer describes a GPU plugin: the renderer is part of this
+project and built into `ng2.exe`.
+
 ## v1.1.1 - 2026-09-28
 
 ### Changed - fully native: rexgpu-xenos.dll is gone
