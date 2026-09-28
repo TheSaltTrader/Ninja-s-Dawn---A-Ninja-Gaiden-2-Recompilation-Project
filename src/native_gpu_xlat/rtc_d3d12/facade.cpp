@@ -121,6 +121,15 @@ bool D3D12Provider::IsPSSpecifiedStencilReferenceSupported() const {
   }
   return cached == 1;
 }
+bool D3D12Provider::AreRasterizerOrderedViewsSupported() const {
+  static int cached = -1;
+  if (cached < 0) {
+    D3D12_FEATURE_DATA_D3D12_OPTIONS o = {};
+    cached = (GetDevice() && SUCCEEDED(GetDevice()->CheckFeatureSupport(D3D12_FEATURE_D3D12_OPTIONS, &o, sizeof(o))) &&
+              o.ROVsSupported) ? 1 : 0;
+  }
+  return cached == 1;
+}
 D3D12_TILED_RESOURCES_TIER D3D12Provider::GetTiledResourcesTier() const {
   D3D12_FEATURE_DATA_D3D12_OPTIONS o = {};
   return (GetDevice() && SUCCEEDED(GetDevice()->CheckFeatureSupport(D3D12_FEATURE_D3D12_OPTIONS, &o, sizeof(o)))) ? o.TiledResourcesTier : D3D12_TILED_RESOURCES_TIER_NOT_SUPPORTED;

@@ -210,6 +210,10 @@ bool D3D12RenderTargetCache::Initialize() {
   if (path_ == Path::kPixelShaderInterlock && !provider.AreRasterizerOrderedViewsSupported()) {
     path_ = Path::kHostRenderTargets;
   }
+  // NG2 PATCH: the path actually taken (the cvar alone hid a silent fallback to host render targets, 2026-09-28).
+  REXLOG_INFO("[ngpu] render target path in use: {} (requested '{}', ROV supported {})",
+              path_ == Path::kPixelShaderInterlock ? "ROV (pixel shader interlock)" : "host render targets",
+              REXCVAR_GET(render_target_path_d3d12), provider.AreRasterizerOrderedViewsSupported());
 
   // Create the buffer for reinterpreting EDRAM contents.
   uint32_t edram_buffer_size =

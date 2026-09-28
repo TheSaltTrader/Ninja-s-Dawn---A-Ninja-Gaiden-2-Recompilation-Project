@@ -84,7 +84,11 @@ class D3D12Provider {
   rex::ui::GraphicsProvider::GpuVendorID GetAdapterVendorID() const { return rex::ui::GraphicsProvider::GpuVendorID::kNvidia; }
   D3D12_HEAP_FLAGS GetHeapFlagCreateNotZeroed() const { return D3D12_HEAP_FLAG_CREATE_NOT_ZEROED; }
   bool IsPSSpecifiedStencilReferenceSupported() const;
-  bool AreRasterizerOrderedViewsSupported() const { return false; }
+  // 2026-09-28: asks the device, as the plugin's provider does. It returned false (a Fable II leftover), so NG2's
+  // render_target_path_d3d12=rov silently fell back to host render targets - the path the tuning notes measured as
+  // broken for this title (22 EDRAM resolves vs 3128 on ROV) - and Chapter 10's depth-as-colour shadow map and
+  // exposure chain came out as a box shadow and a black cinematic (user-verified: Xenos, on ROV, is correct).
+  bool AreRasterizerOrderedViewsSupported() const;
   ID3D12CommandQueue* GetDirectQueue() const { return ::ng2::ngpu::rtc::Native().queue; }
   // PIX programmatic capture interface - never attached natively.
   void* GetGraphicsAnalysis() const { return nullptr; }

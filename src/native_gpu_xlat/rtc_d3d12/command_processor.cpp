@@ -305,6 +305,9 @@ namespace rex::graphics::ngpu_d3d12 {
 // file statics are safe; the presenter (a different module) learns the result
 // through the ng2_uw_mode cvar.
 static int g_ng2_persp_this_frame = 0;
+// True while the bound vertex-constant buffer carries a column-0-compressed 2D UI ortho (kind 2), so the draw's
+// scissor is compressed with it (Chapter 4 boss bar, 2026-09-28). Set on every vertex-constant upload.
+static bool g_ng2_vs_buf_compressed = false;
 static int g_ng2_2d_this_frame = 0;
 // [ng2-fade] DIAGNOSTIC: 2D UI draws this frame whose pixel shader samples no
 // texture (a solid fill - the shape NG2's full-screen fade-to-black takes).
@@ -2863,11 +2866,17 @@ void D3D12CommandProcessor::IssueSwap(uint32_t frontbuffer_ptr, uint32_t frontbu
       if (s_uw_mode_shown < 0 || !feature) {
         s_uw_mode_shown = mode_detected;
         s_uw_fade = 0;
-      } else if (mode_detected != s_uw_mode_shown) {
+      } else if (mode_detected != s_uw_mode_shown ||
+                 (!s_uw_gameplay && s_uw_after_absence && s_uw_gp_streak > 0 && s_uw_mode_shown == 2)) {
+        // 2026-09-28 (user: "a flash when the level starts that was not there before", native only): the 1.5 s entry
+        // after a card showed the level's first second in 16:9 and then popped to the fill (capture cutfix4,
+        // 06:43:04.4-05.6). While that entry is pending the fade now rises to black and HOLDS there; the switch
+        // happens at the end of the wait under full black and the level fades in at full width - the opening glimpse
+        // it hides stays hidden, and a direct level start is one clean fade-in.
         static int s_fade_frames_out = 0;
         ++s_fade_frames_out;
         s_uw_fade = std::min(1000, s_uw_fade + step);
-        if (s_uw_fade >= 1000) {   // at full black: layout and letterbox switch together
+        if (s_uw_fade >= 1000 && mode_detected != s_uw_mode_shown) {   // at full black: layout and letterbox switch together
           REXLOG_INFO("[ng2uw] fade: {} swaps to black, switching mode {} -> {}", s_fade_frames_out, s_uw_mode_shown,
                       mode_detected);
           s_uw_mode_shown = mode_detected;
@@ -3682,6 +3691,22 @@ bool D3D12CommandProcessor::IssueDraw(xenos::PrimitiveType primitive_type, uint3
   }
   ph(8);   // NG2 PATCH: [draw phases] bindings
   uw_ppr_ = nullptr;
+  // [ng2-2d scissor] 2026-09-28 (user, Chapter 4 boss: the bar "hit and comes back"): the boss bar's red fill is
+  // drawn full length and CUT BY A SCISSOR at the health point (dd_t149 d2709: sc 250,1276 1440x22 on the
+  // 2560x1440 HUD target = canvas x 125..845). Compressing the quad's column 0 into the 16:9 band left the scissor
+  // at the uncompressed x, so the cut showed ~(1-k) of the damage. A compressed 2D draw with a scissor narrower
+  // than its viewport gets the same x map around the viewport centre: x' = cx + k (x - cx).
+  if (g_ng2_vs_buf_compressed) {
+    const float k = static_cast<float>(REXCVAR_GET(ng2_fov_k));
+    const LONG vl = LONG(ff_viewport_.TopLeftX), vr = LONG(ff_viewport_.TopLeftX + ff_viewport_.Width);
+    if (k > 0.05f && k < 1.5f && (ff_scissor_.left > vl || ff_scissor_.right < vr)) {
+      const float cx = ff_viewport_.TopLeftX + 0.5f * ff_viewport_.Width;
+      D3D12_RECT r = ff_scissor_;
+      r.left = LONG(std::floor(cx + k * (float(r.left) - cx)));
+      r.right = LONG(std::ceil(cx + k * (float(r.right) - cx)));
+      SetScissorRect(r);
+    }
+  }
   // Must not call anything that can change the descriptor heap from now on!
 
   // Ensure vertex buffers are resident.
@@ -5996,6 +6021,32 @@ void D3D12CommandProcessor::DrawDumpLine(const D3D12Shader* vertex_shader,
           HasPendingResolveReadback(base, 4096) ? " rbpend" : "");
     }
   }
+  // The pixel shader's used float constants (c256+), and its ucode disassembly once per shader into
+  // dd_shaders.txt (2026-09-28, Chapter 4 boss bar: the fill is cut inside its pixel shader).
+  if (pixel_shader) {
+    const auto& pbm = pixel_shader->constant_register_map().float_bitmap;
+    const float* pc = reinterpret_cast<const float*>(&regs[XE_GPU_REG_SHADER_CONSTANT_256_X]);
+    int shown = 0;
+    for (uint32_t i = 0; i < 4 && shown < 6; ++i) {
+      uint64_t bits = pbm[i];
+      uint32_t bit;
+      while (shown < 6 && rex::bit_scan_forward(bits, &bit)) {
+        bits &= ~(1ull << bit);
+        const uint32_t r = (i << 6) + bit;
+        put(" p%u %.4g,%.4g,%.4g,%.4g", r, pc[r * 4], pc[r * 4 + 1], pc[r * 4 + 2], pc[r * 4 + 3]);
+        ++shown;
+      }
+    }
+    static std::unordered_set<uint64_t> s_dd_ps_seen;
+    if (pixel_shader->is_ucode_analyzed() &&
+        s_dd_ps_seen.insert(pixel_shader->ucode_data_hash()).second) {
+      if (FILE* sf = std::fopen("dd_shaders.txt", "a")) {
+        std::fprintf(sf, "=== ps %016llX\n%s\n", (unsigned long long)pixel_shader->ucode_data_hash(),
+                     pixel_shader->ucode_disassembly().c_str());
+        std::fclose(sf);
+      }
+    }
+  }
   if (n < 0) n = 0;
   if (size_t(n) > sizeof(line) - 2) n = int(sizeof(line) - 2);
   line[n++] = '\n';
@@ -6106,18 +6157,29 @@ bool D3D12CommandProcessor::UpdateBindings(const D3D12Shader* vertex_shader,
   // inherit the HUD's compressed ortho: when the decision differs from the one the current buffer was built with,
   // the constants are uploaded again (so the overlay is not compressed and the next HUD draw is again).
   bool ng2_fs_quad = false;
+  bool ng2_quad_partial_width = false;   // a quad whose extent was read and does NOT span the 1280 canvas width
   {
-    static bool s_ng2_fs_uploaded = false;
+    static uint32_t s_ng2_fs_uploaded = 0;   // the decision bits the current constant buffer was built with
+    static const bool s_ng2_fs_enabled = [] {   // NG2_FS_OVERLAY=0: the rule off, for A/Bs
+      const char* e = std::getenv("NG2_FS_OVERLAY");
+      return !(e && *e == '0');
+    }();
     const float fk = static_cast<float>(REXCVAR_GET(ng2_fov_k));
-    if (fk > 0.05f && fk < 1.5f && std::fabs(fk - 1.0f) > 1e-3f && uw_ppr_ &&
+    if (s_ng2_fs_enabled && fk > 0.05f && fk < 1.5f && std::fabs(fk - 1.0f) > 1e-3f && uw_ppr_ &&
         uw_ppr_->host_draw_vertex_count >= 3 && uw_ppr_->host_draw_vertex_count <= 6) {
       float qx0 = 0.0f, qx1 = 0.0f, qy0 = 0.0f, qy1 = 0.0f;
-      if (C8QuadSpan(vertex_shader, qx0, qx1, &qy0, &qy1) >= 0.0f)
+      if (C8QuadSpan(vertex_shader, qx0, qx1, &qy0, &qy1) >= 0.0f) {
         ng2_fs_quad = qx0 <= 16.0f && qx1 >= 1264.0f && qy0 <= 16.0f && qy1 >= 704.0f;
+        ng2_quad_partial_width = !(qx0 <= 16.0f && qx1 >= 1264.0f);
+      }
     }
-    if (ng2_fs_quad != s_ng2_fs_uploaded) {
+    // Re-upload when anything the column-0 decision reads differs from the buffer's: full-screen, partial
+    // width, and solid (textureless) - a solid bar segment must not inherit a textured draw's buffer.
+    const bool ng2_solid_ps = pixel_shader && pixel_shader->GetTextureBindingsAfterTranslation().empty();
+    const uint32_t ng2_fs_key = (ng2_fs_quad ? 1u : 0u) | (ng2_quad_partial_width ? 2u : 0u) | (ng2_solid_ps ? 4u : 0u);
+    if (ng2_fs_key != s_ng2_fs_uploaded) {
       cbuffer_binding_float_vertex_.up_to_date = false;
-      s_ng2_fs_uploaded = ng2_fs_quad;
+      s_ng2_fs_uploaded = ng2_fs_key;
     }
   }
   if (!cbuffer_binding_float_vertex_.up_to_date) {
@@ -6133,6 +6195,7 @@ bool D3D12CommandProcessor::UpdateBindings(const D3D12Shader* vertex_shader,
       return false;
     }
     const uint8_t* float_constants_begin = float_constants;
+    g_ng2_vs_buf_compressed = false;   // this upload's column-0 state (set below when the 2D UI ortho compresses)
     for (uint32_t i = 0; i < 4; ++i) {
       uint64_t float_constant_map_entry = float_constant_map_vertex.float_bitmap[i];
       uint32_t float_constant_index;
@@ -6534,6 +6597,14 @@ bool D3D12CommandProcessor::UpdateBindings(const D3D12Shader* vertex_shader,
               info.kind == 2 &&
               (!pixel_shader ||
                pixel_shader->GetTextureBindingsAfterTranslation().empty());
+          // [ng2-2d solid bar] 2026-09-28 (user, Chapter 4 boss: "the bar showed it was getting shorter but the
+          // actual bar looked the same until multiple slashes", "first few slashes are outside the full bar"): the
+          // boss bar's lost-health and damage layers are textureless quads (ps A4A965C1, x 984..1057 of 1280;
+          // bossbar/uw_on dd_t124 + burst). Exempted as "solid fills" they stayed at their 16:9 positions while the
+          // textured bar was compressed, so the cut lay past the compressed bar's end. The exemption is for the
+          // fade and the letterbox bars - both span the canvas width - so a solid quad whose extent was read and
+          // does NOT span the width is HUD and compresses; an unread extent keeps the old rule.
+          const bool solid_keeps_width = is_solid_2d && !ng2_quad_partial_width;
           if (info.kind == 1) {
             ++g_ng2_persp_this_frame;
           } else {
@@ -6547,7 +6618,8 @@ bool D3D12CommandProcessor::UpdateBindings(const D3D12Shader* vertex_shader,
           // the presenter stretches to a flat full-width black - instead of a
           // centred 16:9 black band with the FOV-widened 3D leaking through on the
           // sides (the old "black centre, scene on the sides" fade).
-          if (gameplay && !is_solid_2d && !full_screen_2d) {
+          if (gameplay && !solid_keeps_width && !full_screen_2d) {
+            if (info.kind == 2) g_ng2_vs_buf_compressed = true;
             const uint32_t B = info.base;
             uint32_t pos = 0;
             const uint32_t wrd = B >> 6, b = B & 63;
