@@ -3,6 +3,46 @@
 Versions are cut with `tools/make_release.py`, which refuses to package a
 version that has no section here.
 
+## v1.1.1 - 2026-09-28
+
+### Changed - fully native: rexgpu-xenos.dll is gone
+
+The game's graphics now run entirely inside `ng2.exe`: the console's command
+stream is read by the program itself and every frame is drawn by its own
+Direct3D 12 renderer. `rexgpu-xenos.dll` is no longer shipped or loaded, and
+the "Native renderer" settings row is retired - there is only one path. A
+machine without Direct3D 12 gets a message box instead of a black window.
+Checked by walking every chapter from the saves list (no unhandled command,
+no failed draw) and by playing the Chapter 10 boss fight.
+
+Frames are handed to the window by a present thread of their own, so the
+game thread no longer waits for the copy to the screen.
+
+### Added - F10 "Internal resolution"
+
+One row listing real render resolutions up to 8K (the world at up to 720p
+times an integer scale).
+
+### Fixed
+
+- Chapter 10: the boss cinematic went black after its first frame and Ryu's
+  shadow was a box. The renderer now uses the pixel-shader render-target
+  path (ROV) the game's settings ask for; it had silently fallen back to a
+  path this game cannot use.
+- Ultrawide, boss health bar (verified on the Chapter 4 boss): the bar now drops
+  with each hit. Before, the damage showed outside the bar and the red fill
+  sprang back, because the bar's cut and its plain-colour layers were not
+  moved into the 16:9 HUD band with the rest of the bar.
+- Ultrawide, level start: no more flash of the stage before the loading
+  icon; after a chapter card the screen holds black and the level fades in
+  at full width.
+- Ultrawide, scene transitions (Chapter 7 door and others): full-screen
+  transition images are no longer squeezed into the centre with the world
+  showing on the sides.
+- Enhanced-texture pack: replacement textures are released with the rest of
+  the texture cache and count toward its memory budget, fixing a memory
+  climb over long sessions.
+
 ## v1.1.0 - 2026-09-27
 
 ### Added - the native renderer, in the game's own window
