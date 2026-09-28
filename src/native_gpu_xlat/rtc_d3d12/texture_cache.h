@@ -343,13 +343,28 @@ class D3D12TextureCache final : public TextureCache {
       std::memcpy(&v, guest + offset, 8);
       return v;
     }
+    // [texpack budget] (ported from Fable II native-gpu a97144e, 2026-09-28) the replacement's bytes are part of this
+    // texture's host memory usage. They were not: the cache budget saw only the native-size guest resource while the
+    // replacements it kept alive filled VRAM - nothing was ever evicted (Fable: 1.1 GB counted, 29 GB used).
     void SetTexpackResource(Microsoft::WRL::ComPtr<ID3D12Resource> r, uint32_t hash) {
+      const uint64_t old_bytes = texpack_bytes_;
       texpack_resource_ = std::move(r);
       texpack_content_hash_ = hash;
+      texpack_bytes_ = TexpackBytes(texpack_resource_.Get());
+      SetHostMemoryUsage(GetHostMemoryUsage() - old_bytes + texpack_bytes_);
     }
     Microsoft::WRL::ComPtr<ID3D12Resource> DetachTexpackResource() {
       texpack_content_hash_ = 0;
+      SetHostMemoryUsage(GetHostMemoryUsage() - texpack_bytes_);
+      texpack_bytes_ = 0;
       return std::move(texpack_resource_);
+    }
+    static uint64_t TexpackBytes(ID3D12Resource* r) {
+      if (!r) return 0;
+      Microsoft::WRL::ComPtr<ID3D12Device> device;
+      if (FAILED(r->GetDevice(IID_PPV_ARGS(&device)))) return 0;
+      const D3D12_RESOURCE_DESC desc = r->GetDesc();
+      return device->GetResourceAllocationInfo(0, 1, &desc).SizeInBytes;
     }
     // Retires the descriptors (released once the current submission has
     // completed) and bumps the generation, so the next draw rebinds.
@@ -367,6 +382,7 @@ class D3D12TextureCache final : public TextureCache {
     std::string texpack_path_;
     Microsoft::WRL::ComPtr<ID3D12Resource> texpack_resource_;  // resolve-at-load 4x
     uint32_t texpack_content_hash_ = 0;
+    uint64_t texpack_bytes_ = 0;   // [texpack budget] counted in the host memory usage
     uint32_t texpack_pending_hash_ = 0;  // [texpack-async] a replacement in flight
     uint64_t texpack_samples_[8] = {};
     double texpack_verified_at_ = 0.0;

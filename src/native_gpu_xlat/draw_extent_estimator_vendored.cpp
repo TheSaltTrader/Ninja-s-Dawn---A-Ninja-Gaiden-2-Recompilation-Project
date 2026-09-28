@@ -28,10 +28,14 @@ namespace ng2::ngpu::xlat { bool PluginBool(const char* name, bool fallback); }
 #include <rex/ui/graphics_util.h>
 
 // VENDORED PATCH: accessor-only - the plugin registered 'execute_unclipped_draw_vs_on_cpu'; this reads its value (default false if unset).
-bool& FLAGS_execute_unclipped_draw_vs_on_cpu_storage_() { static bool s = ::ng2::ngpu::xlat::PluginBool("execute_unclipped_draw_vs_on_cpu", false); return s; }
+// [no-dll] registered here since rexgpu-xenos.dll is gone (gen_gpu_cvars.py, verbatim from the fork)
+REXCVAR_DEFINE_BOOL(execute_unclipped_draw_vs_on_cpu, false, "GPU",
+                    "Execute unclipped draw vertex shader on CPU");
 
 // VENDORED PATCH: accessor-only - the plugin registered 'execute_unclipped_draw_vs_on_cpu_with_scissor'; this reads its value (default false if unset).
-bool& FLAGS_execute_unclipped_draw_vs_on_cpu_with_scissor_storage_() { static bool s = ::ng2::ngpu::xlat::PluginBool("execute_unclipped_draw_vs_on_cpu_with_scissor", false); return s; }
+// [no-dll] registered here since rexgpu-xenos.dll is gone (gen_gpu_cvars.py, verbatim from the fork)
+REXCVAR_DEFINE_BOOL(execute_unclipped_draw_vs_on_cpu_with_scissor, false, "GPU",
+                    "Execute unclipped draw VS on CPU with scissor");
 
 // DEFINE_bool(
 //     execute_unclipped_draw_vs_on_cpu, true,

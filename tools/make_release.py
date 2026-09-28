@@ -47,9 +47,10 @@ BUILD_DIR = os.path.join(ROOT, "out", "build", "win-amd64-Release")
 PAYLOAD = [
     "ng2.exe",
     "rexruntime.dll",
-    "rexgpu-xenos.dll",
     "gamecontrollerdb.txt",
 ]
+# rexgpu-xenos.dll is gone (2026-09-27): the game's own graphics system is the only renderer and the exe registers
+# every GPU setting itself. An existing install keeps its old copy after --update; nothing loads it.
 
 # The Visual C++ runtime the executable and both SDK DLLs import. Windows does
 # not ship it, so without these a machine that never installed the
@@ -201,14 +202,8 @@ def check_sdk_pair(dest):
     error and an empty log. It is the single worst way to get this wrong, and
     the only way to get it wrong by accident.
     """
-    origins = {n: sdk_dll_origin(n) for n in ("rexruntime.dll", "rexgpu-xenos.dll")}
-    kinds = set(origins.values())
-    if len(kinds) > 1:
-        die("SDK DLLs are mismatched (%s). A source-built plugin against a stock "
-            "runtime makes the game exit at startup with no error. Deploy both "
-            "from the same build before cutting."
-            % ", ".join("%s=%s" % kv for kv in sorted(origins.items())))
-    print("  SDK pair: both %s" % kinds.pop())
+    # One SDK DLL since 2026-09-27 (no GPU plugin), so there is no pair to mismatch; say which runtime it is.
+    print("  SDK runtime: %s" % sdk_dll_origin("rexruntime.dll"))
     # Origin agreement is not feature presence - see check_ng2_features.
     check_ng2_features(dest)
 
@@ -226,8 +221,9 @@ SDK_FEATURES = {
         "control": b"rex_gpu_create",
         "require": {b"ng2_uw_mode": "ultrawide presenter (gameplay fills the screen)"},
     },
-    "rexgpu-xenos.dll": {
-        "control": b"rex_gpu_create",
+    # The GPU features the plugin used to carry live in the exe since 2026-09-27 (its own graphics system).
+    "ng2.exe": {
+        "control": b"own graphics system created (no GPU plugin)",
         "require": {
             b"ng2_uw_mode": "ultrawide projection widen",
             b"solid2d": "ultrawide scene-fade fix (v1.0.20)",
@@ -358,7 +354,6 @@ Copy these over your existing install instead, keeping everything else:
 
     ng2.exe
     rexruntime.dll
-    rexgpu-xenos.dll
     gamecontrollerdb.txt
     tools\\
 Your game\\, dlc\\, user\\ and ng2_settings.cfg are untouched by that,
@@ -395,7 +390,6 @@ The folder should end up looking like:
 
     ng2.exe
     rexruntime.dll
-    rexgpu-xenos.dll
     gamecontrollerdb.txt
     ng2_settings.cfg
     game\\default.xex, game\\*.ng2, ...

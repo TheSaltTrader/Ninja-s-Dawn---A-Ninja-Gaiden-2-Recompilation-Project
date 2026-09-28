@@ -34,25 +34,69 @@ namespace ng2::ngpu::xlat { bool PluginBool(const char*, bool); std::string Plug
 #include <rex/logging.h>
 #include <rex/math.h>
 
-int32_t& FLAGS_texture_cache_memory_limit_render_to_texture_storage_() { static int32_t s = ::ng2::ngpu::xlat::PluginInt("texture_cache_memory_limit_render_to_texture", 24); return s; }
+// [no-dll] registered here since rexgpu-xenos.dll is gone (gen_gpu_cvars.py, verbatim from the fork)
+REXCVAR_DEFINE_INT32(texture_cache_memory_limit_render_to_texture, 24, "GPU",
+                     "Texture cache memory limit for render-to-texture (MB)")
+    .range(1, 256)
+    .lifecycle(rex::cvar::Lifecycle::kRequiresRestart);
 
-int32_t& FLAGS_texture_cache_memory_limit_soft_storage_() { static int32_t s = ::ng2::ngpu::xlat::PluginInt("texture_cache_memory_limit_soft", 384); return s; }
+// [no-dll] registered here since rexgpu-xenos.dll is gone (gen_gpu_cvars.py, verbatim from the fork)
+REXCVAR_DEFINE_INT32(texture_cache_memory_limit_soft, 384, "GPU",
+                     "Soft texture cache memory limit (MB)")
+    .range(64, 4096)
+    .lifecycle(rex::cvar::Lifecycle::kRequiresRestart);
 
-int32_t& FLAGS_texture_cache_memory_limit_hard_storage_() { static int32_t s = ::ng2::ngpu::xlat::PluginInt("texture_cache_memory_limit_hard", 768); return s; }
+// [no-dll] registered here since rexgpu-xenos.dll is gone (gen_gpu_cvars.py, verbatim from the fork)
+REXCVAR_DEFINE_INT32(texture_cache_memory_limit_hard, 768, "GPU",
+                     "Hard texture cache memory limit (MB)")
+    .range(128, 8192)
+    .lifecycle(rex::cvar::Lifecycle::kRequiresRestart);
 
-int32_t& FLAGS_texture_cache_memory_limit_soft_lifetime_storage_() { static int32_t s = ::ng2::ngpu::xlat::PluginInt("texture_cache_memory_limit_soft_lifetime", 30); return s; }
+// [no-dll] registered here since rexgpu-xenos.dll is gone (gen_gpu_cvars.py, verbatim from the fork)
+REXCVAR_DEFINE_INT32(texture_cache_memory_limit_soft_lifetime, 30, "GPU",
+                     "Soft texture cache memory limit lifetime (seconds)")
+    .range(1, 3600);
 
-bool& FLAGS_gpu_3d_to_2d_texture_storage_() { static bool s = ::ng2::ngpu::xlat::PluginBool("gpu_3d_to_2d_texture", true); return s; }
+// [no-dll] registered here since rexgpu-xenos.dll is gone (gen_gpu_cvars.py, verbatim from the fork)
+REXCVAR_DEFINE_BOOL(gpu_3d_to_2d_texture, true, "GPU",
+                    "Sample problematic 3D textures through 2D-compatible wrappers")
+    .lifecycle(rex::cvar::Lifecycle::kHotReload);
 
-int32_t& FLAGS_anisotropic_override_storage_() { static int32_t s = ::ng2::ngpu::xlat::PluginInt("anisotropic_override", 3); return s; }
+// [no-dll] registered here since rexgpu-xenos.dll is gone (gen_gpu_cvars.py, verbatim from the fork)
+REXCVAR_DEFINE_INT32(anisotropic_override, 3, "GPU",
+                     "Forces anisotropic filtering for eligible textures.\n"
+                     "Higher values keep textures sharper at oblique angles, but increase texture "
+                     "sampling cost.\n"
+                     " -1 = No override\n"
+                     "  0 = Disable anisotropic filtering\n"
+                     "  1 = Force 1x anisotropic filtering\n"
+                     "  2 = Force 2x anisotropic filtering\n"
+                     "  3 = Force 4x anisotropic filtering\n"
+                     "  4 = Force 8x anisotropic filtering\n"
+                     "  5 = Force 16x anisotropic filtering")
+    .range(-1, 5)
+    .lifecycle(rex::cvar::Lifecycle::kHotReload);
 
-int32_t& FLAGS_draw_resolution_scale_x_storage_() { static int32_t s = ::ng2::ngpu::xlat::PluginInt("draw_resolution_scale_x", 1); return s; }
+// [no-dll] registered here since rexgpu-xenos.dll is gone (gen_gpu_cvars.py, verbatim from the fork)
+REXCVAR_DEFINE_INT32(draw_resolution_scale_x, 1, "GPU", "Draw resolution scale X (1 = no scaling)")
+    .range(1, 8)
+    .lifecycle(rex::cvar::Lifecycle::kRequiresRestart);
 
-int32_t& FLAGS_draw_resolution_scale_y_storage_() { static int32_t s = ::ng2::ngpu::xlat::PluginInt("draw_resolution_scale_y", 1); return s; }
+// [no-dll] registered here since rexgpu-xenos.dll is gone (gen_gpu_cvars.py, verbatim from the fork)
+REXCVAR_DEFINE_INT32(draw_resolution_scale_y, 1, "GPU", "Draw resolution scale Y (1 = no scaling)")
+    .range(1, 8)
+    .lifecycle(rex::cvar::Lifecycle::kRequiresRestart);
 
-int32_t& FLAGS_resolution_scale_storage_() { static int32_t s = ::ng2::ngpu::xlat::PluginInt("resolution_scale", 1); return s; }
+// [no-dll] registered here since rexgpu-xenos.dll is gone (gen_gpu_cvars.py, verbatim from the fork)
+REXCVAR_DEFINE_INT32(resolution_scale, 1, "GPU",
+                     "Draw resolution scale for both X and Y axes (same as setting "
+                     "draw_resolution_scale_x and draw_resolution_scale_y)")
+    .range(1, 8)
+    .lifecycle(rex::cvar::Lifecycle::kRequiresRestart);
 
-bool& FLAGS_pre_mask_resolve_l2_block_storage_() { static bool s = ::ng2::ngpu::xlat::PluginBool("pre_mask_resolve_l2_block", true); return s; }
+// [no-dll] registered here since rexgpu-xenos.dll is gone (gen_gpu_cvars.py, verbatim from the fork)
+REXCVAR_DEFINE_BOOL(pre_mask_resolve_l2_block, true, "GPU",
+                    "Pre-mask scaled resolve L2 blocks to the write range before iterating");
 
 // DEFINE_int32(
 //     draw_resolution_scale_x, 1,

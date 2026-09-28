@@ -34,16 +34,25 @@ namespace ng2::ngpu::xlat { bool PluginBool(const char* name, bool fallback); }
 #include <rex/math.h>
 
 // VENDORED PATCH: accessor-only - the plugin registered 'mrt_edram_used_range_clamp_to_min'; this reads its value (default true if unset).
-bool& FLAGS_mrt_edram_used_range_clamp_to_min_storage_() { static bool s = ::ng2::ngpu::xlat::PluginBool("mrt_edram_used_range_clamp_to_min", true); return s; }
+// [no-dll] registered here since rexgpu-xenos.dll is gone (gen_gpu_cvars.py, verbatim from the fork)
+REXCVAR_DEFINE_BOOL(mrt_edram_used_range_clamp_to_min, true, "GPU",
+                    "Clamp MRT EDRAM used range to minimum");
 
 // VENDORED PATCH: accessor-only - the plugin registered 'execute_unclipped_draw_vs_on_cpu_for_psi_render_backend'; this reads its value (default true if unset).
-bool& FLAGS_execute_unclipped_draw_vs_on_cpu_for_psi_render_backend_storage_() { static bool s = ::ng2::ngpu::xlat::PluginBool("execute_unclipped_draw_vs_on_cpu_for_psi_render_backend", true); return s; }
+// [no-dll] registered here since rexgpu-xenos.dll is gone (gen_gpu_cvars.py, verbatim from the fork)
+REXCVAR_DEFINE_BOOL(execute_unclipped_draw_vs_on_cpu_for_psi_render_backend, true, "GPU",
+                    "Execute unclipped draw VS on CPU for PSI render backend");
 
 // VENDORED PATCH: accessor-only - the plugin registered 'snorm16_render_target_full_range'; this reads its value (default true if unset).
-bool& FLAGS_snorm16_render_target_full_range_storage_() { static bool s = ::ng2::ngpu::xlat::PluginBool("snorm16_render_target_full_range", true); return s; }
+// [no-dll] registered here since rexgpu-xenos.dll is gone (gen_gpu_cvars.py, verbatim from the fork)
+REXCVAR_DEFINE_BOOL(snorm16_render_target_full_range, true, "GPU",
+                    "Use full range for SNORM16 render targets");
 
 // VENDORED PATCH: accessor-only - the plugin registered 'direct_host_resolve'; this reads its value (default true if unset).
-bool& FLAGS_direct_host_resolve_storage_() { static bool s = ::ng2::ngpu::xlat::PluginBool("direct_host_resolve", true); return s; }
+// [no-dll] registered here since rexgpu-xenos.dll is gone (gen_gpu_cvars.py, verbatim from the fork)
+REXCVAR_DEFINE_BOOL(direct_host_resolve, true, "GPU",
+                    "Resolve from host render targets directly to shared memory when possible")
+    .lifecycle(rex::cvar::Lifecycle::kHotReload);
 
 namespace rex::graphics {
 

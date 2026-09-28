@@ -55,13 +55,22 @@ namespace ng2::ngpu::xlat { bool PluginBool(const char*, bool); std::string Plug
 #include <rex/types.h>
 #include "rtc_d3d12/d3d12_util.h"
 
-bool& FLAGS_d3d12_dxbc_disasm_storage_() { static bool s = ::ng2::ngpu::xlat::PluginBool("d3d12_dxbc_disasm", false); return s; }
+// [no-dll] registered here since rexgpu-xenos.dll is gone (gen_gpu_cvars.py, verbatim from the fork)
+REXCVAR_DEFINE_BOOL(d3d12_dxbc_disasm, false, "GPU/D3D12", "Dump DXBC disassembly");
 
-bool& FLAGS_d3d12_dxbc_disasm_dxilconv_storage_() { static bool s = ::ng2::ngpu::xlat::PluginBool("d3d12_dxbc_disasm_dxilconv", false); return s; }
+// [no-dll] registered here since rexgpu-xenos.dll is gone (gen_gpu_cvars.py, verbatim from the fork)
+REXCVAR_DEFINE_BOOL(d3d12_dxbc_disasm_dxilconv, false, "GPU/D3D12",
+                    "Dump DXIL conversion disassembly");
 
-int32_t& FLAGS_d3d12_pipeline_creation_threads_storage_() { static int32_t s = ::ng2::ngpu::xlat::PluginInt("d3d12_pipeline_creation_threads", -1); return s; }
+// [no-dll] registered here since rexgpu-xenos.dll is gone (gen_gpu_cvars.py, verbatim from the fork)
+REXCVAR_DEFINE_INT32(d3d12_pipeline_creation_threads, -1, "GPU/D3D12",
+                     "Number of pipeline creation threads (-1 for auto)")
+    .range(-1, 32)
+    .lifecycle(rex::cvar::Lifecycle::kRequiresRestart);
 
-bool& FLAGS_d3d12_tessellation_wireframe_storage_() { static bool s = ::ng2::ngpu::xlat::PluginBool("d3d12_tessellation_wireframe", false); return s; }
+// [no-dll] registered here since rexgpu-xenos.dll is gone (gen_gpu_cvars.py, verbatim from the fork)
+REXCVAR_DEFINE_BOOL(d3d12_tessellation_wireframe, false, "GPU/D3D12",
+                    "Render tessellation as wireframe");
 
 namespace rex::graphics::ngpu_d3d12 {
 

@@ -150,7 +150,6 @@ accepted and quietly ignored.
 | Fullscreen | off | Borderless fullscreen on the chosen monitor. |
 | Monitor | 0 | Which display to open on. (restart) |
 | Frame rate | 60 | 30 or 60. Nothing higher is offered: Ninja Gaiden II paces its own logic off the refresh rate it is told the display has, so above 60 it does not render more smoothly, it runs **faster** - combat, physics and timers all speed up. A settings file holding `fps=120` still loads and is brought down to 60. |
-| Native renderer | On | Draws the game with the renderer built into this program: the console's command stream is decoded and drawn directly, and the Xenos GPU plugin only supplies its settings. Off = the plugin's own GPU path. (restart) |
 | Internal resolution | 1120 × 584 (as shipped) | The resolution the 3D world is drawn at before it is scaled to the screen: 1120 × 584 (as shipped), 1280 × 720, 1920 × 1080, 2240 × 1168, 2560 × 1440, 3360 × 1752, 3840 × 2160, 5120 × 2880, 7680 × 4320. Built from the game's own world size (1120 × 584, 960 × 540 or 1280 × 720 - a larger world overflows the game's EDRAM layout) times a whole-number supersample, which also scales shadow maps. Cost goes with the pixel count. (restart) |
 | Letterbox | on | Keeps the original aspect instead of stretching. |
 | Ultrawide (3D) | off | Widens the 3D field of view to fill a wider-than-16:9 screen with correct proportions - you see more of the world across the width, with no stretching. Full-screen menus, videos and the in-game HUD stay 16:9. Takes effect immediately. |

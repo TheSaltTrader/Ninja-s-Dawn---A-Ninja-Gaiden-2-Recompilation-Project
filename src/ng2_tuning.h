@@ -220,37 +220,17 @@ struct Ng2Tuning {
       out.push_back({"readback_resolve", rb,
                      "[test lever NG2_READBACK] resolve readback: none/fast/some/full"});
     }
-    // --- The native renderer (2026-09-26 transplant; a settings row since v1.1.0) ---
-    //
-    //   Settings row "Native renderer" (s.native_renderer, ON by default):
-    //       ngpu_backend=true (exe): the plugin's draw / swap callbacks feed the
-    //       copy of its D3D12 backend built into this program; and
-    //       gpu_offload_to_native=true (plugin): the plugin draws nothing itself -
-    //       the native backend is the only GPU, on the plugin's device, and each
-    //       frame goes to the game's own window through the runtime presenter
-    //       (ONE WINDOW, ng2_ngpu_bridge.cpp). Both cvars are read once at
-    //       startup, so the row is restart-bound.
-    //       Since 2026-09-27 the row also selects the game's own graphics system
-    //       (ng2_native_gs.cpp): rexgpu-xenos stays loaded only for the settings
-    //       it defines. NG2_NATIVE_GS=0 keeps the one-window plugin path above.
-    //   NG2_NATIVE_GPU=1|0    overrides the row (1 on, 0 off).
-    //   NG2_NATIVE_OFFLOAD=0  lockstep for diagnosis: the plugin keeps drawing too
-    //       and the native backend presents on its own window beside the game's.
+    // --- The native renderer: the only GPU path (2026-09-27, rexgpu-xenos.dll removed) ---
+    //   ngpu_backend=true: the backend built into this program draws every frame.
+    //   gpu_offload_to_native=true: this program owns guest memory for the GPU (clear_memory_page_state, the
+    //       resolve / memexport readback, the published stat cvars all key off it - false would turn them off).
+    //   Both are forced: the settings row and NG2_NATIVE_GPU / NG2_NATIVE_OFFLOAD selected the plugin path, which
+    //   no longer exists. native_renderer stays in the settings file only so older files parse.
     //   NG2_TUNE=a=b;c=d      any cvars, for experiments (Fable II's FABLE2_TUNE);
     //       items separated by ';' - a ',' would make the whole text one name.
-    {
-      const char* ng = std::getenv("NG2_NATIVE_GPU");
-      const char* off = std::getenv("NG2_NATIVE_OFFLOAD");
-      const bool offload_ok = !(off && *off && off[0] == '0');
-      out.push_back({"ngpu_backend",
-                     ((ng && *ng) ? ng[0] != '0' : s.native_renderer) ? "true" : "false",
-                     "Native renderer (settings row; NG2_NATIVE_GPU=1|0 overrides): the native backend transplant "
-                     "(exe cvar)"});
-      out.push_back({"gpu_offload_to_native",
-                     (((ng && *ng) ? ng[0] != '0' : s.native_renderer) && offload_ok) ? "true" : "false",
-                     "Native renderer: the plugin skips its own GPU work; the native backend is the only GPU "
-                     "(plugin cvar; NG2_NATIVE_OFFLOAD=0 keeps the plugin drawing too)"});
-    }
+    out.push_back({"ngpu_backend", "true", "Native renderer: the only GPU path (exe cvar)"});
+    out.push_back({"gpu_offload_to_native", "true",
+                   "Native renderer owns guest memory for the GPU (registered by the exe since rexgpu-xenos.dll is gone)"});
     if (const char* tune = std::getenv("NG2_TUNE"); tune && *tune) {
       static std::deque<std::string> owned;   // Entry holds const char*; these must outlive it
       std::string text(tune);

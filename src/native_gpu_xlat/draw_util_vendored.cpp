@@ -30,10 +30,13 @@ namespace ng2::ngpu::xlat { bool PluginBool(const char* name, bool fallback); }
 #include <rex/ui/graphics_util.h>
 
 // VENDORED PATCH: accessor-only - the plugin registered 'half_pixel_offset'; this reads its value (default true if unset).
-bool& FLAGS_half_pixel_offset_storage_() { static bool s = ::ng2::ngpu::xlat::PluginBool("half_pixel_offset", true); return s; }
+// [no-dll] registered here since rexgpu-xenos.dll is gone (gen_gpu_cvars.py, verbatim from the fork)
+REXCVAR_DEFINE_BOOL(half_pixel_offset, true, "GPU", "Enable half pixel offset");
 
 // VENDORED PATCH: accessor-only - the plugin registered 'resolve_resolution_scale_fill_half_pixel_offset'; this reads its value (default true if unset).
-bool& FLAGS_resolve_resolution_scale_fill_half_pixel_offset_storage_() { static bool s = ::ng2::ngpu::xlat::PluginBool("resolve_resolution_scale_fill_half_pixel_offset", true); return s; }
+// [no-dll] registered here since rexgpu-xenos.dll is gone (gen_gpu_cvars.py, verbatim from the fork)
+REXCVAR_DEFINE_BOOL(resolve_resolution_scale_fill_half_pixel_offset, true, "GPU",
+                    "Fill half pixel offset during resolution scale resolve");
 
 // Very prominent in 545407F2.
 // DEFINE_bool(

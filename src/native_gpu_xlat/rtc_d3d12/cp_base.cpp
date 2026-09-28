@@ -43,23 +43,59 @@ namespace ng2::ngpu::xlat { bool PluginBool(const char*, bool); std::string Plug
 #include <rex/system/kernel_state.h>
 #include <rex/system/user_module.h>
 
-bool& FLAGS_vsync_storage_() { static bool s = ::ng2::ngpu::xlat::PluginBool("vsync", true); ::ng2::ngpu::xlat::RefreshBool("vsync", s); return s; }   // NATIVE PATCH: [live cvars]
+// [no-dll] registered here since rexgpu-xenos.dll is gone (gen_gpu_cvars.py, verbatim from the fork)
+REXCVAR_DEFINE_BOOL(vsync, true, "GPU", "Enable vertical sync");
 
-bool& FLAGS_clear_memory_page_state_storage_() { static bool s = ::ng2::ngpu::rtc::NativeOwnsGuestMemory() ? ::ng2::ngpu::xlat::PluginBool("clear_memory_page_state", true) : false; return s; }   // NATIVE FORCED unless the native backend owns guest memory (plugin gpu_offload_to_native)
+// [no-dll] registered here since rexgpu-xenos.dll is gone (gen_gpu_cvars.py, verbatim from the fork)
+REXCVAR_DEFINE_BOOL(clear_memory_page_state, true, "GPU",
+                    "Refresh page-valid state from GPU-written memory at frame end. "
+                    "Disable for minor CPU overhead reduction, but may break memory coherency.")
+    .lifecycle(rex::cvar::Lifecycle::kHotReload);
 
-bool& FLAGS_occlusion_query_enable_storage_() { static bool s = ::ng2::ngpu::xlat::PluginBool("occlusion_query_enable", true); return s; }
+// [no-dll] registered here since rexgpu-xenos.dll is gone (gen_gpu_cvars.py, verbatim from the fork)
+REXCVAR_DEFINE_BOOL(occlusion_query_enable, true, "GPU", "Enable host occlusion query handling")
+    .lifecycle(rex::cvar::Lifecycle::kHotReload);
 
-std::string& FLAGS_readback_resolve_storage_() { static std::string s = ::ng2::ngpu::rtc::NativeOwnsGuestMemory() ? ::ng2::ngpu::xlat::PluginString("readback_resolve", "none") : std::string("none"); return s; }   // NATIVE FORCED unless the native backend owns guest memory (plugin gpu_offload_to_native)
+// [no-dll] registered here since rexgpu-xenos.dll is gone (gen_gpu_cvars.py, verbatim from the fork)
+REXCVAR_DEFINE_STRING(readback_resolve, "none", "GPU",
+                      "Controls CPU readback of render-to-texture resolve results.\n"
+                      " none: Disable readback (default)\n"
+                      " fast: Read previous frame (delayed, copy every frame)\n"
+                      " some: Read previous frame (delayed, copy on cache miss)\n"
+                      " full: Immediate sync readback (accurate but stalls)")
+    .allowed({"none", "fast", "some", "full"})
+    .lifecycle(rex::cvar::Lifecycle::kHotReload);
 
-bool& FLAGS_readback_resolve_half_pixel_offset_storage_() { static bool s = ::ng2::ngpu::xlat::PluginBool("readback_resolve_half_pixel_offset", false); return s; }
+// [no-dll] registered here since rexgpu-xenos.dll is gone (gen_gpu_cvars.py, verbatim from the fork)
+REXCVAR_DEFINE_BOOL(readback_resolve_half_pixel_offset, false, "GPU",
+                    "When draw resolution scaling is active, sample from the center of each "
+                    "scaled block during resolve readback downscale")
+    .lifecycle(rex::cvar::Lifecycle::kHotReload);
 
-bool& FLAGS_readback_memexport_storage_() { static bool s = ::ng2::ngpu::rtc::NativeOwnsGuestMemory() ? ::ng2::ngpu::xlat::PluginBool("readback_memexport", true) : false; return s; }   // NATIVE FORCED unless the native backend owns guest memory (plugin gpu_offload_to_native)
+// [no-dll] registered here since rexgpu-xenos.dll is gone (gen_gpu_cvars.py, verbatim from the fork)
+REXCVAR_DEFINE_BOOL(readback_memexport, true, "GPU",
+                    "Enable CPU readback of shader memexport writes for guest memory "
+                    "coherency (can reduce correctness issues, but may add GPU/CPU sync cost)")
+    .lifecycle(rex::cvar::Lifecycle::kHotReload);
 
-bool& FLAGS_readback_memexport_fast_storage_() { static bool s = ::ng2::ngpu::rtc::NativeOwnsGuestMemory() ? ::ng2::ngpu::xlat::PluginBool("readback_memexport_fast", true) : false; return s; }   // NATIVE FORCED unless the native backend owns guest memory (plugin gpu_offload_to_native)
+// [no-dll] registered here since rexgpu-xenos.dll is gone (gen_gpu_cvars.py, verbatim from the fork)
+REXCVAR_DEFINE_BOOL(readback_memexport_fast, true, "GPU",
+                    "Use fast double-buffered memexport readback when possible, with "
+                    "automatic fallback to full synchronous readback")
+    .lifecycle(rex::cvar::Lifecycle::kHotReload);
 
-int32_t& FLAGS_query_occlusion_fake_sample_count_storage_() { static int32_t s = ::ng2::ngpu::xlat::PluginInt("query_occlusion_fake_sample_count", 1000); return s; }
+// [no-dll] registered here since rexgpu-xenos.dll is gone (gen_gpu_cvars.py, verbatim from the fork)
+REXCVAR_DEFINE_INT32(query_occlusion_fake_sample_count, 1000, "GPU",
+                     "Fake sample count for occlusion queries")
+    .range(1, 100000)
+    .lifecycle(rex::cvar::Lifecycle::kHotReload);
 
-bool& FLAGS_async_shader_compilation_storage_() { static bool s = ::ng2::ngpu::xlat::PluginBool("async_shader_compilation", true); return s; }
+// [no-dll] registered here since rexgpu-xenos.dll is gone (gen_gpu_cvars.py, verbatim from the fork)
+REXCVAR_DEFINE_BOOL(async_shader_compilation, true, "GPU",
+                    "Compile shaders and create pipelines asynchronously in background "
+                    "threads. This reduces stutter but may cause brief visual artifacts while "
+                    "pipelines are being prepared.")
+    .lifecycle(rex::cvar::Lifecycle::kHotReload);
 
 namespace rex::graphics {
 

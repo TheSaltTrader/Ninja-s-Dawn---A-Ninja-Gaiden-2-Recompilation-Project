@@ -803,7 +803,8 @@ class D3D12CommandProcessor : public CommandProcessor {
   // kind, guest index base), valid during UpdateBindings only.
   const PrimitiveProcessor::ProcessingResult* uw_ppr_ = nullptr;
   // [uw-2d] Pixel x span of a c8 quad read from guest memory; < 0 = unknown.
-  float C8QuadSpan(const D3D12Shader* vertex_shader, float& x_min, float& x_max) const;
+  float C8QuadSpan(const D3D12Shader* vertex_shader, float& x_min, float& x_max, float* y_min = nullptr,
+                   float* y_max = nullptr) const;
   // [split] Guest ranges resolved since the last submission end; a texture load
   // overlapping one splits the submission first (readback_resolve_split_before_load).
   std::vector<std::pair<uint32_t, uint32_t>> fresh_resolve_ranges_;

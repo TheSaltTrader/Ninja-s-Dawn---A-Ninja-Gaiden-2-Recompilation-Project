@@ -192,6 +192,10 @@
     {
       "setting": "fov_scale",
       "reason": "Fine field-of-view multiplier for Ultrawide 3D. The in-menu slider was removed in v1.0.17 - the Ultrawide toggle alone picks the correct field of view for the monitor, and the slider added a per-value knob without a clear use - so this field is kept at its default (1.0) and only parsed from old settings files. The Ultrawide toggle itself is in the menu and documented."
+    },
+    {
+      "setting": "native_renderer",
+      "reason": "retired from the UI 2026-09-27: rexgpu-xenos.dll is gone, so the game's own graphics system is the only renderer and 'off' would start none (a setting shown to break the game leaves every settings screen). The field survives only so that older ng2_settings.cfg files still parse; ng2_tuning.h forces ngpu_backend and gpu_offload_to_native on."
     }
   ]
 }

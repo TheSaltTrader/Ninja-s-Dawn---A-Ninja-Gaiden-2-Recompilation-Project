@@ -44,11 +44,17 @@ namespace ng2::ngpu::xlat { bool PluginBool(const char*, bool); std::string Plug
 #include "rtc_d3d12/facade.h"
 #include "rtc_d3d12/d3d12_util.h"
 
-bool& FLAGS_native_stencil_value_output_d3d12_intel_storage_() { static bool s = ::ng2::ngpu::xlat::PluginBool("native_stencil_value_output_d3d12_intel", false); return s; }
+// [no-dll] registered here since rexgpu-xenos.dll is gone (gen_gpu_cvars.py, verbatim from the fork)
+REXCVAR_DEFINE_BOOL(native_stencil_value_output_d3d12_intel, false, "GPU/D3D12",
+                    "Native stencil value output for Intel D3D12");
 
-std::string& FLAGS_render_target_path_d3d12_storage_() { static std::string s = ::ng2::ngpu::xlat::PluginString("render_target_path_d3d12", ""); return s; }
+// [no-dll] registered here since rexgpu-xenos.dll is gone (gen_gpu_cvars.py, verbatim from the fork)
+REXCVAR_DEFINE_STRING(render_target_path_d3d12, "", "GPU/D3D12",
+                      "D3D12 render target implementation path")
+    .lifecycle(rex::cvar::Lifecycle::kInitOnly);
 
-bool& FLAGS_native_stencil_value_output_storage_() { static bool s = ::ng2::ngpu::xlat::PluginBool("native_stencil_value_output", true); return s; }
+// [no-dll] registered here since rexgpu-xenos.dll is gone (gen_gpu_cvars.py, verbatim from the fork)
+REXCVAR_DEFINE_BOOL(native_stencil_value_output, true, "GPU", "Enable native stencil value output");
 
 namespace rex::graphics::ngpu_d3d12 {
 

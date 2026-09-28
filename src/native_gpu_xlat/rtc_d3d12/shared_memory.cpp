@@ -43,9 +43,16 @@ std::atomic<uint64_t> g_reach_max_run{0}, g_reach_adds{0}, g_reach_runs{0}, g_re
 #include <rex/math.h>
 #include "rtc_d3d12/d3d12_util.h"
 
-bool& FLAGS_d3d12_tiled_shared_memory_storage_() { static bool s = ::ng2::ngpu::xlat::PluginBool("d3d12_tiled_shared_memory", true); return s; }
+// [no-dll] registered here since rexgpu-xenos.dll is gone (gen_gpu_cvars.py, verbatim from the fork)
+REXCVAR_DEFINE_BOOL(d3d12_tiled_shared_memory, true, "GPU/D3D12",
+                    "Use tiled shared memory on D3D12")
+    .lifecycle(rex::cvar::Lifecycle::kRequiresRestart);
 
-int32_t& FLAGS_shared_memory_upload_threads_storage_() { static int32_t s = ::ng2::ngpu::xlat::PluginInt("shared_memory_upload_threads", 3); return s; }
+// [no-dll] registered here since rexgpu-xenos.dll is gone (gen_gpu_cvars.py, verbatim from the fork)
+REXCVAR_DEFINE_INT32(shared_memory_upload_threads, 3, "GPU/D3D12",
+                     "Helper threads for the guest-memory to upload-buffer copies (0 = copy inline on the "
+                     "command thread; the market uploads ~18 MB a frame)")
+    .lifecycle(rex::cvar::Lifecycle::kHotReload);
 
 namespace rex::graphics::ngpu_d3d12 {
 

@@ -102,6 +102,7 @@ std::atomic<uint64_t> g_fe_seen{0};   // bridge draws that reached BridgeDraw (m
 std::atomic<uint32_t> g_bridge_frame{0};   // the bridge's swap count, stamped on p3_bridge.bin records
 uint32_t g_fe_mis[0x5000];
 std::atomic<uint64_t> g_fe_ops[128];
+void FeGateReport();   // [walk gate] below: packets with no front-end handling, early stops
 uint64_t g_fe_mis_memsrc = 0, g_fe_mis_memsrc_now_bridge = 0, g_fe_mis_packet = 0;
 std::mutex g_fe_mu;
 thread_local int t_fe_depth = 0;
@@ -236,6 +237,7 @@ uint32_t FeDecode(const uint8_t* body, uint32_t n, uint32_t phys_base) {
       const uint32_t op = (h >> 8) & 0x7F, cnt = ((h >> 16) & 0x3FFF) + 1;
       g_fe_ops[op].fetch_add(1, std::memory_order_relaxed);
       if (op == 0x64) { ++g_fe_frame; g_fe_ord.clear(); }   // XE_SWAP: a new frame for the ordinals
+      if (op == 0x64 && g_fe_frame % 1800 == 0) FeGateReport();   // every ~30 s at 60 fps
       // [p5] the side-effect packets: recorded as the plugin would perform them; register effects executed.
       if (!((h & 1) && (g_fe_bin_mask & g_fe_bin_select) == 0)) {
         auto* ksm = ks ? ks->memory() : nullptr;
@@ -269,14 +271,19 @@ uint32_t FeDecode(const uint8_t* body, uint32_t n, uint32_t phys_base) {
             if (g_p5exec && (wi & 0x100)) Px(1, wa, wd);   // a register write goes through FeSet below
             if (!(wi & 0x100) && wa < 0x5000) FeSet(wa, wd);
           }
+        } else if (op == 0x46 && cnt >= 1) {                          // EVENT_WRITE: the initiator writeback only
+          FeSet(0x21F9, be(i + 1) & 0x3F);                           // VGT_EVENT_INITIATOR, as the plugin writes it
         } else if (op == 0x58 && cnt >= 3) {                          // EVENT_WRITE_SHD
+          FeSet(0x21F9, be(i + 1) & 0x3F);                           // VGT_EVENT_INITIATOR
           const uint32_t ini = be(i + 1);
           P5Note((ini >> 31) ? 5 : 4, be(i + 2), (ini >> 31) ? g_fe_swap_counter : be(i + 3));
           if (g_p5exec) { if (ini >> 31) Px(2, be(i + 2)); else Px(1, be(i + 2), be(i + 3)); }
         } else if (op == 0x5A && cnt >= 2) {                          // EVENT_WRITE_EXT
+          FeSet(0x21F9, be(i + 1) & 0x3F);                           // VGT_EVENT_INITIATOR
           P5Note(6, be(i + 2), 0);
           if (g_p5exec) Px(9, be(i + 2));   // screen extents: the executor writes the plugin's fixed full-screen box
         } else if (op == 0x5B && cnt >= 1) {                          // EVENT_WRITE_ZPD
+          FeSet(0x21F9, be(i + 1) & 0x3F);                           // VGT_EVENT_INITIATOR
           P5Note(7, g_fe_regs[0x2325], be(i + 1));
           // Occlusion query: the executor fakes the result as the plugin does (a finished query reports samples
           // passed). Plugin parity only: NG2's census has no ZPD or EXT packets.
@@ -664,6 +671,32 @@ void P5Note(uint32_t kind, uint32_t addr, uint32_t value) {
   const uint32_t rec[4] = {f, kind, addr, value};
   std::fwrite(rec, sizeof(rec), 1, g_p5_f);
   ++g_p5_n;
+}
+
+// [walk gate] (user 2026-09-27: "walk in every stage to test to see if we are missing any gpu calls" before
+// rexgpu-xenos.dll goes). Every type-3 packet the front end has NO handling for, with counts since start - the
+// plugin acts on some of them (VIZ_QUERY 0x23, INDIRECT_BUFFER_PFD 0x37, INVALIDATE_STATE 0x3B, EVENT_WRITE 0x46,
+// ME_INIT 0x48, SET_CONSTANT2 0x55, SET_SHADER_CONSTANTS 0x56, CONTEXT_UPDATE 0x5E, ...), so a non-empty list
+// names what the own graphics system would drop - plus the decode early stops, which drop draws too.
+void FeGateReport() {
+  // Handled, or a no-op in the plugin as well: 0x3B INVALIDATE_STATE (the plugin reads the mask, its call is
+  // commented out), 0x48 ME_INIT (stored in a buffer nothing reads) - walk 2026-09-27, Chapter 6.
+  static const uint8_t kHandled[] = {0x10, 0x21, 0x22, 0x26, 0x27, 0x2B, 0x2D, 0x2F, 0x36, 0x3B, 0x3C, 0x3D, 0x3E,
+                                     0x3F, 0x45, 0x46, 0x48, 0x50, 0x51, 0x54, 0x58, 0x5A, 0x5B, 0x60, 0x61, 0x62,
+                                     0x63, 0x64};
+  std::string missing;
+  for (int o = 0; o < 128; ++o) {
+    const uint64_t v = g_fe_ops[o].load(std::memory_order_relaxed);
+    if (!v) continue;
+    bool handled = false;
+    for (uint8_t h : kHandled) handled |= (h == o);
+    if (!handled) missing += fmt::format(" {:02X}:{}", o, v);
+  }
+  REXLOG_INFO("[walk] frame {}: packets with no front-end handling:{} | early stops: ib unreadable {}, ib too deep {}, "
+              "short ring {} ib {}, resyncs {}, ring resets {}",
+              g_fe_frame, missing.empty() ? std::string(" none") : missing, g_fe_ib_unreadable.load(),
+              g_fe_ib_deep.load(), g_fe_stop_short_ring.load(), g_fe_stop_short_ib.load(), g_fe_resyncs.load(),
+              g_fe_ring_resets.load());
 }
 
 void FeReport(const char* why) {

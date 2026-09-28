@@ -27,7 +27,10 @@ namespace ng2::ngpu::xlat { bool PluginBool(const char*, bool); std::string Plug
 // [perf] What the replay hands the Direct3D 12 command list, per kind.
 std::atomic<uint32_t> g_dcl_command_counts[64];
 std::atomic<uint32_t> g_dcl_command_total{0};
-bool& FLAGS_gpu_dcl_census_storage_() { static bool s = ::ng2::ngpu::xlat::PluginBool("gpu_dcl_census", false); return s; }
+// [no-dll] registered here since rexgpu-xenos.dll is gone (gen_gpu_cvars.py, verbatim from the fork)
+REXCVAR_DEFINE_BOOL(gpu_dcl_census, false, "GPU/D3D12",
+                    "Count the Direct3D 12 commands replayed per kind (costs frames; diagnostic)")
+    .lifecycle(rex::cvar::Lifecycle::kHotReload);
 
 namespace rex::graphics::ngpu_d3d12 {
 

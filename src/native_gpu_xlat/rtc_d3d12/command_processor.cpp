@@ -40,9 +40,15 @@ uint64_t g_ng2_ph[12] = {};   // NG2 PATCH: [draw phases] QPC ticks per phase (s
 // [scene] Draw counts of the last presented guest frame, for the app's HUD
 // overlay: a frame that drew the 3D world has hundreds of depth-tested
 // draws, a frame of 2D menus only has none.
-int32_t& FLAGS_gpu_frame_draws_storage_() { static int32_t s = ::ng2::ngpu::xlat::PluginInt("gpu_frame_draws", 0); return s; }
-int32_t& FLAGS_gpu_frame_depth_draws_storage_() { static int32_t s = ::ng2::ngpu::xlat::PluginInt("gpu_frame_depth_draws", 0); return s; }
-int32_t& FLAGS_guest_fps_x10_storage_() { static int32_t s = ::ng2::ngpu::xlat::PluginInt("guest_fps_x10", 0); return s; }
+// [no-dll] registered here since rexgpu-xenos.dll is gone (gen_gpu_cvars.py, verbatim from the fork)
+REXCVAR_DEFINE_INT32(gpu_frame_draws, 0, "GPU", "Draws in the last presented guest frame (stat)");
+// [no-dll] registered here since rexgpu-xenos.dll is gone (gen_gpu_cvars.py, verbatim from the fork)
+REXCVAR_DEFINE_INT32(gpu_frame_depth_draws, 0, "GPU",
+                     "Depth-tested draws in the last presented guest frame (stat)");
+// [no-dll] registered here since rexgpu-xenos.dll is gone (gen_gpu_cvars.py, verbatim from the fork)
+REXCVAR_DEFINE_INT32(guest_fps_x10, 0, "GPU",
+                     "Guest frames per second x10 over the last second, from the game's "
+                     "swaps (the game's own rate, not the host present rate)");
 #include <rex/dbg.h>
 #include <rex/perf/counter.h>
 #include "rtc_d3d12/command_processor.h"
@@ -61,11 +67,19 @@ int32_t& FLAGS_guest_fps_x10_storage_() { static int32_t s = ::ng2::ngpu::xlat::
 #include "rtc_d3d12/graphics_system_standin.h"
 #include "rtc_d3d12/d3d12_util.h"
 
-bool& FLAGS_d3d12_bindless_storage_() { static bool s = ::ng2::ngpu::xlat::PluginBool("d3d12_bindless", true); return s; }
+// [no-dll] registered here since rexgpu-xenos.dll is gone (gen_gpu_cvars.py, verbatim from the fork)
+REXCVAR_DEFINE_BOOL(d3d12_bindless, true, "GPU/D3D12", "Use bindless resources where available")
+    .lifecycle(rex::cvar::Lifecycle::kRequiresRestart);
 
-bool& FLAGS_d3d12_readback_memexport_storage_() { static bool s = ::ng2::ngpu::rtc::NativeOwnsGuestMemory() ? ::ng2::ngpu::xlat::PluginBool("d3d12_readback_memexport", false) : false; return s; }   // NATIVE FORCED unless the native backend owns guest memory (plugin gpu_offload_to_native)
+// [no-dll] registered here since rexgpu-xenos.dll is gone (gen_gpu_cvars.py, verbatim from the fork)
+REXCVAR_DEFINE_BOOL(d3d12_readback_memexport, false, "GPU/D3D12",
+                    "Read data written by memory export in shaders on the CPU")
+    .lifecycle(rex::cvar::Lifecycle::kHotReload);
 
-bool& FLAGS_d3d12_readback_resolve_storage_() { static bool s = ::ng2::ngpu::rtc::NativeOwnsGuestMemory() ? ::ng2::ngpu::xlat::PluginBool("d3d12_readback_resolve", false) : false; return s; }   // NATIVE FORCED unless the native backend owns guest memory (plugin gpu_offload_to_native)
+// [no-dll] registered here since rexgpu-xenos.dll is gone (gen_gpu_cvars.py, verbatim from the fork)
+REXCVAR_DEFINE_BOOL(d3d12_readback_resolve, false, "GPU/D3D12",
+                    "Read render-to-texture results on the CPU")
+    .lifecycle(rex::cvar::Lifecycle::kHotReload);
 
 // A resolve at an address the readback has not seen waits for the whole GPU
 // queue before its copy (readback_resolve fast/some). Fable II's lake and its
@@ -76,7 +90,11 @@ bool& FLAGS_d3d12_readback_resolve_storage_() { static bool s = ::ng2::ngpu::rtc
 // Off: protecting and releasing three guest views per deferred resolve cost
 // two thirds of the frame rate in Bowerstone Market (21 vs 58-60 fps), and
 // the game's CPU touched none of those renders in four minutes there.
-bool& FLAGS_readback_land_before_texture_upload_storage_() { static bool s = ::ng2::ngpu::xlat::PluginBool("readback_land_before_texture_upload", true); return s; }
+// [no-dll] registered here since rexgpu-xenos.dll is gone (gen_gpu_cvars.py, verbatim from the fork)
+REXCVAR_DEFINE_BOOL(readback_land_before_texture_upload, true, "GPU/D3D12",
+                    "Before a texture loads from resident memory, land any completed deferred resolve "
+                    "copy into its range (fixes the black distant-impostor flash on reload frames)")
+    .lifecycle(rex::cvar::Lifecycle::kHotReload);
 static std::atomic<uint32_t> g_impostor_readbacks_landed{0};
 // [readback] Texture uploads that waited for a prior submission's readback, and
 // uploads that found a readback still in the OPEN submission (not awaitable here).
@@ -99,17 +117,68 @@ static std::atomic<uint64_t> g_landing_us{0};
 static std::atomic<uint64_t> g_landing_lock_us{0};
 static std::atomic<uint32_t> g_submission_count{0};
 static std::atomic<uint64_t> g_submission_us{0};
-bool& FLAGS_readback_resolve_on_demand_storage_() { static bool s = ::ng2::ngpu::rtc::NativeOwnsGuestMemory() ? ::ng2::ngpu::xlat::PluginBool("readback_resolve_on_demand", false) : false; return s; }   // NATIVE FORCED unless the native backend owns guest memory (plugin gpu_offload_to_native)
+// [no-dll] registered here since rexgpu-xenos.dll is gone (gen_gpu_cvars.py, verbatim from the fork)
+REXCVAR_DEFINE_BOOL(readback_resolve_on_demand, false, "GPU/D3D12",
+                    "Watch deferred resolve targets and land their copy the moment the CPU touches them")
+    .lifecycle(rex::cvar::Lifecycle::kHotReload);
 // An experiment for the impostor flashes that only a GPU drain seems to cure.
-int32_t& FLAGS_readback_resolve_drain_small_kb_storage_() { static int32_t s = ::ng2::ngpu::xlat::PluginInt("readback_resolve_drain_small_kb", 0); return s; }
-int32_t& FLAGS_readback_resolve_wait_only_kb_storage_() { static int32_t s = ::ng2::ngpu::xlat::PluginInt("readback_resolve_wait_only_kb", 0); return s; }
-int32_t& FLAGS_readback_resolve_drain_max_kb_storage_() { static int32_t s = ::ng2::ngpu::xlat::PluginInt("readback_resolve_drain_max_kb", 0); return s; }
-int32_t& FLAGS_readback_resolve_drain_large_kb_storage_() { static int32_t s = ::ng2::ngpu::xlat::PluginInt("readback_resolve_drain_large_kb", 0); return s; }
-bool& FLAGS_readback_resolve_keep_superseded_storage_() { static bool s = ::ng2::ngpu::xlat::PluginBool("readback_resolve_keep_superseded", true); return s; }
-bool& FLAGS_readback_resolve_mirror_unscaled_storage_() { static bool s = ::ng2::ngpu::rtc::NativeOwnsGuestMemory() ? ::ng2::ngpu::xlat::PluginBool("readback_resolve_mirror_unscaled", false) : false; return s; }   // NATIVE FORCED unless the native backend owns guest memory (plugin gpu_offload_to_native)
-bool& FLAGS_readback_resolve_split_before_load_storage_() { static bool s = ::ng2::ngpu::xlat::PluginBool("readback_resolve_split_before_load", false); return s; }
-int32_t& FLAGS_readback_resolve_submit_small_kb_storage_() { static int32_t s = ::ng2::ngpu::xlat::PluginInt("readback_resolve_submit_small_kb", 0); return s; }
-int32_t& FLAGS_readback_resolve_rebind_small_kb_storage_() { static int32_t s = ::ng2::ngpu::xlat::PluginInt("readback_resolve_rebind_small_kb", 0); return s; }
+// [no-dll] registered here since rexgpu-xenos.dll is gone (gen_gpu_cvars.py, verbatim from the fork)
+REXCVAR_DEFINE_INT32(readback_resolve_drain_small_kb, 0, "GPU/D3D12",
+                     "With readback_resolve=some, wait for the GPU after every resolve of at most this many KB (0 = never)")
+    .lifecycle(rex::cvar::Lifecycle::kHotReload);
+// [no-dll] registered here since rexgpu-xenos.dll is gone (gen_gpu_cvars.py, verbatim from the fork)
+REXCVAR_DEFINE_INT32(readback_resolve_wait_only_kb, 0, "GPU/D3D12",
+                     "Experiment: at every resolve of at least this many KB wait for the GPU queue as the "
+                     "drain does, but keep the copy on the asynchronous path (0 = off) - splits the drain's "
+                     "cure into its wait and its immediate copy")
+    .lifecycle(rex::cvar::Lifecycle::kHotReload);
+// [no-dll] registered here since rexgpu-xenos.dll is gone (gen_gpu_cvars.py, verbatim from the fork)
+REXCVAR_DEFINE_INT32(readback_resolve_drain_max_kb, 0, "GPU/D3D12",
+                     "Experiment: with readback_resolve_drain_large_kb, drain only resolves of at most this "
+                     "many KB (0 = no upper bound)")
+    .lifecycle(rex::cvar::Lifecycle::kHotReload);
+// [no-dll] registered here since rexgpu-xenos.dll is gone (gen_gpu_cvars.py, verbatim from the fork)
+REXCVAR_DEFINE_INT32(readback_resolve_drain_large_kb, 0, "GPU/D3D12",
+                     "Wait for the GPU and land the copy synchronously for every resolve of at least this "
+                     "many KB, so a large render-to-texture (sky, water, a distant impostor) is valid in "
+                     "guest memory before any texture reads it - the white/magenta streaming flash was such "
+                     "a target uploaded while its readback was still in flight. Small resolves stay async. "
+                     "0 = never (costs frame rate in proportion to how many big resolves a scene streams).")
+    .lifecycle(rex::cvar::Lifecycle::kHotReload);
+// [no-dll] registered here since rexgpu-xenos.dll is gone (gen_gpu_cvars.py, verbatim from the fork)
+REXCVAR_DEFINE_BOOL(readback_resolve_keep_superseded, true, "GPU/D3D12",
+                    "Keep a deferred resolve copy pending when the same target is resolved again "
+                    "before it landed (it lands when its submission completes, from the same buffer), "
+                    "instead of dropping it and leaving the CPU copy stale - the stale bytes were "
+                    "uploaded over the render on the next invalidation: the white/violet impostor flash")
+    .lifecycle(rex::cvar::Lifecycle::kHotReload);
+// [no-dll] registered here since rexgpu-xenos.dll is gone (gen_gpu_cvars.py, verbatim from the fork)
+REXCVAR_DEFINE_BOOL(readback_resolve_mirror_unscaled, false, "GPU/D3D12",
+                    "At a draw resolution scale above 1, also copy the 1x downscale of every resolve "
+                    "into the unscaled shared memory buffer on the GPU (the resolve itself only writes "
+                    "the scaled buffer), so a texture loaded from the unscaled copy of a resolved range "
+                    "shows the render and not the stale fill the CPU last uploaded there - the "
+                    "white/magenta impostor flash. One GPU buffer copy per resolve, no wait (0.2.11)")
+    .lifecycle(rex::cvar::Lifecycle::kHotReload);
+// [no-dll] registered here since rexgpu-xenos.dll is gone (gen_gpu_cvars.py, verbatim from the fork)
+REXCVAR_DEFINE_BOOL(readback_resolve_split_before_load, false, "GPU/D3D12",
+                    "End the GPU submission (a full sync, no wait) right before a texture is loaded "
+                    "from memory the GPU resolved in the still-open submission - the streaming "
+                    "flash's hazard - instead of after every resolve (readback_resolve_submit_small_kb): "
+                    "hundreds of splits a second instead of thousands (0.2.11)")
+    .lifecycle(rex::cvar::Lifecycle::kHotReload);
+// [no-dll] registered here since rexgpu-xenos.dll is gone (gen_gpu_cvars.py, verbatim from the fork)
+REXCVAR_DEFINE_INT32(readback_resolve_submit_small_kb, 0, "GPU/D3D12",
+                     "End the submission (no wait) after every deferred resolve of at most this many KB (0 = never); "
+                     "a command-list boundary is a full GPU barrier and stops the white impostor flashes. "
+                     "Was 64: the larger resolves (sky, water, the distant impostors) flashed too, and the 0.2.10 "
+                     "drain that cured them was this boundary plus a wait for the whole queue; the boundary "
+                     "alone is the cure without the wait (0.2.11)")
+    .lifecycle(rex::cvar::Lifecycle::kHotReload);
+// [no-dll] registered here since rexgpu-xenos.dll is gone (gen_gpu_cvars.py, verbatim from the fork)
+REXCVAR_DEFINE_INT32(readback_resolve_rebind_small_kb, 0, "GPU/D3D12",
+                     "Experiment: re-bind the render targets after every deferred resolve of at most this many KB (0 = never)")
+    .lifecycle(rex::cvar::Lifecycle::kHotReload);
 static std::atomic<uint32_t> g_resolve_splits{0};
 // [readback] Size census of the deferred resolves: <=64K, <=256K, <=1M,
 // <=4M, >4M guest bytes.
@@ -118,25 +187,109 @@ static std::atomic<uint64_t> g_upload_bytes_window{0};  // [perf] uploads per fe
 static std::atomic<uint32_t> g_upload_copies_window{0};  // [perf] upload copies per window
 extern std::atomic<uint32_t> g_dcl_command_counts[64];
 extern std::atomic<uint32_t> g_dcl_command_total;
-bool& FLAGS_readback_resolve_uav_barrier_storage_() { static bool s = ::ng2::ngpu::xlat::PluginBool("readback_resolve_uav_barrier", false); return s; }
-int32_t& FLAGS_fable2_menu_letterbox_gap_ms_storage_() { static int32_t s = ::ng2::ngpu::xlat::PluginInt("fable2_menu_letterbox_gap_ms", 150); return s; }
-double& FLAGS_fable2_uw_2d_k_storage_() { static double s = ::ng2::ngpu::xlat::PluginDouble("fable2_uw_2d_k", 0.0); return s; }
-int32_t& FLAGS_gpu_draw_dump_frames_storage_() { static int32_t s = ::ng2::ngpu::xlat::PluginInt("gpu_draw_dump_frames", 0); return s; }
-std::string& FLAGS_gpu_draw_dump_file_storage_() { static std::string s = ::ng2::ngpu::xlat::PluginString("gpu_draw_dump_file", ""); return s; }
-bool& FLAGS_readback_await_before_texture_upload_storage_() { static bool s = ::ng2::ngpu::xlat::PluginBool("readback_await_before_texture_upload", true); return s; }
-int32_t& FLAGS_shared_memory_upload_spin_ns_storage_() { static int32_t s = ::ng2::ngpu::xlat::PluginInt("shared_memory_upload_spin_ns", 0); return s; }
-int32_t& FLAGS_shared_memory_upload_touch_bytes_storage_() { static int32_t s = ::ng2::ngpu::xlat::PluginInt("shared_memory_upload_touch_bytes", 0); return s; }
-bool& FLAGS_readback_fast_path_gpu_written_storage_() { static bool s = ::ng2::ngpu::xlat::PluginBool("readback_fast_path_gpu_written", false); return s; }
-bool& FLAGS_shared_memory_upload_reach_storage_() { static bool s = ::ng2::ngpu::xlat::PluginBool("shared_memory_upload_reach", false); return s; }
+// [no-dll] registered here since rexgpu-xenos.dll is gone (gen_gpu_cvars.py, verbatim from the fork)
+REXCVAR_DEFINE_BOOL(readback_resolve_uav_barrier, false, "GPU/D3D12",
+                    "Experiment: explicit UAV barriers on the shared memory and EDRAM buffers after every resolve")
+    .lifecycle(rex::cvar::Lifecycle::kHotReload);
+// [no-dll] registered here since rexgpu-xenos.dll is gone (gen_gpu_cvars.py, verbatim from the fork)
+REXCVAR_DEFINE_INT32(fable2_menu_letterbox_gap_ms, 150, "GPU/D3D12",
+                     "Fable II ultrawide: a world scene whose camera has been stale this many ms is a "
+                     "full-screen pause/Up menu; the app fades to black over its open/close to hide the "
+                     "game's aspect blip (0 = no fade; the app reads this)")
+    .lifecycle(rex::cvar::Lifecycle::kHotReload);
+// [no-dll] registered here since rexgpu-xenos.dll is gone (gen_gpu_cvars.py, verbatim from the fork)
+REXCVAR_DEFINE_DOUBLE(fable2_uw_2d_k, 0.0, "GPU/D3D12",
+                      "Fable II ultrawide: scale the 2D HUD's pixel-to-clip constant (c8) x by this factor "
+                      "(16:9 / display aspect) so the HUD keeps its proportions; 0 = off")
+    .lifecycle(rex::cvar::Lifecycle::kHotReload);
+// [no-dll] registered here since rexgpu-xenos.dll is gone (gen_gpu_cvars.py, verbatim from the fork)
+REXCVAR_DEFINE_INT32(gpu_draw_dump_frames, 0, "GPU/D3D12",
+                     "Diagnostic: write one line per draw for this many guest frames to "
+                     "gpu_draw_dump_file, then reset to 0 (the app's pad command dump:N sets it)")
+    .lifecycle(rex::cvar::Lifecycle::kHotReload);
+// [no-dll] registered here since rexgpu-xenos.dll is gone (gen_gpu_cvars.py, verbatim from the fork)
+REXCVAR_DEFINE_STRING(gpu_draw_dump_file, "", "GPU/D3D12",
+                      "Diagnostic: the file gpu_draw_dump_frames writes its per-draw lines to")
+    .lifecycle(rex::cvar::Lifecycle::kHotReload);
+// [no-dll] registered here since rexgpu-xenos.dll is gone (gen_gpu_cvars.py, verbatim from the fork)
+REXCVAR_DEFINE_BOOL(readback_await_before_texture_upload, true, "GPU/D3D12",
+                    "A texture upload that reads guest memory still waiting for a resolve readback "
+                    "from an EARLIER submission waits for that submission (only) and lands the copy "
+                    "first, so it never uploads stale bytes (the white/magenta streaming flash). "
+                    "Replaces the resolve-time drain (readback_resolve_drain_large_kb), which "
+                    "waited for the whole GPU queue at every large resolve: 28-38 guest fps in town.")
+    .lifecycle(rex::cvar::Lifecycle::kHotReload);
+// [no-dll] registered here since rexgpu-xenos.dll is gone (gen_gpu_cvars.py, verbatim from the fork)
+REXCVAR_DEFINE_INT32(shared_memory_upload_spin_ns, 0, "GPU/D3D12",
+                     "Diagnostic: busy-spin this many nanoseconds per upload range, touching "
+                     "nothing. Pure latency with no memory access - if this alone suppresses "
+                     "the NG2 freeze, the freeze is a timing race and no volume story explains it")
+    .lifecycle(rex::cvar::Lifecycle::kHotReload);
+// [no-dll] registered here since rexgpu-xenos.dll is gone (gen_gpu_cvars.py, verbatim from the fork)
+REXCVAR_DEFINE_INT32(shared_memory_upload_touch_bytes, 0, "GPU/D3D12",
+                     "Diagnostic: read this many bytes from the start of each page of each "
+                     "upload range into a volatile sink, hashing nothing (0 = off). One probe "
+                     "with one parameter, so a difference between legs cannot be a difference "
+                     "between probes. 1 byte holds residency constant at near-zero bandwidth; "
+                     "4096 is the same traffic as the churn probe with none of its compute. If "
+                     "suppression tracks the byte count, the mechanism is memory traffic; if "
+                     "only hashing suppresses, it is the work and not the read")
+    .lifecycle(rex::cvar::Lifecycle::kHotReload);
+// [no-dll] registered here since rexgpu-xenos.dll is gone (gen_gpu_cvars.py, verbatim from the fork)
+REXCVAR_DEFINE_BOOL(readback_fast_path_gpu_written, false, "GPU/D3D12",
+                    "The impostor readback fast path asks whether the pages it is about to "
+                    "skip a wait for are already correct in the GPU buffer. TRUE asks "
+                    "GPU-written, FALSE asks merely valid, which is what shipped in v0.2.12. "
+                    "The two are the same question only while clear_memory_page_state is off. "
+                    "MEASURED, two alternating rounds on a quiet machine: the rounds "
+                    "DISAGREED in direction (46.0/45.7 then 46.9/47.1 fps) and the waits "
+                    "it exists to avoid did not move (3263/3239 then 3324/3329 per 5 s), "
+                    "so it makes no difference to Fable in the scene sampled. Defaulted "
+                    "FALSE, which is what v0.2.12 shipped, because a change with no "
+                    "measurable effect whose original justification was disproved should "
+                    "not ride along inside a hotfix. The code stays, so a title that does "
+                    "exercise this path can turn it on")
+    .lifecycle(rex::cvar::Lifecycle::kHotReload);
+// [no-dll] registered here since rexgpu-xenos.dll is gone (gen_gpu_cvars.py, verbatim from the fork)
+REXCVAR_DEFINE_BOOL(shared_memory_upload_reach, false, "GPU/D3D12",
+                    "Diagnostic: report how often a single contiguous dirty upload run reaches "
+                    "the 256 KB threshold that hands the copy to the worker pool, and the "
+                    "largest one seen. Answers whether a title exercises the pool at all - "
+                    "unreachable and merely unobserved are different claims and only this "
+                    "tells them apart")
+    .lifecycle(rex::cvar::Lifecycle::kHotReload);
 // NATIVE PATCH (2026-09-26): on in the native backend unless ngpu_backend_upload_skip=false (D4: 57.95 -> 59.78 fps,
 // spread 4.5 -> 0.6, with the XXH3 page hash); the plugin setting can still force it on.
 namespace ng2::ngpu::rtc { bool NgpuBackendUploadSkipCvar(); }
-bool& FLAGS_shared_memory_upload_skip_unchanged_storage_() { static bool s = ::ng2::ngpu::xlat::PluginBool("shared_memory_upload_skip_unchanged", false) || ::ng2::ngpu::rtc::NgpuBackendUploadSkipCvar(); return s; }
-bool& FLAGS_shared_memory_upload_churn_storage_() { static bool s = ::ng2::ngpu::xlat::PluginBool("shared_memory_upload_churn", false); return s; }
-int32_t& FLAGS_fable2_2d_census_storage_() { static int32_t s = ::ng2::ngpu::xlat::PluginInt("fable2_2d_census", 0); return s; }
-int32_t& FLAGS_readback_resolve_sync_budget_storage_() { static int32_t s = ::ng2::ngpu::xlat::PluginInt("readback_resolve_sync_budget", 8); return s; }
+// [no-dll] registered here since rexgpu-xenos.dll is gone (gen_gpu_cvars.py, verbatim from the fork)
+REXCVAR_DEFINE_BOOL(shared_memory_upload_skip_unchanged, false, "GPU/D3D12",
+                    "Skip the upload of any 4 KB page whose bytes are identical to the ones "
+                    "last uploaded for it - the GPU buffer already holds them. Under "
+                    "clear_memory_page_state 71% of the upload volume is such bytes. Safe "
+                    "because a GPU write to a page evicts its recorded hash, so the skip can "
+                    "never leave a resolve output where CPU data belongs")
+    .lifecycle(rex::cvar::Lifecycle::kHotReload);
+// [no-dll] registered here since rexgpu-xenos.dll is gone (gen_gpu_cvars.py, verbatim from the fork)
+REXCVAR_DEFINE_BOOL(shared_memory_upload_churn, false, "GPU/D3D12",
+                    "Diagnostic: hash a sample of every re-uploaded range and report how much of "
+                    "the upload volume is bytes that did not change since they were last uploaded. "
+                    "With clear_memory_page_state on a title re-reads its CPU-sourced working set "
+                    "every frame; this says whether that work is necessary or waste")
+    .lifecycle(rex::cvar::Lifecycle::kHotReload);
+// [no-dll] registered here since rexgpu-xenos.dll is gone (gen_gpu_cvars.py, verbatim from the fork)
+REXCVAR_DEFINE_INT32(fable2_2d_census, 0, "GPU/D3D12",
+                     "Diagnostic: log the first N distinct vertex shaders with their 2D/3D classification")
+    .lifecycle(rex::cvar::Lifecycle::kHotReload);
+// [no-dll] registered here since rexgpu-xenos.dll is gone (gen_gpu_cvars.py, verbatim from the fork)
+REXCVAR_DEFINE_INT32(readback_resolve_sync_budget, 8, "GPU/D3D12",
+                     "Resolve readbacks per frame that may wait for the GPU before copying; "
+                     "the rest are copied when their submission completes (0 = never wait)")
+    .lifecycle(rex::cvar::Lifecycle::kHotReload);
 
-bool& FLAGS_d3d12_submit_on_primary_buffer_end_storage_() { static bool s = ::ng2::ngpu::xlat::PluginBool("d3d12_submit_on_primary_buffer_end", true); return s; }
+// [no-dll] registered here since rexgpu-xenos.dll is gone (gen_gpu_cvars.py, verbatim from the fork)
+REXCVAR_DEFINE_BOOL(d3d12_submit_on_primary_buffer_end, true, "GPU/D3D12",
+                    "Submit command list when PM4 primary buffer ends")
+    .lifecycle(rex::cvar::Lifecycle::kHotReload);
 
 extern "C" void RexNgpuNotifyResolve();
 
@@ -2668,10 +2821,17 @@ void D3D12CommandProcessor::IssueSwap(uint32_t frontbuffer_ptr, uint32_t frontbu
     // world: a card, a video, the title menus) the world must now persist 90 frames (1.5 s) before the fill; the
     // glimpse stays in the 16:9 centre as the game draws it, and the switch lands in the game's own black. The Start
     // menu keeps the world drawn behind it, so leaving it still enters in 2 frames. NG2_UW_ENTER_FRAMES overrides 90.
+    // 2026-09-28 (user: "after going through the door the screen gets squished for a second before the intermission
+    // starts"): a cinematic's own black gap is an absence of the world too, and the 1.5 s entry pillarboxed the
+    // cinematic's first second and a half. The long entry is for what follows a CARD or a MENU - frames drawing the
+    // menu mist (the Chapter card logs mist=2, the title menus draw it) - so it arms only if the absence had mist.
+    static bool s_uw_absence_mist = false;
     if (has_world) {
       s_uw_noworld_streak = 0;
-    } else if (++s_uw_noworld_streak >= 60) {
-      s_uw_after_absence = true;
+      s_uw_absence_mist = false;
+    } else {
+      if (cnt_mist > 0) s_uw_absence_mist = true;
+      if (++s_uw_noworld_streak >= 60 && s_uw_absence_mist) s_uw_after_absence = true;
     }
     static const int s_uw_enter_after_absence = [] {
       const char* e = std::getenv("NG2_UW_ENTER_FRAMES");
@@ -5704,8 +5864,10 @@ void D3D12CommandProcessor::UpdateSystemConstantValues(
 }
 
 float D3D12CommandProcessor::C8QuadSpan(const D3D12Shader* vertex_shader, float& x_min,
-                                        float& x_max) const {
+                                        float& x_max, float* y_min, float* y_max) const {
   x_min = x_max = 0.0f;
+  if (y_min) *y_min = 0.0f;
+  if (y_max) *y_max = 0.0f;
   if (!uw_ppr_ || uw_ppr_->host_draw_vertex_count == 0 || uw_ppr_->host_draw_vertex_count > 6) {
     return -1.0f;
   }
@@ -5749,15 +5911,29 @@ float D3D12CommandProcessor::C8QuadSpan(const D3D12Shader* vertex_shader, float&
       }
     }
     const uint64_t at = uint64_t(index) * stride + offset;
-    if (at + 4 > buffer_bytes) return -1.0f;
+    if (at + (y_min ? 8 : 4) > buffer_bytes) return -1.0f;
     uint32_t raw_x;
     std::memcpy(&raw_x, base + at, 4);
     raw_x = xenos::GpuSwap(raw_x, vf.endian);
     float x;
     std::memcpy(&x, &raw_x, 4);
     if (!(x == x) || x < -1e5f || x > 1e5f) return -1.0f;
-    if (first) { x_min = x_max = x; first = false; }
-    else { x_min = std::min(x_min, x); x_max = std::max(x_max, x); }
+    float y = 0.0f;
+    if (y_min) {   // [ng2-2d full-screen] the position's second component
+      uint32_t raw_y;
+      std::memcpy(&raw_y, base + at + 4, 4);
+      raw_y = xenos::GpuSwap(raw_y, vf.endian);
+      std::memcpy(&y, &raw_y, 4);
+      if (!(y == y) || y < -1e5f || y > 1e5f) return -1.0f;
+    }
+    if (first) {
+      x_min = x_max = x;
+      if (y_min) { *y_min = *y_max = y; }
+      first = false;
+    } else {
+      x_min = std::min(x_min, x); x_max = std::max(x_max, x);
+      if (y_min) { *y_min = std::min(*y_min, y); *y_max = std::max(*y_max, y); }
+    }
   }
   return x_max - x_min;
 }
@@ -5924,6 +6100,25 @@ bool D3D12CommandProcessor::UpdateBindings(const D3D12Shader* vertex_shader,
     std::memcpy(system_constants, &system_constants_, sizeof(system_constants_));
     cbuffer_binding_system_.up_to_date = true;
     current_graphics_root_up_to_date_ &= ~(1u << root_parameter_system_constants);
+  }
+  // [ng2-2d full-screen] Is this draw a quad covering the whole 1280x720 UI canvas? Decided here, per draw, because
+  // the column-0 compression is applied to the UPLOADED constants and a quad reusing the HUD's constant block would
+  // inherit the HUD's compressed ortho: when the decision differs from the one the current buffer was built with,
+  // the constants are uploaded again (so the overlay is not compressed and the next HUD draw is again).
+  bool ng2_fs_quad = false;
+  {
+    static bool s_ng2_fs_uploaded = false;
+    const float fk = static_cast<float>(REXCVAR_GET(ng2_fov_k));
+    if (fk > 0.05f && fk < 1.5f && std::fabs(fk - 1.0f) > 1e-3f && uw_ppr_ &&
+        uw_ppr_->host_draw_vertex_count >= 3 && uw_ppr_->host_draw_vertex_count <= 6) {
+      float qx0 = 0.0f, qx1 = 0.0f, qy0 = 0.0f, qy1 = 0.0f;
+      if (C8QuadSpan(vertex_shader, qx0, qx1, &qy0, &qy1) >= 0.0f)
+        ng2_fs_quad = qx0 <= 16.0f && qx1 >= 1264.0f && qy0 <= 16.0f && qy1 >= 704.0f;
+    }
+    if (ng2_fs_quad != s_ng2_fs_uploaded) {
+      cbuffer_binding_float_vertex_.up_to_date = false;
+      s_ng2_fs_uploaded = ng2_fs_quad;
+    }
   }
   if (!cbuffer_binding_float_vertex_.up_to_date) {
     // Even if the shader doesn't need any float constants, a valid binding must
@@ -6321,6 +6516,20 @@ bool D3D12CommandProcessor::UpdateBindings(const D3D12Shader* vertex_shader,
           // and loading the ONLY textureless 2D UI draw is the fade - the HUD,
           // menus and cards are all textured - so this cleanly identifies the
           // fade without touching anything else.
+          // [ng2-2d full-screen] 2026-09-28 (user repro, Chapter 7: "after going through the door the screen gets
+          // squished" and, before the fight, "black with the gameplay showing on each side"): NG2 draws its scene
+          // transitions as a full-screen 2D quad - a copy of the rendered frame (ps 46BAB03B, a 1280x720 GPU-written
+          // texture: the old frame over the new scene at the door, black at the cut) or a tinted fill - and the
+          // column-0 compression squeezed it into the 16:9 centre like HUD while the widened world showed on the
+          // sides (draw dump dd_dump.txt, 2026-09-28 06:32). A 2D quad that covers the whole 1280x720 UI canvas is a
+          // full-screen overlay, never HUD (a HUD bar can span the width, never the height), so it is not compressed.
+          const bool full_screen_2d = info.kind == 2 && ng2_fs_quad;
+          if (full_screen_2d && pixel_shader) {
+            static std::unordered_set<uint64_t> s_fs_seen;
+            if (s_fs_seen.size() < 64 && s_fs_seen.insert(pixel_shader->ucode_data_hash()).second)
+              REXLOG_INFO("[ng2-2d] full-screen 2D overlay (not compressed): ps {:016X}",
+                          pixel_shader->ucode_data_hash());
+          }
           const bool is_solid_2d =
               info.kind == 2 &&
               (!pixel_shader ||
@@ -6338,7 +6547,7 @@ bool D3D12CommandProcessor::UpdateBindings(const D3D12Shader* vertex_shader,
           // the presenter stretches to a flat full-width black - instead of a
           // centred 16:9 black band with the FOV-widened 3D leaking through on the
           // sides (the old "black centre, scene on the sides" fade).
-          if (gameplay && !is_solid_2d) {
+          if (gameplay && !is_solid_2d && !full_screen_2d) {
             const uint32_t B = info.base;
             uint32_t pos = 0;
             const uint32_t wrd = B >> 6, b = B & 63;

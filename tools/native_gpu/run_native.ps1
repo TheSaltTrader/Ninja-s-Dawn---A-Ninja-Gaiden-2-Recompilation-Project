@@ -52,15 +52,21 @@ $marker = Join-Path $bin "STAGED.txt"
 
 function Die($msg) { Write-Host "REFUSED: $msg"; exit 1 }
 if (-not (Test-Path $exe)) { Die "no $exe" }
-foreach ($d in @("rexgpu-xenos.dll", "rexruntime.dll")) {
+# NG2_NO_PLUGIN=1 (2026-09-27, rexgpu-xenos.dll removed): stage the runtime only, and MOVE any plugin DLL out of the
+# run folder for the run (restored after), so the exe is proven to run with no plugin present.
+$noPlugin = ($env:NG2_NO_PLUGIN -eq "1")
+$needed = if ($noPlugin) { @("rexruntime.dll") } else { @("rexgpu-xenos.dll", "rexruntime.dll") }
+foreach ($d in $needed) {
   if (-not (Test-Path (Join-Path $Pair $d))) { Die "no $d in $Pair" }
 }
 # Content, not origin: the pair must carry the exports and the NG2 features the ledger names.
-$plugin = [IO.File]::ReadAllBytes((Join-Path $Pair "rexgpu-xenos.dll"))
+$plugin = if ($noPlugin) { $null } else { [IO.File]::ReadAllBytes((Join-Path $Pair "rexgpu-xenos.dll")) }
 $runtime = [IO.File]::ReadAllBytes((Join-Path $Pair "rexruntime.dll"))
 function Has($bytes, $needle) { ([Text.Encoding]::ASCII.GetString($bytes)).Contains($needle) }
-foreach ($n in @("RexNgpuSetDrawCallback", "RexNgpuSetSwapCallback", "RexNgpuDirtyRegs", "ng2_uw_mode", "solid2d", "pointers reset", "[texpack]")) {
-  if (-not (Has $plugin $n)) { Die "the plugin in $Pair lacks '$n'" }
+if (-not $noPlugin) {
+  foreach ($n in @("RexNgpuSetDrawCallback", "RexNgpuSetSwapCallback", "RexNgpuDirtyRegs", "ng2_uw_mode", "solid2d", "pointers reset", "[texpack]")) {
+    if (-not (Has $plugin $n)) { Die "the plugin in $Pair lacks '$n'" }
+  }
 }
 foreach ($n in @("ng2_uw_mode", "video_mode_explicit")) {
   if (-not (Has $runtime $n)) { Die "the runtime in $Pair lacks '$n'" }
@@ -104,10 +110,15 @@ try {
 
   # 2. Stage the pair.
   New-Item -ItemType Directory -Force $backupDlls | Out-Null
-  Copy-Item (Join-Path $bin "rexgpu-xenos.dll") $backupDlls -Force
+  if (Test-Path (Join-Path $bin "rexgpu-xenos.dll")) { Copy-Item (Join-Path $bin "rexgpu-xenos.dll") $backupDlls -Force }
   Copy-Item (Join-Path $bin "rexruntime.dll") $backupDlls -Force
   "STAGED plugin pair from $Pair by run_native.ps1 at $stamp - the original DLLs are in $backupDlls; copy them back if this file is still here after the game has exited." | Out-File -Encoding ascii $marker
-  Copy-Item (Join-Path $Pair "rexgpu-xenos.dll") $bin -Force
+  if ($noPlugin) {
+    Remove-Item (Join-Path $bin "rexgpu-xenos.dll") -Force -ErrorAction SilentlyContinue   # its copy is in $backupDlls
+    Write-Host "NO PLUGIN: rexgpu-xenos.dll is not in the run folder for this run"
+  } else {
+    Copy-Item (Join-Path $Pair "rexgpu-xenos.dll") $bin -Force
+  }
   Copy-Item (Join-Path $Pair "rexruntime.dll") $bin -Force
 
   # 3. The saves.
@@ -178,11 +189,13 @@ try {
 }
 finally {
   # 5. Restore, always.
-  if (Test-Path (Join-Path $backupDlls "rexgpu-xenos.dll")) {
-    Copy-Item (Join-Path $backupDlls "rexgpu-xenos.dll") $bin -Force
-    Copy-Item (Join-Path $backupDlls "rexruntime.dll") $bin -Force
+  $restored = @()
+  foreach ($d in @("rexgpu-xenos.dll", "rexruntime.dll")) {
+    if (Test-Path (Join-Path $backupDlls $d)) { Copy-Item (Join-Path $backupDlls $d) $bin -Force; $restored += $d }
+  }
+  if ($restored.Count -gt 0) {
     Remove-Item $marker -ErrorAction SilentlyContinue
-    Write-Host "restored the previous DLL pair"
+    Write-Host "restored the previous DLLs: $($restored -join ', ')"
   }
   if (Test-Path (Join-Path $saveBackup "user")) {
     robocopy (Join-Path $saveBackup "user") (Join-Path $bin "user") /MIR /NFL /NDL /NJH /NJS | Out-Null

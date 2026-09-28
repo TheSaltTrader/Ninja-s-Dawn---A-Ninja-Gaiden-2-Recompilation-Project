@@ -387,14 +387,6 @@ NativeGraphicsSystem* g_gs = nullptr;
 
 }  // namespace
 
-bool Requested(bool row_on) {
-  static const bool on = [row_on] {
-    if (const char* e = std::getenv("NG2_NATIVE_GS"); e && *e) return *e != '0';
-    if (const char* g = std::getenv("NG2_NATIVE_GPU"); g && *g) return *g != '0';
-    return row_on;
-  }();
-  return on;
-}
 
 std::unique_ptr<rex::system::IGraphicsSystem> Create() {
   if (!rex::ui::d3d12::D3D12Provider::IsD3D12APIAvailable()) return nullptr;

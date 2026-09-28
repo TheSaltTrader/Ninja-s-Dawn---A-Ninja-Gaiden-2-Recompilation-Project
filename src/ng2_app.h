@@ -73,22 +73,24 @@ class Ng2App : public rex::ReXApp {
         PPCImageConfig));
   }
 
-  // Select the Xenos GPU emulation plugin. Without this the runtime comes up
-  // in "native rendering mode" and every Vd* kernel call is ignored, so the
-  // guest never gets a ring buffer. CMakeLists stages rexgpu-xenos.dll next to
-  // the executable via GPU_PLUGINS.
+  // The game's own graphics system (ng2_native_gs.cpp) - the only GPU path since 2026-09-27: rexgpu-xenos.dll is no
+  // longer built, staged or loaded. Every setting it used to register is registered by the exe itself
+  // (ng2_gpu_cvars.cpp and the vendored backend's REXCVAR_DEFINEs, tools/native_gpu/gen_gpu_cvars.py). With
+  // config.graphics supplied the runtime loads no plugin (gpu_plugin stays empty). Without D3D12 there is no
+  // renderer at all, so that is a clear error rather than the runtime's "native rendering mode", where every Vd*
+  // call is ignored and the game never gets a ring buffer.
   void OnPreSetup(rex::RuntimeConfig& config) override {
-    config.gpu_plugin = "xenos";
-    // [gs] FULL NATIVE (settings row "Native renderer", ON by default; NG2_NATIVE_GS=1|0 overrides): the game's own
-    // graphics system instead of rexgpu-xenos's. The plugin DLL is still loaded as a plain library so the settings
-    // it defines (vsync, swap_post_effect, the texture pack, ng2_uw_mode / ng2_fov_k the presenter reads) stay
-    // registered; its graphics system is never created. NG2_NATIVE_GS=0 keeps the v1.1.0 one-window plugin path.
-    if (ng2::gs::Requested(settings_.native_renderer)) {
-      const HMODULE plugin = LoadLibraryA("rexgpu-xenos.dll");
-      config.graphics = ng2::gs::Create();
-      REXLOG_INFO("[gs] NG2_NATIVE_GS: own graphics system {} (plugin library {} for its settings)",
-                  config.graphics ? "created" : "UNAVAILABLE - falling back to the plugin", plugin ? "loaded" : "missing");
+    config.gpu_plugin.clear();
+    config.graphics = ng2::gs::Create();
+    if (!config.graphics) {
+      REXLOG_ERROR("[gs] Direct3D 12 is unavailable - the game's renderer cannot start");
+      MessageBoxA(nullptr,
+                  "Ninja Gaiden II needs a Direct3D 12 capable graphics card and driver.\n\n"
+                  "Direct3D 12 could not be initialised on this machine.",
+                  "Ninja Gaiden II", MB_OK | MB_ICONERROR);
+      ExitProcess(1);
     }
+    REXLOG_INFO("[gs] own graphics system created (no GPU plugin)");
 
     ApplyDisplaySettings();
     ApplyTuning();

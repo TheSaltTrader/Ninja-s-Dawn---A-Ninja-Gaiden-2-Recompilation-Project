@@ -33,13 +33,22 @@ namespace ng2::ngpu::xlat { bool PluginBool(const char*, bool); std::string Plug
 #include <rex/math.h>
 #include <rex/types.h>
 
-bool& FLAGS_force_convert_line_loops_to_strips_storage_() { static bool s = ::ng2::ngpu::xlat::PluginBool("force_convert_line_loops_to_strips", false); return s; }
+// [no-dll] registered here since rexgpu-xenos.dll is gone (gen_gpu_cvars.py, verbatim from the fork)
+REXCVAR_DEFINE_BOOL(force_convert_line_loops_to_strips, false, "GPU",
+                    "Force convert line loops to strips");
 
-bool& FLAGS_force_convert_quad_lists_to_triangle_lists_storage_() { static bool s = ::ng2::ngpu::xlat::PluginBool("force_convert_quad_lists_to_triangle_lists", false); return s; }
+// [no-dll] registered here since rexgpu-xenos.dll is gone (gen_gpu_cvars.py, verbatim from the fork)
+REXCVAR_DEFINE_BOOL(force_convert_quad_lists_to_triangle_lists, false, "GPU",
+                    "Force convert quad lists to triangle lists");
 
-bool& FLAGS_force_convert_triangle_fans_to_lists_storage_() { static bool s = ::ng2::ngpu::xlat::PluginBool("force_convert_triangle_fans_to_lists", false); return s; }
+// [no-dll] registered here since rexgpu-xenos.dll is gone (gen_gpu_cvars.py, verbatim from the fork)
+REXCVAR_DEFINE_BOOL(force_convert_triangle_fans_to_lists, false, "GPU",
+                    "Force convert triangle fans to lists");
 
-int32_t& FLAGS_primitive_processor_cache_min_indices_storage_() { static int32_t s = ::ng2::ngpu::xlat::PluginInt("primitive_processor_cache_min_indices", 0); return s; }
+// [no-dll] registered here since rexgpu-xenos.dll is gone (gen_gpu_cvars.py, verbatim from the fork)
+REXCVAR_DEFINE_INT32(primitive_processor_cache_min_indices, 0, "GPU",
+                     "Minimum indices for primitive processor cache")
+    .range(0, 1000000);
 
 // All these overrides are always safe to use as all backends are expected to
 // support triangle lists and line strips.

@@ -1,3 +1,4 @@
+#include <rex/cvar.h>
 // VENDORED from rexglue-src ng2 fork f6fc6d4c:src/graphics/d3d12/texture_cache.cpp - systematic renames only (see vendor_rtc_d3d12.py / ORIGIN.txt):
 // namespaces d3d12 -> ngpu_d3d12, plugin headers -> rtc_d3d12/facade.h, cvars -> plugin registry reads (4 bool, 2 string, 10 int).
 #include <string>
@@ -67,19 +68,38 @@ namespace texpack_shaders {
 // arrived through the tuning file at the next launch, and a player who ticked
 // "dump", walked the level and came back found nothing written and no way to
 // tell why.
-bool& FLAGS_texture_dump_storage_() { static bool s = ::ng2::ngpu::xlat::PluginBool("texture_dump", false); ::ng2::ngpu::xlat::RefreshBool("texture_dump", s); return s; }   // NATIVE PATCH: [live cvars] the app writes this while the game runs
-std::string& FLAGS_texture_dump_path_storage_() { static std::string s = ::ng2::ngpu::xlat::PluginString("texture_dump_path", ""); ::ng2::ngpu::xlat::RefreshString("texture_dump_path", s); return s; }   // NATIVE PATCH: [live cvars] the app writes this while the game runs
-bool& FLAGS_texture_pack_resolve_at_load_storage_() { static bool s = ::ng2::ngpu::xlat::PluginBool("texture_pack_resolve_at_load", true); return s; }
+// [no-dll] registered here since rexgpu-xenos.dll is gone (gen_gpu_cvars.py, verbatim from the fork)
+REXCVAR_DEFINE_BOOL(texture_dump, false, "GPU",
+                    "Dump every unique guest texture to texture_dump_path for "
+                    "offline decoding and upscaling. Off by default.")
+    .lifecycle(rex::cvar::Lifecycle::kHotReload);
+// [no-dll] registered here since rexgpu-xenos.dll is gone (gen_gpu_cvars.py, verbatim from the fork)
+REXCVAR_DEFINE_STRING(texture_dump_path, "", "GPU",
+                      "Where texture_dump writes. Empty = disabled.")
+    .lifecycle(rex::cvar::Lifecycle::kHotReload);
+// [no-dll] registered here since rexgpu-xenos.dll is gone (gen_gpu_cvars.py, verbatim from the fork)
+REXCVAR_DEFINE_BOOL(texture_pack_resolve_at_load, true, "GPU",
+                    "Match pack textures by the bytes in memory at LOAD, not at "
+                    "creation. Fixes streamed textures (e.g. NG2 chapter 10) whose "
+                    "bytes are not written yet at creation. Off by default.")
+    .lifecycle(rex::cvar::Lifecycle::kHotReload);
 // Live counts, for the on-screen indicator. These are cvars because the app
 // and the GPU plugin are separate DLLs with a one-way link, and the registry is
 // the channel that already crosses that boundary (REXCVAR_QUERY). They are
 // outputs, not settings - nothing should ever write them from a config file.
-int32_t& FLAGS_texture_pack_replaced_storage_() { static int32_t s = ::ng2::ngpu::xlat::PluginInt("texture_pack_replaced", 0); return s; }
-int32_t& FLAGS_texture_pack_original_storage_() { static int32_t s = ::ng2::ngpu::xlat::PluginInt("texture_pack_original", 0); return s; }
+// [no-dll] registered here since rexgpu-xenos.dll is gone (gen_gpu_cvars.py, verbatim from the fork)
+REXCVAR_DEFINE_INT32(texture_pack_replaced, 0, "GPU",
+                     "Read-only: textures loaded from the pack this run");
+// [no-dll] registered here since rexgpu-xenos.dll is gone (gen_gpu_cvars.py, verbatim from the fork)
+REXCVAR_DEFINE_INT32(texture_pack_original, 0, "GPU",
+                     "Read-only: textures loaded from the game this run");
 
 // Which chapter is loading, written by the app from the file the game opens
 // for it. 0 means "not in a chapter", which is the state during boot and menus.
-int32_t& FLAGS_texture_pack_chapter_storage_() { static int32_t s = ::ng2::ngpu::xlat::PluginInt("texture_pack_chapter", 0); ::ng2::ngpu::xlat::RefreshInt("texture_pack_chapter", s); return s; }   // NATIVE PATCH: [live cvars] the app writes this while the game runs
+// [no-dll] registered here since rexgpu-xenos.dll is gone (gen_gpu_cvars.py, verbatim from the fork)
+REXCVAR_DEFINE_INT32(texture_pack_chapter, 0, "GPU",
+                     "Chapter currently loading, for per-stage pack warming")
+    .lifecycle(rex::cvar::Lifecycle::kHotReload);
 
 // Warming progress, published for the app to draw and to hold input on.
 //
@@ -87,17 +107,69 @@ int32_t& FLAGS_texture_pack_chapter_storage_() { static int32_t s = ::ng2::ngpu:
 // separate modules: the app cannot see this translation unit, and the cvar
 // registry is the channel every other setting already uses. total > done means
 // a stage is still being read.
-int32_t& FLAGS_texture_warm_total_storage_() { static int32_t s = ::ng2::ngpu::xlat::PluginInt("texture_warm_total", 0); return s; }
-int32_t& FLAGS_texture_warm_done_storage_() { static int32_t s = ::ng2::ngpu::xlat::PluginInt("texture_warm_done", 0); return s; }
-bool& FLAGS_texture_pack_async_storage_() { static bool s = ::ng2::ngpu::xlat::PluginBool("texture_pack_async", true); return s; }
-bool& FLAGS_texture_precreate_storage_() { static bool s = ::ng2::ngpu::xlat::PluginBool("texture_precreate", true); return s; }
-int32_t& FLAGS_texture_precreate_mb_storage_() { static int32_t s = ::ng2::ngpu::xlat::PluginInt("texture_precreate_mb", 512); return s; }
-int32_t& FLAGS_texture_pack_prebuild_mb_storage_() { static int32_t s = ::ng2::ngpu::xlat::PluginInt("texture_pack_prebuild_mb", 1536); return s; }
-int32_t& FLAGS_texture_pack_spare_mb_storage_() { static int32_t s = ::ng2::ngpu::xlat::PluginInt("texture_pack_spare_mb", 256); return s; }
-int32_t& FLAGS_texture_pack_apply_per_frame_storage_() { static int32_t s = ::ng2::ngpu::xlat::PluginInt("texture_pack_apply_per_frame", 24); return s; }
-int32_t& FLAGS_texture_pack_upload_budget_mb_storage_() { static int32_t s = ::ng2::ngpu::xlat::PluginInt("texture_pack_upload_budget_mb", 0); return s; }
+// [no-dll] registered here since rexgpu-xenos.dll is gone (gen_gpu_cvars.py, verbatim from the fork)
+REXCVAR_DEFINE_INT32(texture_warm_total, 0, "GPU",
+                     "Files in the stage being warmed (0 = not warming)")
+    .lifecycle(rex::cvar::Lifecycle::kHotReload);
+// [no-dll] registered here since rexgpu-xenos.dll is gone (gen_gpu_cvars.py, verbatim from the fork)
+REXCVAR_DEFINE_INT32(texture_warm_done, 0, "GPU",
+                     "Files warmed so far in the current stage")
+    .lifecycle(rex::cvar::Lifecycle::kHotReload);
+// [no-dll] registered here since rexgpu-xenos.dll is gone (gen_gpu_cvars.py, verbatim from the fork)
+REXCVAR_DEFINE_BOOL(texture_pack_async, true, "GPU",
+                    "Build pack replacements (two resource creations and the file read) on "
+                    "worker threads; the render thread swaps the view when a result arrives. "
+                    "Measured 2026-09-26: 413 replacements read on the render thread cost 391 ms "
+                    "of a 1230 ms frame on Chapter 1 arrival")
+    .lifecycle(rex::cvar::Lifecycle::kHotReload);
+// [no-dll] registered here since rexgpu-xenos.dll is gone (gen_gpu_cvars.py, verbatim from the fork)
+REXCVAR_DEFINE_BOOL(texture_precreate, true, "GPU",
+                    "Pre-create the game's own texture resources at a chapter load from the shapes "
+                    "recorded the last time that chapter was played (cache/texture_shapes/chNN.txt "
+                    "beside the executable), on the pack worker while the game is not creating, so "
+                    "a streaming burst takes ready-made resources instead of creating them on the "
+                    "rendering thread (542 creations = 153 ms of the Chapter 1 arrival frame). "
+                    "Works with the enhanced textures off")
+    .lifecycle(rex::cvar::Lifecycle::kHotReload);
+// [no-dll] registered here since rexgpu-xenos.dll is gone (gen_gpu_cvars.py, verbatim from the fork)
+REXCVAR_DEFINE_INT32(texture_precreate_mb, 512, "GPU",
+                     "Video memory for the pre-created game textures of a chapter (texture_precreate)")
+    .lifecycle(rex::cvar::Lifecycle::kHotReload);
+// [no-dll] registered here since rexgpu-xenos.dll is gone (gen_gpu_cvars.py, verbatim from the fork)
+REXCVAR_DEFINE_INT32(texture_pack_prebuild_mb, 1536, "GPU",
+                     "Video memory for pack replacements built GPU-ready at a stage change from the "
+                     "stage's list (stages/chNN.txt), keyed by file id and content hash: a streamed "
+                     "texture whose content matches swaps to the finished resource with no read, "
+                     "creation, upload or mip pass in play. 0 = off. The list is a set in id order, "
+                     "so a stage larger than the budget is covered in that order")
+    .lifecycle(rex::cvar::Lifecycle::kHotReload);
+// [no-dll] registered here since rexgpu-xenos.dll is gone (gen_gpu_cvars.py, verbatim from the fork)
+REXCVAR_DEFINE_INT32(texture_pack_spare_mb, 256, "GPU",
+                     "Video memory for pack resources created ahead of time by the pack worker, "
+                     "by shape, from the pack's own shape histogram; during a streaming burst "
+                     "the worker then only reads files and the game's own texture creations "
+                     "stop contending with the worker's for the kernel resource lock "
+                     "(2026-09-26: 542 creations 153 ms alone, 286-315 ms beside the worker)")
+    .lifecycle(rex::cvar::Lifecycle::kHotReload);
+// [no-dll] registered here since rexgpu-xenos.dll is gone (gen_gpu_cvars.py, verbatim from the fork)
+REXCVAR_DEFINE_INT32(texture_pack_apply_per_frame, 24, "GPU",
+                     "Pack replacements built on the worker that a single frame applies (each "
+                     "records a copy and a mip pass); the rest wait for the next frames. 0 = all. "
+                     "Measured 2026-09-26: applying every result at once turned one 1230 ms frame "
+                     "into a window of 14 hitches")
+    .lifecycle(rex::cvar::Lifecycle::kHotReload);
+// [no-dll] registered here since rexgpu-xenos.dll is gone (gen_gpu_cvars.py, verbatim from the fork)
+REXCVAR_DEFINE_INT32(texture_pack_upload_budget_mb, 0, "GPU",
+                     "Pack texture bytes uploaded per frame before the rest wait for "
+                     "later frames (0 = no limit). Off: measured a loss at 24 MB - "
+                     "the copies were never the hitch (Fable II, 2026-09-13)")
+    .lifecycle(rex::cvar::Lifecycle::kHotReload);
 
-std::string& FLAGS_texture_pack_path_storage_() { static std::string s = ::ng2::ngpu::xlat::PluginString("texture_pack_path", ""); ::ng2::ngpu::xlat::RefreshString("texture_pack_path", s); return s; }   // NATIVE PATCH: [live cvars] the app writes this while the game runs
+// [no-dll] registered here since rexgpu-xenos.dll is gone (gen_gpu_cvars.py, verbatim from the fork)
+REXCVAR_DEFINE_STRING(texture_pack_path, "", "GPU",
+                      "Folder of replacement textures to load instead of the "
+                      "game's own. Empty = disabled.")
+    .lifecycle(rex::cvar::Lifecycle::kHotReload);
 
 
 // Generated with `xb buildshaders`.
@@ -1340,6 +1412,33 @@ void D3D12TextureCache::ClearCache() {
 
 void D3D12TextureCache::BeginSubmission(uint64_t new_submission_index) {
   TextureCache::BeginSubmission(new_submission_index);
+
+  // [texpack retire] (ported from Fable II native-gpu 2f8aa68, 2026-09-28) retire the pack's upload buffers and
+  // superseded resources here, every submission. The list was drained only on the in-frame build path, which the
+  // prebuild + async build bypass almost always, so every prebuilt upload buffer (system memory) and resource (VRAM)
+  // ever copied stayed alive - Fable reached 31 GB of VRAM and 62 GB of private memory in a 50-destination sweep, and
+  // this machine ran critically low on memory the same night. Its size is logged every 10 s.
+  {
+    const uint64_t completed = command_processor_.GetCompletedSubmission();
+    g_texpack_uploads.erase(
+        std::remove_if(g_texpack_uploads.begin(), g_texpack_uploads.end(),
+                       [completed](const auto& e) { return e.first <= completed; }),
+        g_texpack_uploads.end());
+    static auto last_log = std::chrono::steady_clock::now();
+    const auto now = std::chrono::steady_clock::now();
+    if (now - last_log > std::chrono::seconds(10)) {
+      last_log = now;
+      uint64_t bytes = 0;
+      ID3D12Device* device = command_processor_.GetD3D12Provider().GetDevice();
+      for (const auto& e : g_texpack_uploads) {
+        if (!e.second) continue;
+        const D3D12_RESOURCE_DESC d = e.second->GetDesc();
+        bytes += device->GetResourceAllocationInfo(0, 1, &d).SizeInBytes;
+      }
+      REXGPU_INFO("[texpack] retire list: {} resources ({} MB) waiting for their submission to complete",
+                  g_texpack_uploads.size(), bytes >> 20);
+    }
+  }
 
   // [texpack] A fresh upload budget, then the uploads held back earlier, as
   // many as it covers. The command processor reset the deferred command list
