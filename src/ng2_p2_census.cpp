@@ -18,6 +18,7 @@
 #include <rex/system/kernel_state.h>
 
 #include "ng2_ngpu_bridge.h"   // [p3 draw] FrontEndDraw / FrontEndSwap
+#include "ng2_native_gs.h"     // [gs] the game's own graphics system
 
 namespace ng2::p2 {
 namespace {
@@ -160,6 +161,8 @@ inline void FeSet(uint32_t reg, uint32_t v) {
   g_fe_regs[reg] = v;
   g_fe_src[reg] = 0;
   g_fe_dirty[reg >> 6] |= uint64_t(1) << (reg & 63);
+  if (g_p5exec && reg >= 0x1921 && reg <= 0x1927)   // [gs] the gamma port: the backend keeps the ramp itself
+    ::ng2::ngpu::FrontEndRegisterNow(reg, v);
   if (g_p5exec && !((reg >= 0x2000 && reg < 0x2400) || (reg >= 0x4000 && reg < 0x4928))) {
     Px(7, reg, v, 0);   // [p5 exec] outside the draw ranges: the plugin's register file keeps it (scratch, gamma port)
     g_px_regs.fetch_add(1, std::memory_order_relaxed);
@@ -994,7 +997,21 @@ bool FrontEndDraws() { return g_p3draw; }
 
 // PRODUCTION SWITCH (NG2_NATIVE_FE=1): the native front end without the census - the kick callback drives it,
 // it draws on the guest thread, and the plugin's command processor only executes its side effects.
+void NativeKick(uint32_t ring_ptr, uint32_t ring_bytes, uint32_t wptr) { FeKick(ring_ptr, ring_bytes, wptr); }
+
 bool StartNativeFrontEnd() {
+  if (ng2::gs::Active()) {   // the game's own graphics system: no plugin, it kicks the front end directly
+    if (g_fe && g_p5exec) return true;
+    g_fe_compare = false;
+    g_p3draw = true;
+    g_push = &ng2::gs::PushSideEffects;
+    g_p5exec = true;
+    g_fe = true;
+    g_fe_kick_mode = true;
+    REXLOG_INFO("[native] NATIVE FRONT END ON (own graphics system): kicks decoded and drawn on the game's thread, "
+                "side effects executed by the game's executor thread - rexgpu-xenos is not the graphics system");
+    return true;
+  }
   const char* e = std::getenv("NG2_NATIVE_FE");
   if (!e || !*e || *e == '0') return false;
   if (g_fe && g_p5exec) return true;   // the census path already started it

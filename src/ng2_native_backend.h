@@ -11,6 +11,7 @@
 
 struct ID3D12Device;
 struct ID3D12CommandQueue;
+namespace rex::ui { class Presenter; }
 struct ID3D12Resource;
 
 namespace ng2::ngpu::backend {
@@ -43,6 +44,9 @@ bool Draw(const DrawRecord& d);
 
 // The frame's swap: fetch constant 0 (6 dwords) as the swap saw it, the gamma ramp tables (nullptr = unchanged),
 // the front buffer the XE_SWAP packet named.
+// [gs] Copy the frame the last swap produced into the runtime presenter's guest output (the game's own graphics
+// system), on this backend's queue, submitted before the presenter's fence. Guest thread, after Swap.
+bool PresentInto(rex::ui::Presenter* presenter);
 // [p3 draw] The gamma ramp alone (the plugin's swap callback delivers it while the front end swaps).
 void SetGamma(const uint32_t* gamma_table_256, const uint32_t* gamma_pwl_rgb);
 void Swap(uint32_t frontbuffer_ptr, uint32_t width, uint32_t height, const uint32_t* fetch0,

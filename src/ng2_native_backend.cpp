@@ -12,6 +12,9 @@ extern uint64_t g_ng2_ph[12];   // NG2 PATCH: [draw phases] (vendored command_pr
 #include <rex/cvar.h>
 #include <rex/logging.h>
 #include <rex/system/kernel_state.h>
+#include <rex/kernel/xboxkrnl/video.h>   // [gs] PresentInto: the display size
+#include <rex/ui/d3d12/d3d12_presenter.h>   // [gs] PresentInto: the runtime presenter's guest output
+#include <algorithm>
 
 #include <string>
 
@@ -38,6 +41,13 @@ using rex::graphics::RegisterFile;
 using rex::graphics::ngpu_d3d12::D3D12CommandProcessor;
 using rex::graphics::ngpu_d3d12::D3D12GraphicsSystem;
 namespace xenos = rex::graphics::xenos;
+
+namespace {
+// The frame the last swap produced (NativeRefreshGuestOutput below); before the Driver, whose PresentInto reads it.
+ID3D12Resource* g_output = nullptr;
+uint32_t g_output_w = 0, g_output_h = 0;
+bool g_output_is_8bpc = false;
+}  // namespace
 
 // The friend the vendored D3D12CommandProcessor names (vendor_rtc_d3d12.py SOURCE_PATCHES): it performs what the
 // PM4 parser (CommandProcessor::ExecutePacket*) would, from the bridge's records instead of the ring.
@@ -164,6 +174,37 @@ class Driver {
       cp_->gamma_ramp_pwl_up_to_date_ = false;
     }
   }
+  bool PresentInto(rex::ui::Presenter* presenter) {
+    if (!cp_ || !presenter || !g_output || !g_output_w || !g_output_h) return false;
+    ID3D12Resource* out = g_output;
+    const uint32_t w = g_output_w, h = g_output_h;
+    const bool is_8bpc = g_output_is_8bpc;
+    rex::system::X_VIDEO_MODE vm;
+    rex::kernel::xboxkrnl::VdQueryVideoMode(&vm);
+    const uint32_t dw = std::max(uint32_t(1), uint32_t(vm.display_width));
+    const uint32_t dh = std::max(uint32_t(1), uint32_t(vm.display_height));
+    return presenter->RefreshGuestOutput(w, h, dw, dh, [&](rex::ui::Presenter::GuestOutputRefreshContext& ctx) -> bool {
+      ID3D12Resource* dest =
+          static_cast<rex::ui::d3d12::D3D12Presenter::D3D12GuestOutputRefreshContext&>(ctx).resource_uav_capable();
+      const D3D12_RESOURCE_DESC dd = dest->GetDesc();
+      if (dd.Width != w || dd.Height != h || dd.Format != rex::ui::d3d12::D3D12Presenter::kGuestOutputFormat) return false;
+      ctx.SetIs8bpc(is_8bpc);
+      if (!cp_->BeginSubmission(true)) return false;
+      constexpr D3D12_RESOURCE_STATES kIn = rex::ui::d3d12::D3D12Presenter::kGuestOutputInternalState;
+      cp_->PushTransitionBarrier(out, kIn, D3D12_RESOURCE_STATE_COPY_SOURCE);
+      cp_->PushTransitionBarrier(dest, kIn, D3D12_RESOURCE_STATE_COPY_DEST);
+      cp_->SubmitBarriers();
+      cp_->deferred_command_list_.D3DCopyResource(dest, out);
+      cp_->PushTransitionBarrier(out, D3D12_RESOURCE_STATE_COPY_SOURCE, kIn);
+      cp_->PushTransitionBarrier(dest, D3D12_RESOURCE_STATE_COPY_DEST, kIn);
+      cp_->SubmitBarriers();
+      cp_->EndSubmission(true);
+      // The async submit thread must have handed this copy to the queue before the presenter signals its fence.
+      ::ng2::ngpu::rtc::NoteSwapSubmission(cp_->LastQueuedSubmission());
+      ::ng2::ngpu::rtc::WaitSwapSubmitted(50);
+      return true;
+    });
+  }
   void EndFrameNoSwap() { cp_->EndSubmission(false); }
   void InitShaderStorage(const std::filesystem::path& cache_root, uint32_t title_id) {
     if (cp_) cp_->InitializeShaderStorage(cache_root, title_id, true);   // blocking: pipelines exist before the draws
@@ -237,9 +278,6 @@ class Driver {
 
 namespace {
 Driver g_driver;
-ID3D12Resource* g_output = nullptr;
-uint32_t g_output_w = 0, g_output_h = 0;
-bool g_output_is_8bpc = false;
 }  // namespace
 
 bool Init(ID3D12Device* device, ID3D12CommandQueue* queue) { return g_driver.Ready() || g_driver.Init(device, queue); }
@@ -248,6 +286,7 @@ void WriteRegister(uint32_t index, uint32_t value) { g_driver.WriteRegister(inde
 bool Draw(const DrawRecord& d) { return g_driver.Draw(d); }
 void Swap(uint32_t fb, uint32_t w, uint32_t h, const uint32_t* fetch0, const uint32_t* table, const uint32_t* pwl) { g_driver.Swap(fb, w, h, fetch0, table, pwl); }
 void SetGamma(const uint32_t* table, const uint32_t* pwl) { g_driver.SetGamma(table, pwl); }
+bool PresentInto(rex::ui::Presenter* presenter) { return g_driver.PresentInto(presenter); }
 void EndFrameNoSwap() { g_driver.EndFrameNoSwap(); }
 void InitShaderStorage(const std::filesystem::path& cache_root, uint32_t title_id) { g_driver.InitShaderStorage(cache_root, title_id); }
 void ShutdownShaderStorage() { g_driver.ShutdownShaderStorage(); }

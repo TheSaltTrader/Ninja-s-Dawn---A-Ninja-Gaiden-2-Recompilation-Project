@@ -44,6 +44,8 @@ void BridgeSwap();
 bool FrontEndDraws();
 // NG2_NATIVE_FE=1: the front end without the census (called by the bridge once the plugin callbacks exist).
 bool StartNativeFrontEnd();
+// [gs] The game's graphics system hands each CP_RB_WPTR write here (wptr 0xFFFFFFFF = the ring was reset).
+void NativeKick(uint32_t ring_ptr, uint32_t ring_bytes, uint32_t wptr);
 void FrontEndCounts(uint64_t& draws, uint64_t& swaps);
 
 }  // namespace ng2::p2

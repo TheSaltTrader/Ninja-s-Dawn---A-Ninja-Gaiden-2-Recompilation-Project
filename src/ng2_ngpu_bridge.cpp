@@ -36,6 +36,7 @@
 
 #include "ng2_native_backend.h"
 #include "ng2_p2_census.h"
+#include "ng2_native_gs.h"
 #include "ngpu_backend_api.h"
 #include "rtc_d3d12/facade.h"
 
@@ -162,6 +163,7 @@ PresentStatsFn g_present_stats = nullptr;
 StorageFn g_get_storage = nullptr;
 bool g_storage_open = false;
 void SyncSwapPostEffect(bool force);   // defined with OnSwap below
+std::vector<std::pair<uint32_t, uint32_t>> g_pending_now;   // [gs] gamma-port writes before the backend exists
 bool g_one_window = false;       // ONE WINDOW: the backend on the plugin's device, its frames through the presenter
 bool g_hold_this_swap = false;   // the reveal hold's verdict at the last swap; the provider reads it
 uint64_t g_provider_calls = 0, g_provider_held = 0, g_provider_waits_timed_out = 0, g_provider_no_output = 0;
@@ -406,7 +408,12 @@ bool LockstepReady() {
   if (g_backend_on) return true;
   ID3D12Device* device = nullptr;
   ID3D12CommandQueue* queue = nullptr;
-  if (g_one_window) {
+  if (ng2::gs::Active()) {
+    // [gs] The game's own graphics system: its provider's device and direct queue (the presenter paints on it).
+    device = ng2::gs::Device();
+    queue = ng2::gs::Queue();
+    if (!device || !queue) return false;
+  } else if (g_one_window) {
     // The plugin's device and direct queue, valid once its SetupContext has run (before its first draw callback).
     if (!g_get_device || !g_get_device(&device, &queue) || !device || !queue) return false;
   } else {
@@ -425,7 +432,15 @@ bool LockstepReady() {
     // arrival frames, ng2_044, and nothing persisted).
     wchar_t root[1024] = {};
     uint32_t title = 0;
-    if (g_get_storage && g_get_storage(root, uint32_t(std::size(root)), &title) && root[0] && title) {
+    for (const auto& pr : g_pending_now) backend::WriteRegister(pr.first, pr.second);   // [gs] the gamma ramp so far
+    g_pending_now.clear();
+    std::filesystem::path gs_root;
+    uint32_t gs_title = 0;
+    if (ng2::gs::Active() && ng2::gs::ShaderStorage(gs_root, gs_title)) {
+      backend::InitShaderStorage(gs_root, gs_title);
+      g_storage_open = true;
+      REXLOG_INFO("[ngpu] BACKEND: pipeline storage loaded from {} (title {:08X}, own graphics system)", gs_root.string(), gs_title);
+    } else if (g_get_storage && g_get_storage(root, uint32_t(std::size(root)), &title) && root[0] && title) {
       const std::filesystem::path cache_root(root);
       backend::InitShaderStorage(cache_root, title);
       g_storage_open = true;
@@ -783,7 +798,11 @@ void AfterSwap() {
       held_logged = false;
     }
   }
-  if (!g_one_window && !g_hold_this_swap) render::RequestPresent();
+  if (ng2::gs::Active()) {
+    if (!g_hold_this_swap) backend::PresentInto(ng2::gs::Presenter());   // [gs] into the game's own presenter
+  } else if (!g_one_window && !g_hold_this_swap) {
+    render::RequestPresent();
+  }
   DirtyCoverageAtSwap();
   LogPeriodic();
 }
@@ -793,6 +812,11 @@ void AfterSwap() {
 void Start(const render::WindowSpec& window) {
   if (!REXCVAR_GET(ngpu_backend)) {
     REXLOG_INFO("[ngpu] native backend off (ngpu_backend=false; NG2_NATIVE_GPU=1 turns it on)");
+    return;
+  }
+  if (ng2::gs::Active()) {   // [gs] no plugin graphics system: nothing to bind; the front end is already on
+    REXLOG_INFO("[ngpu] OWN GRAPHICS SYSTEM: the backend comes up on its device at the first draw and presents into its "
+                "presenter at each swap");
     return;
   }
   HMODULE m = GetModuleHandleA("rexgpu-xenos.dll");
@@ -968,6 +992,11 @@ void FrontEndSwap(uint32_t fb, uint32_t w, uint32_t h, const uint32_t* regs, uin
   }
   backend::Swap(fb, w, h, fetch0, nullptr, nullptr);
   AfterSwap();
+}
+
+void FrontEndRegisterNow(uint32_t reg, uint32_t value) {
+  if (g_backend_on) backend::WriteRegister(reg, value);
+  else if (g_pending_now.size() < 65536) g_pending_now.push_back({reg, value});
 }
 
 void SetFovK(double k) {

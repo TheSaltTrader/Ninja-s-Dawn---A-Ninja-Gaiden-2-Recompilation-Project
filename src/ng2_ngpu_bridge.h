@@ -49,6 +49,8 @@ struct FeDrawInfo {
 };
 void FrontEndDraw(const uint32_t* regs, uint64_t* dirty, const FeDrawInfo& d);
 void FrontEndSwap(uint32_t fb, uint32_t w, uint32_t h, const uint32_t* regs, uint64_t* dirty);
+// [gs] A register the backend must see in order at once (the gamma port); buffered until the backend is up.
+void FrontEndRegisterNow(uint32_t reg, uint32_t value);
 
 // Binds the plugin's RexNgpu* exports and installs the lockstep consumer;
 // starts the native window when ngpu_backend is on. Call once the plugin is
