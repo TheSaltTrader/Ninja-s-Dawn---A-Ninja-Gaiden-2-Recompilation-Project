@@ -850,9 +850,9 @@ class Ng2App : public rex::ReXApp {
     // The internal render size patch. These are our own cvars, read by the
     // midasm hooks in patch_hooks.cpp; 0 means "leave the game's 1120x584
     // alone", which is why they are only written when the patch is on.
-    if (settings_.internal_720p) {
-      REXCVAR_SET(ng2_render_width, 1280);
-      REXCVAR_SET(ng2_render_height, 720);
+    if (settings_.render_height == 720 || settings_.render_height == 540) {
+      REXCVAR_SET(ng2_render_width, settings_.WorldWidth());
+      REXCVAR_SET(ng2_render_height, settings_.WorldHeight());
     }
     REXCVAR_SET(ng2_video_mode, settings_.video_mode);
 
@@ -862,11 +862,13 @@ class Ng2App : public rex::ReXApp {
 
     REXLOG_INFO(
         "Display: window {}x{}, guest display {}x{}, {}x internal scale, {} Hz, "
-        "fullscreen={}, vsync={}",
+        "fullscreen={}, vsync={}; internal resolution {}x{} (world {}x{} x{})",
         settings_.window_width, settings_.window_height,
         REXCVAR_GET(video_mode_width), REXCVAR_GET(video_mode_height),
         settings_.resolution_scale, settings_.fps, settings_.fullscreen,
-        settings_.vsync);
+        settings_.vsync, settings_.WorldWidth() * settings_.resolution_scale,
+        settings_.WorldHeight() * settings_.resolution_scale,
+        settings_.WorldWidth(), settings_.WorldHeight(), settings_.resolution_scale);
   }
 
   // Ultrawide 3D FOV. The GPU plugin reads ng2_fov_k on every draw and scales

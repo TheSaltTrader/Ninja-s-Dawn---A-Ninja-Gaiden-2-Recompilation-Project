@@ -11,6 +11,7 @@
 #include <thread>
 #include <atomic>
 #include <algorithm>
+#include <cstdio>
 #include <array>
 #include <cmath>
 #include <cstdarg>
@@ -526,37 +527,46 @@ bool DrawSettings(Ng2Settings& s, const PageOptions& opts) {
     }
 
     ImGui::BeginDisabled(false);  // restart-bound, but always editable: the change is saved now and applied on the next launch (RestartTag says so), and ApplyLiveSettings never pushes these live
-    RowStart("Internal render size",
-             "A patch on the game itself: it renders at 1120x584 internally "
-             "and scales that up. 1280x720 removes the upscale. The same "
-             "change as the Xenia community patch for this title.");
-    int size_index = s.internal_720p ? 1 : 0;
-    const char* sizes[] = {"1120 x 584 (as shipped)", "1280 x 720 (patched)"};
-    if (ImGui::Combo("##internal", &size_index, sizes, 2)) {
-      s.internal_720p = size_index == 1;
-      changed = true;
-    }
-    RestartTag();  // always: the row is restart-bound whether or not it is editable (2026-09-27)
-
-    RowStart("Supersampling",
-             "Renders the game's own framebuffer at a multiple of its size and "
-             "filters it back down. The sharpest setting here, and the most "
-             "expensive: the cost goes with the SQUARE of the number, so 4x is "
-             "sixteen times the pixels. Measured on this machine at a 1080p "
-             "window, every setting here held 60 fps - but that was measured on "
-             "the menu, which is a light scene, so treat the high ones as worth "
-             "trying rather than free.");
-    int scale_index = std::clamp(s.resolution_scale - 1, 0, 7);
-    // All the way to the plugin's own ceiling of 8. Stopping short of it was
-    // arbitrary twice over - first at 3, then at 6 - and on a card that can
-    // afford more it is image quality left on the table.
-    //
-    // This is also what raises SHADOW resolution, which is measured rather than
-    // assumed: the probe showed this title resolving a 512x512 depth buffer
-    // through a scaled resolve, so at 3x it is already allocated at 1536x1536.
-    const char* scales[] = {"Off", "2x", "3x", "4x", "5x", "6x", "7x", "8x"};
-    if (ImGui::Combo("##scale", &scale_index, scales, IM_ARRAYSIZE(scales))) {
-      s.resolution_scale = scale_index + 1;
+    // One row for the internal resolution (2026-09-27, replacing "Internal render size" and "Supersampling"): the
+    // game's own world size (render_height: as shipped 1120x584, 960x540 or 1280x720 - nothing larger, a 1920x1080
+    // world overflows the game's EDRAM layout and renders black) times the renderer's integer supersample
+    // (resolution_scale). Every entry was probed on the native renderer (probe_res, ng2_115-119). A combination not
+    // listed here (a preset changes only the scale, or an edited settings file) is shown as its own "custom" entry.
+    // The scale also raises SHADOW resolution: this title resolves a 512x512 depth buffer through a scaled resolve.
+    struct InternalRes { int render_height; int scale; const char* label; };
+    static const InternalRes kInternal[] = {
+        {0, 1, "1120 x 584 (as shipped)"},
+        {720, 1, "1280 x 720"},
+        {540, 2, "1920 x 1080"},
+        {0, 2, "2240 x 1168 (as shipped, 2x)"},
+        {720, 2, "2560 x 1440"},
+        {0, 3, "3360 x 1752 (as shipped, 3x)"},
+        {720, 3, "3840 x 2160 (4K)"},
+        {720, 4, "5120 x 2880 (5K)"},
+        {720, 6, "7680 x 4320 (8K)"},
+    };
+    constexpr int kInternalCount = IM_ARRAYSIZE(kInternal);
+    RowStart("Internal resolution",
+             "The resolution the game's 3D world is actually drawn at, before it "
+             "is scaled to your screen. The game itself renders at 1120x584 and "
+             "the console scaled that up; everything above 1280x720 is drawn at "
+             "a whole multiple of the game's own size and filtered down, which "
+             "is sharper and also raises shadow detail. The cost goes with the "
+             "number of pixels: 3840x2160 is nine times 1280x720. Restart "
+             "required.");
+    int res_index = kInternalCount;   // custom unless a listed pair matches
+    for (int i = 0; i < kInternalCount; ++i)
+      if (kInternal[i].render_height == s.render_height && kInternal[i].scale == s.resolution_scale) res_index = i;
+    static char custom_label[64];
+    std::snprintf(custom_label, sizeof(custom_label), "%d x %d (custom)", s.WorldWidth() * s.resolution_scale,
+                  s.WorldHeight() * s.resolution_scale);
+    const char* res_labels[kInternalCount + 1];
+    for (int i = 0; i < kInternalCount; ++i) res_labels[i] = kInternal[i].label;
+    res_labels[kInternalCount] = custom_label;
+    const int res_shown = res_index == kInternalCount ? kInternalCount + 1 : kInternalCount;
+    if (ImGui::Combo("##internalres", &res_index, res_labels, res_shown) && res_index < kInternalCount) {
+      s.render_height = kInternal[res_index].render_height;
+      s.resolution_scale = kInternal[res_index].scale;
       changed = true;
     }
     RestartTag();  // always: the row is restart-bound whether or not it is editable (2026-09-27)

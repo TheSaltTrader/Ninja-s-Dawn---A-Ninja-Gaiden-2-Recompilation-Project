@@ -53,12 +53,17 @@ struct Ng2Settings {
   // afford 4x is image quality left on the table.
   int resolution_scale = 1;
 
-  // The Xenia community render-size patch: the title renders internally at
-  // 1120x584 and scales up. Raising it to 1280x720 removes that scale.
-  // Implemented as midasm hooks in patch_hooks.cpp, not a memory patch, since
-  // the values are immediates the recompiler has already turned into C++
-  // constants.
-  bool internal_720p = false;
+  // The game's own world render size, the Xenia community render-size patch
+  // generalised: 0 = as shipped (1120x584, scaled up by the game), 720 =
+  // 1280x720 (the community patch), 540 = 960x540 (the base of 1920x1080 at 2x
+  // supersampling). Implemented as midasm hooks in patch_hooks.cpp. Nothing
+  // above 720 is offered: a 1920x1080 world overflows the game's own 10 MB EDRAM
+  // layout and the 3D scene renders black (probe 2026-09-27, ng2_118) - higher
+  // internal resolutions come from resolution_scale on top of this.
+  // Settings files before 2026-09-27 carry internal_720p=0/1, still read.
+  int render_height = 0;
+  int WorldWidth() const { return render_height == 720 ? 1280 : render_height == 540 ? 960 : 1120; }
+  int WorldHeight() const { return render_height == 720 ? 720 : render_height == 540 ? 540 : 584; }
 
   // The community Chapter 12 crash workaround (Gliniak, via Xenia's patch file
   // for this title). Off by default: its author is explicit that it causes
@@ -358,7 +363,8 @@ struct Ng2Settings {
         << "fps=" << fps << "\n"
         << "vsync=" << (vsync ? 1 : 0) << "\n"
         << "resolution_scale=" << resolution_scale << "\n"
-        << "internal_720p=" << (internal_720p ? 1 : 0) << "\n"
+        << "internal_720p=" << (render_height == 720 ? 1 : 0) << "\n"
+        << "render_height=" << render_height << "\n"
         << "anisotropic=" << anisotropic << "\n"
         << "texture_cache_mb=" << texture_cache_mb << "\n"
         << "texture_dump=" << (texture_dump ? 1 : 0) << "\n"
@@ -428,6 +434,7 @@ struct Ng2Settings {
     vsync = true;
     monitor = std::clamp(monitor, 0, 16);
     resolution_scale = std::clamp(resolution_scale, 1, 8);
+    if (render_height != 540 && render_height != 720) render_height = 0;
     anisotropic = std::clamp(anisotropic, -1, 5);  // 5 = 16x
     texture_cache_mb = std::clamp(texture_cache_mb, 0, 8192);
     // Only the three the tool and the menu actually offer.
@@ -462,7 +469,8 @@ struct Ng2Settings {
     else if (k == "fps") fps = std::atoi(v.c_str());
     else if (k == "vsync") vsync = Truthy(v);
     else if (k == "resolution_scale") resolution_scale = std::atoi(v.c_str());
-    else if (k == "internal_720p") internal_720p = Truthy(v);
+    else if (k == "internal_720p") render_height = Truthy(v) ? 720 : 0;   // older files; render_height (saved after it) wins
+    else if (k == "render_height") render_height = std::atoi(v.c_str());
     else if (k == "chapter12_workaround") chapter12_workaround = Truthy(v);
     else if (k == "video_mode") video_mode = std::atoi(v.c_str());
     // Migration: the setting used to be a bool that only meant "skip".

@@ -42,12 +42,12 @@
       "reason": "retired from the UI in v1.0.21. On this title vsync off is not a tearing control but a SPEED control - the guest advances its logic on vblank, so off raises that from 60 Hz to ~1000 Hz and the game runs fast. The row is gone from both settings screens, Clamp() and the tuning force it on, and the field survives only so that older ng2_settings.cfg files still parse."
     },
     {
-      "setting": "internal_720p",
-      "doc_phrase": "internal render"
+      "setting": "render_height",
+      "doc_phrase": "Internal resolution"
     },
     {
       "setting": "resolution_scale",
-      "doc_phrase": "Internal supersampling"
+      "doc_phrase": "Internal resolution"
     },
     {
       "setting": "texture_cache_mb",
