@@ -33,8 +33,9 @@ class Presenter;
 
 namespace ng2::gs {
 
-// NG2_NATIVE_GS=1 in the environment (read once).
-bool Requested();
+// The settings row "Native renderer" (row_on) selects the game's own graphics system; NG2_NATIVE_GS=1|0 overrides
+// it, and NG2_NATIVE_GPU=0 (the renderer off) turns it off. Decided once, at the first call.
+bool Requested(bool row_on);
 // The game's graphics system; nullptr if D3D12 is unavailable.
 std::unique_ptr<rex::system::IGraphicsSystem> Create();
 // True once Create() returned a system (the bridge and the front end switch on it).

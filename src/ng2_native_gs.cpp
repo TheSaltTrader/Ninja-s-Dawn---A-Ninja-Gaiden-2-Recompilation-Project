@@ -364,10 +364,11 @@ NativeGraphicsSystem* g_gs = nullptr;
 
 }  // namespace
 
-bool Requested() {
-  static const bool on = [] {
-    const char* e = std::getenv("NG2_NATIVE_GS");
-    return e && *e && *e != '0';
+bool Requested(bool row_on) {
+  static const bool on = [row_on] {
+    if (const char* e = std::getenv("NG2_NATIVE_GS"); e && *e) return *e != '0';
+    if (const char* g = std::getenv("NG2_NATIVE_GPU"); g && *g) return *g != '0';
+    return row_on;
   }();
   return on;
 }

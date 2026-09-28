@@ -79,10 +79,11 @@ class Ng2App : public rex::ReXApp {
   // the executable via GPU_PLUGINS.
   void OnPreSetup(rex::RuntimeConfig& config) override {
     config.gpu_plugin = "xenos";
-    // [gs] FULL NATIVE (NG2_NATIVE_GS=1): the game's own graphics system instead of rexgpu-xenos's. The plugin DLL
-    // is still loaded as a plain library so the settings it defines (vsync, swap_post_effect, the texture pack,
-    // ng2_uw_mode / ng2_fov_k the presenter reads) stay registered; its graphics system is never created.
-    if (ng2::gs::Requested()) {
+    // [gs] FULL NATIVE (settings row "Native renderer", ON by default; NG2_NATIVE_GS=1|0 overrides): the game's own
+    // graphics system instead of rexgpu-xenos's. The plugin DLL is still loaded as a plain library so the settings
+    // it defines (vsync, swap_post_effect, the texture pack, ng2_uw_mode / ng2_fov_k the presenter reads) stay
+    // registered; its graphics system is never created. NG2_NATIVE_GS=0 keeps the v1.1.0 one-window plugin path.
+    if (ng2::gs::Requested(settings_.native_renderer)) {
       const HMODULE plugin = LoadLibraryA("rexgpu-xenos.dll");
       config.graphics = ng2::gs::Create();
       REXLOG_INFO("[gs] NG2_NATIVE_GS: own graphics system {} (plugin library {} for its settings)",

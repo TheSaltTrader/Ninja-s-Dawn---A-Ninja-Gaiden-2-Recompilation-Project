@@ -230,6 +230,9 @@ struct Ng2Tuning {
     //       frame goes to the game's own window through the runtime presenter
     //       (ONE WINDOW, ng2_ngpu_bridge.cpp). Both cvars are read once at
     //       startup, so the row is restart-bound.
+    //       Since 2026-09-27 the row also selects the game's own graphics system
+    //       (ng2_native_gs.cpp): rexgpu-xenos stays loaded only for the settings
+    //       it defines. NG2_NATIVE_GS=0 keeps the one-window plugin path above.
     //   NG2_NATIVE_GPU=1|0    overrides the row (1 on, 0 off).
     //   NG2_NATIVE_OFFLOAD=0  lockstep for diagnosis: the plugin keeps drawing too
     //       and the native backend presents on its own window beside the game's.
