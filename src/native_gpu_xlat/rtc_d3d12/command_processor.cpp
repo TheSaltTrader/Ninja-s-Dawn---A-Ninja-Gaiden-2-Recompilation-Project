@@ -2652,6 +2652,8 @@ void D3D12CommandProcessor::IssueSwap(uint32_t frontbuffer_ptr, uint32_t frontbu
     static bool s_uw_gameplay = false;
     static int s_uw_gp_streak = 0;
     static int s_uw_menu_streak = 0;
+    static int s_uw_noworld_streak = 0;
+    static bool s_uw_after_absence = true;   // the first gameplay of a run follows the title and menus
     if (frame_gameplay) {
       ++s_uw_gp_streak;
       s_uw_menu_streak = 0;
@@ -2659,11 +2661,29 @@ void D3D12CommandProcessor::IssueSwap(uint32_t frontbuffer_ptr, uint32_t frontbu
       ++s_uw_menu_streak;
       s_uw_gp_streak = 0;
     }
-    // Enter gameplay quickly (2 frames); leave it only after a sustained non-
-    // gameplay signal (10 frames, ~0.16 s) so a brief 3D-less blip during play - a
+    // [ng2-uw-enter] (user report 2026-09-27: "the screen can flash in ultrawide on both sides" before the stage's
+    // loading icon). After the Chapter card the game renders ~1.1 s of the stage's opening shot, then fades it to
+    // black for the load while the world keeps drawing (burst capture + log, ng2_141). Entering the fill after 2
+    // frames showed that glimpse across the full width. After a long ABSENCE OF THE WORLD (>= 60 frames with no
+    // world: a card, a video, the title menus) the world must now persist 90 frames (1.5 s) before the fill; the
+    // glimpse stays in the 16:9 centre as the game draws it, and the switch lands in the game's own black. The Start
+    // menu keeps the world drawn behind it, so leaving it still enters in 2 frames. NG2_UW_ENTER_FRAMES overrides 90.
+    if (has_world) {
+      s_uw_noworld_streak = 0;
+    } else if (++s_uw_noworld_streak >= 60) {
+      s_uw_after_absence = true;
+    }
+    static const int s_uw_enter_after_absence = [] {
+      const char* e = std::getenv("NG2_UW_ENTER_FRAMES");
+      return (e && *e) ? std::max(2, std::atoi(e)) : 90;
+    }();
+    const int enter_frames = s_uw_after_absence ? s_uw_enter_after_absence : 2;
+    // Enter gameplay quickly (2 frames; 90 after a long absence of the world, above); leave it only after a
+    // sustained non-gameplay signal (10 frames, ~0.16 s) so a brief 3D-less blip during play - a
     // streaming gap or a one-frame full-screen effect - does not flash 16:9. A
     // real menu, video, card or loading screen lasts far longer than 10 frames.
-    if (!s_uw_gameplay && s_uw_gp_streak >= 2) {
+    if (s_uw_gameplay) s_uw_after_absence = false;
+    if (!s_uw_gameplay && s_uw_gp_streak >= enter_frames) {
       s_uw_gameplay = true;
     } else if (s_uw_gameplay && s_uw_menu_streak >= 10) {
       s_uw_gameplay = false;
