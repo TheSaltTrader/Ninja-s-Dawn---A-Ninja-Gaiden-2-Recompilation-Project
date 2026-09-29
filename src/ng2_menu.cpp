@@ -176,7 +176,13 @@ void RestartTag() {
   // Called right after the row's control, so the last item is that control.
   if (ImGui::IsItemEdited())
     g_restart_pending = true;
+  // Beside the control when it fits, else on the line below it: after a full-width combo the tag used to be drawn
+  // past the table cell and clipped, so Resolution, Frame rate, Internal resolution... showed no tag at all
+  // (eye_look of the v1.1.4 menu, 2026-09-28).
+  const float need = ImGui::CalcTextSize("takes effect after a restart").x + ImGui::GetStyle().ItemSpacing.x;
   ImGui::SameLine();
+  if (ImGui::GetContentRegionAvail().x < need)
+    ImGui::NewLine();
   ImGui::PushStyleColor(ImGuiCol_Text, kRestartRed);
   ImGui::TextUnformatted("takes effect after a restart");
   ImGui::PopStyleColor();
