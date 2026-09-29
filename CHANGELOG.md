@@ -15,6 +15,11 @@ the internal resolution and a few others) were marked with a small
 saved and applies once the game is started again. The note at the bottom
 of the menu is red too.
 
+Several of those settings - Monitor, Resolution, Frame rate, Internal
+resolution, Sharpening - showed no mark at all: it was drawn past the edge
+of their row and cut off. It now sits under the setting when it does not fit
+beside it.
+
 ## v1.1.3 - 2026-09-28
 
 ### Fixed - texture dumping wrote nothing into a new texture folder
