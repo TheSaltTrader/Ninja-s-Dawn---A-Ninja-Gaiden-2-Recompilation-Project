@@ -3,6 +3,20 @@
 Versions are cut with `tools/make_release.py`, which refuses to package a
 version that has no section here.
 
+## v1.1.6 - 2026-09-29
+
+### Fixed - Ultrawide: leaving a shop showed the shop stretched across the screen
+
+On an ultrawide display, leaving Muramasa's shop switched the picture to
+full width while the game was still cross-fading from the shop into play, so
+the shop's picture was shown stretched across the whole screen for about half
+a second. The switch now waits for the game's closing picture: the screen
+fades to black as soon as the shop closes, stays black while that picture is
+drawn, and fades in once, at full width, on gameplay - one fade, the way a
+level start already does it. A menu that closes without such a picture is
+unchanged. Checked in play at the shop, several times in a row
+(the log line `[ng2uw] menu exit: held 16:9 for N frames` says the hold ran).
+
 ## v1.1.5 - 2026-09-28
 
 ### Changed - test tooling only

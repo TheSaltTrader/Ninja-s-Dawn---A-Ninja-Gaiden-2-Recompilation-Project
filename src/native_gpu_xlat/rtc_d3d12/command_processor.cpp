@@ -317,6 +317,9 @@ static int g_ng2_2d_solid_this_frame = 0;
 // scrolling mist video (two quads of 3839 px, measured 2026-09-27 on both paths). Nothing else is that wide,
 // so the count says "the pause/weapons menu is up" and the scene detector pillarboxes the frame (16:9).
 static int g_ng2_menu_mist_this_frame = 0;
+// [ng2-menu-exit] Textured quads this frame covering the whole 1280x720 UI canvas: the game's full-screen picture
+// overlays (a copy of an earlier frame cross-faded over the new one). Counted per draw where ng2_fs_quad is decided.
+static int g_ng2_2d_fs_tex_this_frame = 0;
 
 // Generated with `xb buildshaders`.
 namespace shaders {
@@ -2804,7 +2807,32 @@ void D3D12CommandProcessor::IssueSwap(uint32_t frontbuffer_ptr, uint32_t frontbu
     // the only textureless 2D draw), so the fades that bracket a video or a scene change cover the full width.
     // [ng2-menu] A frame drawing the menu's mist is the Start menu: 16:9 like every other menu (user,
     // 2026-09-27), whatever the world behind it does. The 10-frame leave hysteresis below still applies.
-    const bool frame_gameplay = (has_world || cnt2d_solid > 0) && !pause_menu && cnt_mist == 0;
+    // [ng2-menu-exit] 2026-09-29 (user: "when exiting a shop the game goes ultrawide, stretches the screen and then
+    // goes into gameplay"; Muramasa's shop, eye capture + ng2_138 07:07:05): the shop's mist stops the frame B is
+    // pressed, but the game then cross-fades a full-screen copy of the 16:9 shop frame over the world for ~0.5 s.
+    // Entering the fill 2 frames after the mist left that picture stretched across the width. After a menu, a frame
+    // that still draws a full-screen textured overlay is the menu's closing picture, not gameplay; the hold ends when
+    // the overlay does, and at most 120 frames after the mist (so no overlay can keep the picture at 16:9).
+    // NG2_UW_MENU_EXIT_HOLD=0 turns the rule off for A/Bs.
+    static const bool s_uw_exit_hold_on = [] {
+      const char* e = std::getenv("NG2_UW_MENU_EXIT_HOLD");
+      return !(e && *e == '0');
+    }();
+    const int cnt_fs_tex = g_ng2_2d_fs_tex_this_frame;
+    g_ng2_2d_fs_tex_this_frame = 0;
+    static int s_uw_since_mist = 1 << 20;   // frames since the last frame that drew the menu mist
+    static int s_uw_exit_held = 0;          // frames of the current menu exit held at 16:9 by the overlay
+    s_uw_since_mist = cnt_mist > 0 ? 0 : std::min(s_uw_since_mist + 1, 1 << 20);
+    const bool menu_exit_overlay = s_uw_exit_hold_on && cnt_mist == 0 && s_uw_since_mist <= 120 && cnt_fs_tex > 0;
+    if (menu_exit_overlay) {
+      ++s_uw_exit_held;
+    } else if (s_uw_exit_held > 0) {
+      REXLOG_INFO("[ng2uw] menu exit: held 16:9 for {} frames while the menu's closing picture was drawn",
+                  s_uw_exit_held);
+      s_uw_exit_held = 0;
+    }
+    const bool frame_gameplay =
+        (has_world || cnt2d_solid > 0) && !pause_menu && cnt_mist == 0 && !menu_exit_overlay;
     static bool s_uw_gameplay = false;
     static int s_uw_gp_streak = 0;
     static int s_uw_menu_streak = 0;
@@ -2863,11 +2891,21 @@ void D3D12CommandProcessor::IssueSwap(uint32_t frontbuffer_ptr, uint32_t frontbu
     {
       const int fade_frames = std::max(1, int(REXCVAR_GET(ng2_uw_fade_frames)));
       const int step = 1000 / fade_frames + 1;
+      // [ng2-menu-exit black] 2026-09-29 (user, on the first cut of the hold above: "there is an extra fade when the
+      // game returns back to gameplay"; option A chosen): the game's own cross-fade out of the shop played in the
+      // 16:9 band and then the switch to the fill faded to black and back - two fades. Now, once the menu's closing
+      // picture is drawn over the world, the fade rises to black and HOLDS there until gameplay is detected; the mode
+      // switches under that black and the level fades in once, at full width (the level start's pattern). Released
+      // if the menu comes back (mist), once the fill is shown, or 120 frames after the mist at most.
+      static bool s_uw_exit_black = false;
+      if (menu_exit_overlay && has_world && s_uw_mode_shown == 2) s_uw_exit_black = true;
+      if (cnt_mist > 0 || s_uw_mode_shown != 2 || s_uw_since_mist > 120) s_uw_exit_black = false;
       if (s_uw_mode_shown < 0 || !feature) {
         s_uw_mode_shown = mode_detected;
         s_uw_fade = 0;
       } else if (mode_detected != s_uw_mode_shown ||
-                 (!s_uw_gameplay && s_uw_after_absence && s_uw_gp_streak > 0 && s_uw_mode_shown == 2)) {
+                 (!s_uw_gameplay && s_uw_after_absence && s_uw_gp_streak > 0 && s_uw_mode_shown == 2) ||
+                 s_uw_exit_black) {
         // 2026-09-28 (user: "a flash when the level starts that was not there before", native only): the 1.5 s entry
         // after a card showed the level's first second in 16:9 and then popped to the fill (capture cutfix4,
         // 06:43:04.4-05.6). While that entry is pending the fade now rises to black and HOLDS there; the switch
@@ -2898,8 +2936,8 @@ void D3D12CommandProcessor::IssueSwap(uint32_t frontbuffer_ptr, uint32_t frontbu
       // Ninpo cast or a cinematic is never missed), plus a periodic heartbeat.
       if (mode != s_uw_last_logged_mode) {
         s_uw_last_logged_mode = mode;
-        REXLOG_INFO("[ng2uw] CHANGE -> mode={} (3d={} 2d={} solid2d={} pause={} mist={} thr3d={})",
-                    mode, cnt3d, cnt2d, cnt2d_solid, pause_menu ? 1 : 0, cnt_mist, s_uw_thr3d);
+        REXLOG_INFO("[ng2uw] CHANGE -> mode={} (3d={} 2d={} solid2d={} pause={} mist={} fs={} thr3d={})",
+                    mode, cnt3d, cnt2d, cnt2d_solid, pause_menu ? 1 : 0, cnt_mist, cnt_fs_tex, s_uw_thr3d);
       } else if ((s_uw_dbg++ % 60) == 0) {
         REXLOG_INFO("[ng2uw] 3d={} 2d={} solid2d={} pause={} mist={} thr3d={} feature={} mode={}",
                     cnt3d, cnt2d, cnt2d_solid, pause_menu ? 1 : 0, cnt_mist, s_uw_thr3d, feature, mode);
@@ -6201,6 +6239,7 @@ bool D3D12CommandProcessor::UpdateBindings(const D3D12Shader* vertex_shader,
     // Re-upload when anything the column-0 decision reads differs from the buffer's: full-screen, partial
     // width, and solid (textureless) - a solid bar segment must not inherit a textured draw's buffer.
     const bool ng2_solid_ps = pixel_shader && pixel_shader->GetTextureBindingsAfterTranslation().empty();
+    if (ng2_fs_quad && pixel_shader && !ng2_solid_ps) ++g_ng2_2d_fs_tex_this_frame;
     const uint32_t ng2_fs_key = (ng2_fs_quad ? 1u : 0u) | (ng2_quad_partial_width ? 2u : 0u) | (ng2_solid_ps ? 4u : 0u);
     if (ng2_fs_key != s_ng2_fs_uploaded) {
       cbuffer_binding_float_vertex_.up_to_date = false;
