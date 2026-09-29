@@ -54,7 +54,8 @@ function Die($msg) { Write-Host "REFUSED: $msg"; exit 1 }
 if (-not (Test-Path $exe)) { Die "no $exe" }
 # NG2_NO_PLUGIN=1 (2026-09-27, rexgpu-xenos.dll removed): stage the runtime only, and MOVE any plugin DLL out of the
 # run folder for the run (restored after), so the exe is proven to run with no plugin present.
-$noPlugin = ($env:NG2_NO_PLUGIN -eq "1")
+# 2026-09-28: the DEFAULT since v1.1.1 shipped with no plugin - NG2_NO_PLUGIN=0 opts back into staging the old pair.
+$noPlugin = ($env:NG2_NO_PLUGIN -ne "0")
 $needed = if ($noPlugin) { @("rexruntime.dll") } else { @("rexgpu-xenos.dll", "rexruntime.dll") }
 foreach ($d in $needed) {
   if (-not (Test-Path (Join-Path $Pair $d))) { Die "no $d in $Pair" }
@@ -201,7 +202,10 @@ try {
 finally {
   # 5. Restore, always.
   $restored = @()
-  foreach ($d in @("rexgpu-xenos.dll", "rexruntime.dll")) {
+  # No-plugin runs never put rexgpu-xenos.dll back: restoring whatever a run found made one stray copy permanent
+  # (every run backed it up and restored it). Its copy stays in $backupDlls, so it is moved out, not deleted.
+  $restoreList = if ($noPlugin) { @("rexruntime.dll") } else { @("rexgpu-xenos.dll", "rexruntime.dll") }
+  foreach ($d in $restoreList) {
     if (Test-Path (Join-Path $backupDlls $d)) { Copy-Item (Join-Path $backupDlls $d) $bin -Force; $restored += $d }
   }
   if ($restored.Count -gt 0) {

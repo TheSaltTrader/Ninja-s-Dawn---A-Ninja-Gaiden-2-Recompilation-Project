@@ -361,11 +361,18 @@ void ClearPadFileQueue() {
 // scripted test run sat on the title all evening because the person watching had clicked into another window, and
 // the gate held the scripted presses too. The file exists only in tests; a player never meets this.
 bool PadFileActiveImpl() {
+  // Held open 1.5 s after the last command ends: a screen that acts on the button's RELEASE (the costume confirm)
+  // read the release after the queue had emptied, found the gate closed and missed it (vision check, 2026-09-28).
+  static double s_last_busy = -1e9;
   {
     std::lock_guard<std::mutex> lk(g_padfile_mu);
-    if (!g_padfile_q.empty() || g_padfile_cmd_start >= 0.0)
+    if (!g_padfile_q.empty() || g_padfile_cmd_start >= 0.0) {
+      s_last_busy = Now();
       return true;
+    }
   }
+  if (Now() - s_last_busy < 1.5)
+    return true;
   std::error_code ec;
   return std::filesystem::exists(PadDir() / "pad_script.txt", ec);
 }
