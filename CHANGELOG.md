@@ -17,15 +17,14 @@ its log if a texture cannot be written.
 Checked end to end on an empty folder: dump while playing, upscale with the
 built-in upscaler, then play with the resulting pack.
 
-### Fixed - switching the texture pack (F9) or dumping could make frames flash
+### Changed - switching the texture pack (F9) or dumping reloads less
 
-Switching the enhanced textures on or off, or dumping on or off, dropped the
-whole graphics cache in the middle of play - including the game's own rendered
-images - and at an internal resolution above the original that could leave
-frames washed white, red or cyan for a while afterwards. A switch now reloads
-only the textures that come from the game's data, which is all the pack or
-the dump needs, and keeps everything the game has rendered (the fix found by
-the Fable II port).
+Switching the enhanced textures on or off, or dumping on or off, used to drop
+the whole graphics cache in the middle of play, including the game's own
+rendered images. A switch now reloads only the textures that come from the
+game's data, which is all the pack or the dump needs. In the Fable II port the
+full reload could leave frames washed white, red or cyan; it was not seen in
+this game, and the lighter reload keeps it that way.
 
 ### Fixed - the texture menu made a full pack look nearly empty
 
