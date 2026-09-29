@@ -3,6 +3,16 @@
 Versions are cut with `tools/make_release.py`, which refuses to package a
 version that has no section here.
 
+## v1.1.5 - 2026-09-28
+
+### Changed - test tooling only
+
+Nothing changes for play. The scripted-input channel used by the project's
+automated test runs (a `pad_script.txt` beside the program, absent in normal
+use) now keeps input open for a moment after its last command, so a menu that
+acts when a button is released receives it even when the game window is not
+in front. Updating is optional.
+
 ## v1.1.4 - 2026-09-28
 
 ### Changed - settings that need a restart say so plainly
