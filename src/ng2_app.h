@@ -1025,7 +1025,8 @@ class Ng2App : public rex::ReXApp {
       // would replace something informative with something less so.
       if (ng2::GetWarmState().warming)
         return false;
-      return ng2::ThisProcessIsForeground();
+      // A scripted test run (the pad-script channel) is not held by focus: see PadFileActive.
+      return ng2::ThisProcessIsForeground() || ng2::PadFileActive();
     });
     REXLOG_INFO("Input: held while the texture cache warms, and while we are "
                 "not the foreground window");

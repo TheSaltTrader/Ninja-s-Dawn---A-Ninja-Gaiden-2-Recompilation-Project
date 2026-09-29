@@ -35,6 +35,9 @@ void ArmAutoSkip();
 // Any genuine input from the player. Disarms immediately.
 void NoteRealInput();
 
+// The pad-script test channel (pad_script.txt beside the exe) has commands queued, running or waiting to be read.
+bool PadFileActive();
+
 // Whether the feature is switched on at all.
 void SetAutoSkipEnabled(bool enabled);
 bool AutoSkipActive();

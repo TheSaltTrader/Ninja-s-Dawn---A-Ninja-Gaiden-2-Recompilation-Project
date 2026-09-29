@@ -356,6 +356,20 @@ void ClearPadFileQueue() {
   g_padfile_cmd_start = -1.0;
 }
 
+// 2026-09-28: the pad-script test channel is live - commands queued or running, or a pad_script.txt waiting to be
+// read. The input gate lets input through while this holds even when the game is not the foreground window: a
+// scripted test run sat on the title all evening because the person watching had clicked into another window, and
+// the gate held the scripted presses too. The file exists only in tests; a player never meets this.
+bool PadFileActiveImpl() {
+  {
+    std::lock_guard<std::mutex> lk(g_padfile_mu);
+    if (!g_padfile_q.empty() || g_padfile_cmd_start >= 0.0)
+      return true;
+  }
+  std::error_code ec;
+  return std::filesystem::exists(PadDir() / "pad_script.txt", ec);
+}
+
 void WritePadAcceptsOnce() {
   if (g_padfile_accepts_written)
     return;
@@ -468,6 +482,8 @@ class AutoSkipDriver final : public rex::input::InputDriver {
 };
 
 }  // namespace
+
+bool PadFileActive() { return PadFileActiveImpl(); }
 
 void SetAutoSkipEnabled(bool enabled) {
   g_enabled.store(enabled, std::memory_order_release);
