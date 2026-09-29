@@ -167,10 +167,18 @@ struct PageOptions {
 // worded plainly: the value is saved the moment it changes and applied on the
 // next launch, so the player is told the change is real but deferred rather
 // than being blocked from making it.
+// 2026-09-28 (user: "any setting that requires a restart to take effect should be very clear in the menu, in red and
+// stated [that the] change will take effect [only after a] reboot"): the tag says what it means, in bright red, and a
+// change to a restart-bound control raises a red banner at the top of the menu for the rest of the session.
+constexpr ImVec4 kRestartRed = ImVec4(1.0f, 0.25f, 0.25f, 1.0f);
+bool g_restart_pending = false;
 void RestartTag() {
+  // Called right after the row's control, so the last item is that control.
+  if (ImGui::IsItemEdited())
+    g_restart_pending = true;
   ImGui::SameLine();
-  ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.92f, 0.28f, 0.28f, 1.0f));
-  ImGui::TextUnformatted("restart required");
+  ImGui::PushStyleColor(ImGuiCol_Text, kRestartRed);
+  ImGui::TextUnformatted("takes effect after a restart");
   ImGui::PopStyleColor();
 }
 
@@ -2125,6 +2133,13 @@ void SettingsOverlay::OnDraw(ImGuiIO& io) {
   opts.restart_bound_editable = false;
 
   bool changed = false;
+  if (g_restart_pending) {
+    ImGui::PushStyleColor(ImGuiCol_Text, kRestartRed);
+    ImGui::TextWrapped("RESTART REQUIRED - you changed a setting that takes effect only after the game is "
+                       "restarted. It is saved; quit and start the game again to apply it.");
+    ImGui::PopStyleColor();
+    ImGui::Separator();
+  }
   ImGui::BeginChild("body", ImVec2(0, -ImGui::GetFrameHeightWithSpacing() * 2.2f));
   changed |= DrawSettings(*settings_, opts);
   changed |= DrawWorkarounds(*settings_, opts);
@@ -2169,9 +2184,10 @@ void SettingsOverlay::OnDraw(ImGuiIO& io) {
   // Nothing is greyed any more (v1.0.0 made every row editable), so the old
   // "greyed settings are fixed for this session" line described controls that
   // no longer exist and contradicted the red tag beside the rows it meant.
-  Muted("Settings marked 'restart required' are saved now and applied on the "
-        "next launch - the window and the guest video mode are built during "
-        "startup.");
+  ImGui::PushStyleColor(ImGuiCol_Text, kRestartRed);
+  ImGui::TextWrapped("Settings marked \"takes effect after a restart\" are saved at once but apply only when the "
+                     "game is started again - the window and the guest video mode are built during startup.");
+  ImGui::PopStyleColor();
 
 
   if (on_advanced_ && ImGui::Button("Advanced (all cvars)...")) {

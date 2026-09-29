@@ -143,8 +143,9 @@ comparison keypress cannot overwrite the preference you chose.
 
 Settings that can change while the game runs do so immediately. Settings the
 window or the guest's video mode were built from are saved now and applied on
-the next launch, and are marked **restart required** in red rather than
-accepted and quietly ignored.
+the next launch, and are marked **takes effect after a restart** in red rather
+than accepted and quietly ignored. Changing one also puts a red "restart
+required" banner at the top of the menu until the game is restarted.
 
 ### Display
 

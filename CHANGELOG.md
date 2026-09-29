@@ -3,6 +3,18 @@
 Versions are cut with `tools/make_release.py`, which refuses to package a
 version that has no section here.
 
+## v1.1.4 - 2026-09-28
+
+### Changed - settings that need a restart say so plainly
+
+Settings that only apply when the game starts (the window, the resolution,
+the internal resolution and a few others) were marked with a small
+"restart required" beside them, easy to miss. They now say
+**takes effect after a restart** in bright red, and changing one puts a red
+**RESTART REQUIRED** banner at the top of the menu, saying the change is
+saved and applies once the game is started again. The note at the bottom
+of the menu is red too.
+
 ## v1.1.3 - 2026-09-28
 
 ### Fixed - texture dumping wrote nothing into a new texture folder
