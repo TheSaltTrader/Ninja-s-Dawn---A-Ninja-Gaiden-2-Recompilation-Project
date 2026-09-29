@@ -151,14 +151,14 @@ required" banner at the top of the menu until the game is restarted.
 
 | Setting | Default | Notes |
 |---|---|---|
-| Resolution | 1280 × 720 | The size of the window, or of the surface the picture is scaled to in fullscreen. Presets run from 720p to 4K and include 21:9, 24:10 and 32:9 ultrawides, plus Custom. The game always renders 16:9 internally, so on a wider preset turn on **Ultrawide (3D)** below. (restart) |
+| Resolution | 1280 × 720 | The size of the window, or of the surface the picture is scaled to in fullscreen. Presets run from 720p to 4K and include 21:9, 24:10 and 32:9 ultrawides, plus Custom. The game always renders 16:9 internally, so on a wider preset turn on **Ultrawide (3D)** below. **Takes effect after a restart.** |
 | Fullscreen | off | Borderless fullscreen on the chosen monitor. |
-| Monitor | 0 | Which display to open on. (restart) |
-| Frame rate | 60 | 30 or 60. Nothing higher is offered: Ninja Gaiden II paces its own logic off the refresh rate it is told the display has, so above 60 it does not render more smoothly, it runs **faster** - combat, physics and timers all speed up. A settings file holding `fps=120` still loads and is brought down to 60. |
-| Internal resolution | 1120 × 584 (as shipped) | The resolution the 3D world is drawn at before it is scaled to the screen: 1120 × 584 (as shipped), 1280 × 720, 1920 × 1080, 2240 × 1168, 2560 × 1440, 3360 × 1752, 3840 × 2160, 5120 × 2880, 7680 × 4320. Built from the game's own world size (1120 × 584, 960 × 540 or 1280 × 720 - a larger world overflows the game's EDRAM layout) times a whole-number supersample, which also scales shadow maps. Cost goes with the pixel count. (restart) |
+| Monitor | 0 | Which display to open on. **Takes effect after a restart.** |
+| Frame rate | 60 | 30 or 60. Nothing higher is offered: Ninja Gaiden II paces its own logic off the refresh rate it is told the display has, so above 60 it does not render more smoothly, it runs **faster** - combat, physics and timers all speed up. A settings file holding `fps=120` still loads and is brought down to 60. **Takes effect after a restart.** |
+| Internal resolution | 1120 × 584 (as shipped) | The resolution the 3D world is drawn at before it is scaled to the screen: 1120 × 584 (as shipped), 1280 × 720, 1920 × 1080, 2240 × 1168, 2560 × 1440, 3360 × 1752, 3840 × 2160, 5120 × 2880, 7680 × 4320. Built from the game's own world size (1120 × 584, 960 × 540 or 1280 × 720 - a larger world overflows the game's EDRAM layout) times a whole-number supersample, which also scales shadow maps. Cost goes with the pixel count. This row replaced the separate Internal render size and Supersampling rows in v1.1.1; the Quality preset still sets the supersample. **Takes effect after a restart.** |
 | Letterbox | on | Keeps the original aspect instead of stretching. |
 | Ultrawide (3D) | off | Widens the 3D field of view to fill a wider-than-16:9 screen with correct proportions - you see more of the world across the width, with no stretching. Full-screen menus, videos and the in-game HUD stay 16:9. Takes effect immediately. |
-| Dither the output | off | Hides colour banding on 8-bit displays. |
+| Dither the output | off | Hides colour banding on 8-bit displays. **Takes effect after a restart.** |
 
 **V-Sync is not offered and is always on.** On this title it is not a tearing
 control: the game advances its logic on vblank, so turning it off raises that
@@ -171,43 +171,50 @@ An **Autodetect** button re-runs the first-launch hardware detection and picks s
 
 | Setting | Default | Notes |
 |---|---|---|
-| Anisotropic filtering | auto | |
+| Anisotropic filtering | auto | **Takes effect after a restart.** |
 | Anti-aliasing | none | |
-| Output filter | bilinear | Bilinear, or FidelityFX CAS. |
-| CAS sharpness | 0.0 | Only meaningful with CAS selected. |
+| Sharpening | bilinear | Bilinear, or FidelityFX CAS. **Takes effect after a restart.** |
+| Extra sharpness | 0.0 | Only meaningful with CAS selected. **Takes effect after a restart.** |
 | Skip intro videos | off | Skips the openings and the attract demos. **Chapter-loading videos are deliberately left alone** — the game reads a failed open of one as a bad disc and stops. |
 | Skip chapter cinematics | off | Presses A/START for you through the in-engine cinematic at a chapter start. Any real controller input disarms it instantly, so a cinematic you want to watch is one stick nudge away from being left alone. |
-| Fuzzy alpha | off | Workaround. |
-| Accurate depth | off | Workaround. |
+| Fuzzy alpha test | off | Workaround. **Takes effect after a restart.** |
+| Accurate depth | off | Workaround. **Takes effect after a restart.** |
 
 ### Textures
 
 | Setting | Default | Notes |
 |---|---|---|
 | Texture folder | — | Where the dump and the finished pack live. |
-| Dump textures while playing | off | Writes each texture the first time it is seen. Turn it off once you have a pack. |
-| Use the upscaled pack | off | Needs a pack to have been made first. **F9** toggles it live. |
+| Dump while playing | off | Writes each texture the first time it is seen into `<texture folder>/dump`, which is created if it is not there yet (before v1.1.3 a new folder silently got no files). Turn it off once you have a pack. **Takes effect after a restart.** |
+| Use the upscaled textures | off | Needs a pack to have been made first. **F9** switches it on and off live, with a notice at the top left; a switch reloads only the textures that come from the game's data, not what the game has rendered. |
 | Upscale factor | 2× | 2×, 4× or 8×. |
 | Upscaler | Lanczos | **Lanczos** is a high-quality resample built in and needs nothing extra. **Real-ESRGAN AI** is a trained model that adds detail, and needs the 43 MB download plus a Vulkan-capable GPU. The AI entry only appears once the upscaler is installed. |
 | Detail strength | 0.75 | How much of the model's **fine detail** is laid over the original. Not a cross-fade: the tone and colour stay the game's. Real-ESRGAN is photo-trained and denoises hard — on a smoke texture it cut mean brightness by 40%, because faint wisps against black are exactly what it treats as noise. Only the detail is taken. |
-| Texture cache | renderer default | How much host memory the renderer may hold textures in, up to 8 GB. |
+| Texture cache | renderer default | How much host memory the renderer may hold textures in, up to 8 GB. **Takes effect after a restart.** |
 
 Making a pack: set a folder, turn dumping on, play through the areas you care
 about, turn dumping off, then press **Process textures**. The tools run in a
 hidden child process and report progress in two steps (decode, then upscale);
 the pack is loaded on the next launch or the next F9.
 
-The counts above the button are textures that **can be enhanced**: how many
-were dumped, how many are in the pack, how many are waiting. HUD, fonts, video
-frames and other non-art are dumped too but never packed, by design, and are
-not counted. A run processes only the waiting textures unless **Redo textures
+The lines above the button say first how many enhanced textures **the pack
+holds**, then what the **dump folder** has: how many dumped textures can be
+enhanced, how many of those the pack already covers, and how many are waiting.
+"Covered" is judged the way the game itself matches textures - the same image
+and shape, wherever in memory it was dumped - so a texture already in the pack
+under another address is not counted as waiting, and "Process textures" does
+not redo it. HUD, fonts, video frames and other non-art are dumped too but
+never packed, by design, and are not counted. A run processes only the waiting textures unless **Redo textures
 already in the pack** is ticked; the line under the button says exactly what
 it will do and at which scale, upscaler and strength. The pack records what it
 was made with in `pack/pack.txt`; change the scale, the upscaler or the detail
 strength and the next run redoes every texture, and the menu says so first.
 "Enhanced textures: ON" below the counts, with the number of enhanced and
 original textures loaded, is read from the renderer and answers whether the
-pack is actually in use.
+pack is actually in use. The enhanced count covers every way a texture is
+swapped for its enhanced version and restarts when the pack is switched (before
+v1.1.3 it showed only one of them and could read a few hundred while thousands
+were in use).
 
 Dumping and using the pack are mutually exclusive. Together they put a file
 write and a folder stat on the GPU thread for every texture the game creates,
@@ -224,6 +231,14 @@ already on screen.
 The lists are built by playing. A stage you have not visited yet has no list and
 simply behaves as it did before, so this is never worse than not having it, and
 the benefit arrives on your second visit to a stage rather than your first.
+
+**GPU-ready prebuild.** At a stage change the port also builds that stage's
+replacements ready to draw, so a texture streamed in during play swaps to its
+enhanced version with no file read or creation in the frame. The video memory it
+may use follows the graphics card: 30% of its video-memory budget, between
+512 MB and 4 GB. Since v1.1.2 a card with enough memory prepares a whole stage
+(Chapter 14 needs about 2.2 GB); before, a 1.5 GB cap left part of it to be
+built mid-play, which showed as 50-200 ms hitches when an area streamed in.
 
 ### On-screen readouts
 
@@ -300,7 +315,7 @@ are written up in `docs/`:
 | Document | What it answers |
 |---|---|
 | [ARCHITECTURE.md](docs/ARCHITECTURE.md) | How the pieces fit: what is in each of the three binaries, how a setting reaches the engine, and the changes that live outside any source file. |
-| [ISSUES_AND_FIXES.md](docs/ISSUES_AND_FIXES.md) | Every issue met while porting, its cause and its fix, by area, from v0.1.0 to v1.0.24. |
+| [ISSUES_AND_FIXES.md](docs/ISSUES_AND_FIXES.md) | Every issue met while porting, its cause and its fix, by area, from v0.1.0 to v1.1.5. |
 | [XENIA_ISSUES.md](docs/XENIA_ISSUES.md) | Every label on Xenia's compatibility issue for this title, and what this port does about each. Includes what the census does *not* cover. |
 | [VECTOR_COVERAGE.txt](docs/VECTOR_COVERAGE.txt) | How the garbled videos were traced to VMX128 registers v64–v127 reading as zero — including the two dead ends that ruled out the video files and the SDK's decoder first. |
 | [VIDEO_DECODE.md](docs/VIDEO_DECODE.md) | The game decodes its own WMVs in recompiled guest code; it imports no media APIs at all. |

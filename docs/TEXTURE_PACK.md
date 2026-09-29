@@ -1,8 +1,40 @@
 # Texture pack: extraction, upscaling, replacement
 
-**Status: extraction and decoding WORK and are verified. Replacement is not
-built yet.** `docs/texpack/decoded_sample.png` is real output - a flower and a
-kunai decoded from raw guest bytes, correct alpha, no artefacts.
+**Status (v1.1.5, 2026-09-28): dumping, upscaling and replacement all work and
+ship.** The sections after "Current state" are the design record, written while
+the pipeline was being built (the first of them when replacement did not exist
+yet), and say "the plugin" for what is now the renderer inside `ng2.exe`; each
+keeps the reasoning that still holds. For using the pack, see the README's
+"Textures" section; for every defect met on the way, `ISSUES_AND_FIXES.md`
+(T1 to T22, N6 to N11). `docs/texpack/decoded_sample.png` is real output - a
+flower and a kunai decoded from raw guest bytes, correct alpha, no artefacts.
+
+## Current state
+
+* **Where it runs.** Since v1.1.1 the renderer is part of `ng2.exe`
+  (`src/native_gpu_xlat/rtc_d3d12/texture_cache.cpp`); there is no GPU plugin.
+  The settings are ordinary F10 rows, not plugin cvars.
+* **Dumping.** "Dump while playing" writes each texture the first time it is
+  seen into `<texture folder>/dump`, creating that folder if needed (v1.1.3;
+  before, a folder without it silently got nothing). The row takes effect after
+  a restart.
+* **Upscaling.** `tools/upscale_textures.py`, driven by "Process textures" in
+  the menu, with the bundled Real-ESRGAN engine as the default (v1.0.14). A
+  dumped texture counts as covered when the pack already has the same image and
+  shape under any address, so it is not redone (v1.1.3).
+* **Matching.** A pack file is found by content hash plus the texture's shape
+  (the low 40 bits of the id), the way the section on ids below describes, so a
+  texture the game streams to a new address still finds its replacement.
+* **Loading without hitches.** Pack reads and texture creation run on worker
+  threads; at a stage load the port prepares the stage's replacements ready for
+  the GPU, within 30% of the card's video-memory budget (512 MB to 4 GB, v1.1.2),
+  and pre-creates the game's own textures it recorded on the previous visit.
+* **Switching.** F9 turns the pack on and off live, with a notice at the top
+  left; a switch reloads only the textures that come from the game's data
+  (v1.1.3). The menu's "Enhanced textures" line and the `[swap]` log line give
+  one total of replacements in use, reset at each switch.
+* **Memory.** Replacements belong to the texture cache and count toward its
+  budget (v1.1.1).
 
 ## How it works, and why it is built this way
 
@@ -79,7 +111,7 @@ texture_path=C:/ng2tex
 
 Then `python tools/upscale_textures.py --dir C:/ng2tex [--upscale]`.
 
-**GPU plugin cvars cannot be passed on the command line.** They only reach the
+**Up to v1.1.0: GPU plugin cvars cannot be passed on the command line.** They only reach the
 plugin through `cvar::LoadConfig` deferral, i.e. the generated
 `cache/ng2_tuning.toml`, which `ng2_tuning.h` writes each launch. `--texture_dump`
 on the command line silently does nothing.
@@ -153,6 +185,8 @@ formats (`k_8`, `k_8_8` - masks and ramps), and strips with an aspect ratio >= 8
 
 ## Two traps that cost time
 
+(The first applies to releases up to v1.1.0, which shipped the plugin.)
+
 **The plugin and the runtime must be built from the SAME source tree.** A
 source-built `rexgpu-xenos.dll` against the stock `rexruntime.dll` makes the game
 exit during startup with no error - the log simply stops after the tuning lines.
@@ -175,7 +209,11 @@ pitch_texels = max(pitch * 32, w)
 pitch_blocks = max(1, pitch_texels // block)   # block = 1, or 4 for DXT
 ```
 
-## What remains
+## What remained (2026-09-11)
+
+All four were done by v1.0.14: replacement in v0.5.4 (T1), Real-ESRGAN bundled
+in v1.0.14 (T20), the options section in use since. Kept as the record of the
+order it was built in.
 
 0. **A gameplay capture.** Everything below is blocked on it, and it costs two
    minutes: turn dumping on, load a level, fight for a bit. Until then there is

@@ -55,11 +55,11 @@
     },
     {
       "setting": "texture_dump",
-      "doc_phrase": "Dump textures while playing"
+      "doc_phrase": "Dump while playing"
     },
     {
       "setting": "texture_pack",
-      "doc_phrase": "Use the upscaled pack"
+      "doc_phrase": "Use the upscaled textures"
     },
     {
       "setting": "texture_scale",
@@ -83,11 +83,11 @@
     },
     {
       "setting": "present_effect",
-      "doc_phrase": "Output filter"
+      "doc_phrase": "Sharpening"
     },
     {
       "setting": "cas_sharpness",
-      "doc_phrase": "CAS sharpness"
+      "doc_phrase": "Extra sharpness"
     },
     {
       "setting": "skip_cinematics",

@@ -32,6 +32,9 @@ NG2's into C++ `switch` statements), C++ exception state, and vtable layout.
 That is the compatibility that actually matters, and it is confirmed working:
 NG2 analyses with **0 errors across 42,504 functions**, codegens, compiles,
 links, and executes guest code under the SDK's stock Xenos GPU plugin.
+(That was the starting point. Since v1.1.1 the graphics run in the port's
+own renderer inside `ng2.exe` and the plugin is not used; see
+`ARCHITECTURE.md`.)
 
 ## What is different, and why it matters
 

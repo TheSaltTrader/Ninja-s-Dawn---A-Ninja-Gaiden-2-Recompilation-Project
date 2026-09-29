@@ -1,5 +1,16 @@
 # Native GPU port — branch `native-gpu` (not pushed)
 
+> **Status 2026-09-28: done by another route, and shipped.** NG2 did not take
+> the Direct3D 9 / Plume route this plan describes. It kept the command stream
+> and moved the SDK's own Direct3D 12 backend into the executable - vendored
+> through the Fable II migration kit, see `src/native_gpu_xlat/ORIGIN.txt` -
+> first beside the plugin (v1.1.0), then without it: `rexgpu-xenos.dll` is gone
+> since v1.1.1, the draw recording has its own thread since v1.1.2, and v1.1.5
+> is current. The branch is `native-gpu-ng2`, and `main` follows it. The current
+> design is in `docs/ARCHITECTURE.md` ("The graphics path"), the defects in
+> `docs/ISSUES_AND_FIXES.md` N1-N15. What follows is the original plan, kept as
+> the record of the M3/M4 reconnaissance, which is still accurate.
+
 Goal: replace the Xenia-derived Xenos emulation (`rexgpu-xenos.dll`, PM4 ring
 buffer interpreted at the packet level) with a **native renderer**: intercept the
 game at the **Direct3D 9 device API** it was written against and drive a modern

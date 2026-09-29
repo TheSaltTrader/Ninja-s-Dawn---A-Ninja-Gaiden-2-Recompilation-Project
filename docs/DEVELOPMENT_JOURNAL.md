@@ -850,3 +850,16 @@ into "carry on with invalid state".
   unimplemented in the runtime. Not yet proven to be load-bearing.
 - `tools/scan_missed.py --write` exists but should not be used unattended - see
   the false-positive note above.
+
+## After v1.0.24: the native renderer (2026-09-26 to 2026-09-28)
+
+The record for this stretch is kept elsewhere, and this journal only points at
+it: `ISSUES_AND_FIXES.md` N1-N15 has each defect with its cause and fix,
+`ARCHITECTURE.md` the design, `CHANGELOG.md` v1.0.25 to v1.1.5 what shipped.
+In short, the SDK's GPU plugin was replaced by a renderer compiled into
+`ng2.exe` (v1.1.0 beside the plugin, v1.1.1 without it); its draw recording
+moved to its own thread (v1.1.2); and the texture pack's dump, count, switch
+and pre-build were put right under it (v1.1.2, v1.1.3). Two entries above are
+overtaken: the video corruption was not in the GPU plugin after all but in the
+recompiler, and was fixed in v0.5.0 (`VIDEO_DECODE.md`); and the "Known gaps"
+list is superseded by the "Still open" section of `ISSUES_AND_FIXES.md`.

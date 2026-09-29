@@ -441,6 +441,9 @@ def main():
                 # Placeholders and our own manifest are ours, not the game's.
                 if os.path.basename(low) in ("put_files_here.txt",):
                     continue
+                # The bundled Real-ESRGAN weights (ncnn .bin, shipped since v1.0.14) are the upscaler's, not the disc's.
+                if "/tools/upscaler/models/" in low.replace("\\", "/"):
+                    continue
                 offenders.append(e)
         if offenders:
             for e in offenders[:20]:

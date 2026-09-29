@@ -1,13 +1,89 @@
-# Handoff — resume point, current at 2026-09-26
+# Handoff — resume point, current at 2026-09-28
 
 Written so this work can be picked up cold, from nothing but this file. It is a
 working document, not a published one: `local/` and this file are outside the
 publication allowlist (`tools/stage_repo.py`), so absolute paths and machine
 specifics are safe to write here and will never be staged.
 
-Sections 1, 2, 4-7 and 11 are the state at 2026-09-26. Sections 3, 8, 9 and
-10 - build and deploy, the withdrawn claims, the gotchas and the diagnostic
-scripts - are the durable part and carry forward unchanged unless noted.
+**Section 0 is the current state (2026-09-28, v1.1.5).** Sections 1, 2, 4-7 and
+11 are the state at 2026-09-26, before the native renderer, and say "the GPU
+plugin" for what is now inside `ng2.exe`. Sections 3, 8, 9 and 10 - build and
+deploy, the withdrawn claims, the gotchas and the diagnostic scripts - are the
+durable part; section 0 supersedes section 3's build and deploy steps.
+
+---
+
+## 0. State at 2026-09-28 — v1.1.5, fully native
+
+**Summary.** The game's graphics run entirely inside `ng2.exe` since v1.1.1:
+the program reads the console's command stream itself and draws with its own
+Direct3D 12 renderer (the SDK backend, vendored in `src/native_gpu_xlat/` via
+the Fable II migration kit). `rexgpu-xenos.dll` is no longer built into a
+release, shipped or loaded. Decoding stays on the game thread, draw recording
+runs on a draw thread (`ng2_opt_split`, v1.1.2) and frames reach the window
+through a present thread. `docs/ARCHITECTURE.md` has the diagram;
+`docs/ISSUES_AND_FIXES.md` N1-N15 has every defect from v1.0.25 to v1.1.5.
+
+| Item | State |
+|---|---|
+| Version | `1.1.5` (`VERSION`) |
+| Work tree | `D:\ng2_frameinterp\ng2recomp-worktree`, branch `native-gpu-ng2`; `origin/main` is fast-forwarded to it at each release |
+| Published | releases v1.1.2, v1.1.3, v1.1.4, v1.1.5 on GitHub, each asset read back (size + sha256) after upload |
+| Standalone install | `D:\Ninja Gaiden 2 Portable` on v1.1.5 |
+| Lodestone census | green - `python tools/lodestone_census.py --package <zip>`: 45 settings, 40 documented, 0 undocumented, no game data (the Real-ESRGAN weights under `tools/upscaler/models/` are exempt since 2026-09-28; they had been flagged as game data) |
+| Verified by play | every chapter walked from the saves list (no unhandled command, no failed draw); the Chapter 10 boss fight; the Chapter 4 boss (ultrawide boss bar); texture dump -> upscale -> pack on an empty folder |
+
+**Build and run (native branch).**
+
+```bash
+# incremental exe build; claims ~/.game-test-lock for 15 min, releases it after
+bash /d/ng2_frameinterp/work/scripts/build_exe_only.sh
+
+# run the build (re-checks that no ng2/fable2 process is running at launch,
+# waits for the game to exit before releasing the lock)
+powershell -File tools/native_gpu/run_native.ps1
+```
+
+`rexruntime.dll` still comes from the SDK tree; rebuild it only after an SDK
+source change (`local/diag/build_sdk.cmd`). `run_native.ps1` defaults to no
+plugin (`NG2_NO_PLUGIN` unset or anything but `0`) and no longer restores
+`rexgpu-xenos.dll` into the build folder.
+
+**Release.** `python tools/make_release.py` (refuses a version with no
+changelog section; checks the staged exe for `ng2_uw_mode`, the fade marker and
+"own graphics system created"), then the `publish_11x.sh` scripts in
+`D:\ng2_frameinterp\work\scripts`: pre-flight, push main, tag,
+`gh release create`, read back size and sha256.
+
+**Test tooling** (`D:\ng2_frameinterp\work\scripts`). A scripted leg drives
+the game through `pad_script.txt` beside the exe; the input hold for an
+unfocused window does not apply while that channel is active or for 1.5 s after
+its last command (v1.1.5). `leg_when_free5.sh` waits for the machine lock (an
+expired lock is cleared only after re-checking it at the moment of clearing),
+`until_gameplay.sh` retries until gameplay is reached, `burst_now.ps1` /
+`burst_shots2.ps1` capture frames and stop when the game exits,
+`texpack_toggle.txt` beside the exe switches the pack as F9 does,
+`flashcount.py` and `violet_scan.py` (validated floor 0.05% of the frame) count
+flashes, `provenance_sheet.py` checks every capture actually shows NG2.
+
+**Rules that cost time to learn.** One game at a time on this machine: the lock
+is `~/.game-test-lock`, shared with the Fable II sessions, with a 45 s gap before
+re-claiming; no build and no test while any game runs, including the user's
+own. Kill only PIDs you started, and after stopping a shell chain look for its
+surviving children by command line (a leftover chain ran two legs during the
+Fable II session on 2026-09-27). Back up the saves before running the
+portable. A screen capture records whatever window is on top.
+
+**Open.**
+
+1. Should changes that touch only the test tooling wait for the next release
+   that changes play? Asked of the user after v1.1.5; unanswered.
+2. A route with heavy tree canopy has not been checked for a violet flash;
+   the captured routes had none above 0.05% of the frame.
+3. The F10 Sharpening row's fallback note still says the CAS and FSR shaders
+   are "compiled out of the plugin"; the wording predates the native renderer.
+4. The items of section 11 below still stand (attract-demo freeze, BC7/BC3,
+   missing guest functions).
 
 ---
 

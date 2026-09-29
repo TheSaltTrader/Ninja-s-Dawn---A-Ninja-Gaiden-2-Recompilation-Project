@@ -4,7 +4,7 @@ How the pieces of this port fit together: what is in each binary, how a setting
 reaches the engine, and which changes do not live in any source file. Written
 because more than one defect here has come from the shape of the system rather
 than from any single file — a feature split across two DLLs that lost half of
-itself in a release, and two crash fixes that vanished when the translated code
+itself in a release (before the graphics moved into the executable), and two crash fixes that vanished when the translated code
 was regenerated.
 
 For what the port *does*, see the [README](../README.md). For what went wrong
@@ -12,19 +12,25 @@ and why, see [ISSUES_AND_FIXES.md](ISSUES_AND_FIXES.md).
 
 ---
 
-## The three binaries
+## The binaries
 
-A release is one executable and two DLLs, and **they are one matched set**. A
-mismatched trio does not fail politely: the game exits during startup with no
-error message and an empty log.
+Since v1.1.1 a release is one executable and one SDK DLL, plus the Visual C++
+runtime files beside them. **They are a matched set.** A mismatched pair does
+not fail politely: the game exits during startup with no error message and an
+empty log.
 
 | Binary | Built from | Holds |
 |---|---|---|
-| `ng2.exe` | `ng2recomp` (this repo) + the translated game code | The game's own PowerPC translated to x86-64, the settings screens, the setup screen, the updater, the texture tools' front end |
+| `ng2.exe` | `ng2recomp` (this repo) + the translated game code | The game's own PowerPC translated to x86-64, **its graphics system** (the console's command stream reader, the Direct3D 12 renderer, the texture pack, the ultrawide widen, the present thread), the settings screens, the setup screen, the updater, the texture tools' front end |
 | `rexruntime.dll` | the ReXGlue SDK tree | Kernel, filesystem, audio, input, and **the presenter** |
-| `rexgpu-xenos.dll` | the ReXGlue SDK tree | The Xenos GPU plugin: the PM4 ring parser, shader translation, the upload copy pool |
 
-Both DLLs are built from source rather than taken from a stock SDK drop,
+Up to v1.0.25 there was a third, `rexgpu-xenos.dll`, the SDK's Xenos GPU
+plugin: the ring parser, shader translation and the Direct3D 12 backend. v1.1.0
+compiled that backend into the executable beside the plugin, and v1.1.1 removed
+the plugin (ISSUES_AND_FIXES N1). An install updated from an older release
+still has the file; nothing loads it.
+
+`rexruntime.dll` is built from source rather than taken from a stock SDK drop,
 because this port depends on fixes in that tree (see the README's "What this is
 built on").
 
@@ -34,18 +40,40 @@ a known-good release, never against that folder.
 
 ---
 
-## Why a feature can span two DLLs
+## The graphics path
+
+    game thread     the translated game writes the console's command stream
+                    (PM4 packets) as it did on the Xbox 360; ng2.exe reads it
+                    and decodes each packet, on the game's own thread
+        |           ordered stream of decoded draws, 128 chunks deep, with
+        v           every fence, interrupt and kick side effect queued behind
+    draw thread     the draws before it (`ng2_opt_split`, default on)
+                    records the Direct3D 12 commands: the translated shaders,
+                    the EDRAM render-target model (ROV path), the texture
+                    cache and the texture pack
+        |
+        v
+    present thread  hands each finished frame to the game's window, so the
+                    game thread never waits on the copy to the screen
+
+The renderer is the SDK's Direct3D 12 backend, vendored into
+`src/native_gpu_xlat/` by way of the Fable II port's migration kit
+(`src/native_gpu_xlat/ORIGIN.txt` records every source commit and every patch),
+and driven by the executable instead of the plugin. The thread split and the
+present thread came from the Fable II port as well. A machine without
+Direct3D 12 gets a message box at start-up.
+
+---
+
+## Why a feature can span two binaries
 
 Ultrawide is the worked example, and the one that has already cost a release.
 
-    ng2.exe            computes k = render_aspect / display_aspect
-                       and writes it to the ng2_fov_k cvar
-        |
-        v
-    rexgpu-xenos.dll   reads ng2_fov_k per draw, scales column 0 of the
-                       per-object World-View-Projection -> the 3D field of
-                       view widens (a true Hor+ widen, not a stretch).
-                       Classifies each frame as gameplay or menu/video and
+    ng2.exe            computes k = render_aspect / display_aspect, scales
+                       column 0 of the per-object World-View-Projection by it
+                       -> the 3D field of view widens (a true Hor+ widen, not
+                       a stretch). Classifies each frame as gameplay or
+                       menu/video, compresses the HUD into the 16:9 band, and
                        writes the answer to the ng2_uw_mode cvar
         |
         v
@@ -54,21 +82,22 @@ Ultrawide is the worked example, and the one that has already cost a release.
                        pillarboxes at 16:9, mode 0 defers to the player's
                        "Keep aspect ratio" setting
 
-The two DLLs cannot call each other. `presenter.cpp` compiles into
-`rexruntime.dll` while `command_processor.cpp` compiles into
-`rexgpu-xenos.dll`, and the GPU plugin does not relink the core objects, so a
-plain extern or a compile-time cvar reference across that boundary will not
-link. **The shared cvar registry, addressed by name, is the channel.**
+The presenter is compiled into `rexruntime.dll` and cannot link against code
+in the executable, so **the shared cvar registry, addressed by name, is the
+channel.** Until v1.1.1 the widen lived in the GPU plugin, which could not call
+the runtime either, and the same channel joined three binaries.
 
-The consequence is the part worth remembering: a build with the right plugin and
-the wrong runtime widens the field of view into a frame that is then letterboxed
-anyway. Nothing errors. Ultrawide simply reads as absent, and so do the
-full-screen scene fades, which depend on the same fill. That shipped as v1.0.22.
+The consequence is the part worth remembering: a build with the widen and a
+runtime without the presenter's half widens the field of view into a frame that
+is then letterboxed anyway. Nothing errors. Ultrawide simply reads as absent,
+and so do the full-screen scene fades, which depend on the same fill. That
+shipped as v1.0.22.
 
 `make_release.py` now refuses to package unless the staged runtime carries
-`ng2_uw_mode` and the plugin carries `ng2_uw_mode` and the fade fix's own
-counter. Each check runs a control string first, so a reader that can see
-nothing refuses rather than reporting every feature missing.
+`ng2_uw_mode` and the staged executable carries `ng2_uw_mode`, the fade fix's
+own marker and the string that says its own graphics system was created. Each
+check runs a control string first, so a reader that can see nothing refuses
+rather than reporting every feature missing.
 
 ---
 
@@ -84,11 +113,15 @@ Three things decide whether a setting can be changed while the game runs:
 * **Restart-bound settings** are saved immediately and applied at the next
   launch. The row stays editable and is marked, rather than being greyed out:
   the value is real, just deferred.
-* **GPU-plugin cvars cannot be set from the command line at all**, and cannot be
-  set in `OnPostSetup` either — the plugin registers its cvars after
-  `OnPreSetup` and reads some of them once at GPU init. They go through a TOML
-  loaded in `OnPreSetup` via `cvar::LoadConfig`, the one path that defers values
-  for cvars that do not exist yet.
+* **Renderer settings read once at start-up** (the internal resolution, the
+  anisotropic level, the output filter and its sharpness, dither, the texture
+  cache size and others) are restart-bound whatever the row looks like. The
+  F10 census (`tools/f10_census.py`) established which; each such row carries a
+  red "takes effect after a restart" note (`RestartTag` in `ng2_menu.cpp`), and
+  changing one raises a RESTART REQUIRED banner. Up to v1.1.0 these were the
+  GPU plugin's cvars, which could be set neither from the command line nor in
+  `OnPostSetup` - the plugin registered them after `OnPreSetup` - and went
+  through a TOML loaded via `cvar::LoadConfig`.
 
 **A setting that is removed keeps its field.** When a setting is shown to harm
 the game it is taken out of every screen, the tuning forces the safe value, and
@@ -142,11 +175,12 @@ as a **signed decimal** `lis` immediate — `0x84C40000` appears as
 It refuses to cut a version with no changelog entry, one missing a required
 tool, a build older than its sources, or anything that looks like game data.
 
-Two checks specifically guard the trio described above:
+Two checks specifically guard the binaries described above:
 
-* `check_sdk_pair()` — refuses one stock DLL beside one source-built one.
-  **This checks origin, not content**, and it passed on the build that shipped
-  without ultrawide.
+* `check_sdk_pair()` — up to v1.1.0 refused one stock DLL beside one
+  source-built one; with one SDK DLL left it now reports which runtime was
+  staged. **This checks origin, not content**, and it passed on the build that
+  shipped without ultrawide.
 * `check_ng2_features()` — reads the *staged* files and refuses to package if an
   NG2 feature has gone missing from them.
 
