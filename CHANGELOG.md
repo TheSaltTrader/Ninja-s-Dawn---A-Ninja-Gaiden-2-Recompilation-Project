@@ -3,6 +3,46 @@
 Versions are cut with `tools/make_release.py`, which refuses to package a
 version that has no section here.
 
+## v1.1.3 - 2026-09-28
+
+### Fixed - texture dumping wrote nothing into a new texture folder
+
+Turning on "Dump while playing" with a texture folder that had no `dump`
+subfolder yet wrote no files at all: nothing created that subfolder, every
+write failed without a word, and the upscaler then reported that there was
+nothing to upscale. A folder that already had one (from an earlier setup)
+was unaffected. The game now creates `dump` when dumping starts, and says in
+its log if a texture cannot be written.
+
+Checked end to end on an empty folder: dump while playing, upscale with the
+built-in upscaler, then play with the resulting pack.
+
+### Fixed - switching the texture pack (F9) or dumping could make frames flash
+
+Switching the enhanced textures on or off, or dumping on or off, dropped the
+whole graphics cache in the middle of play - including the game's own rendered
+images - and at an internal resolution above the original that could leave
+frames washed white, red or cyan for a while afterwards. A switch now reloads
+only the textures that come from the game's data, which is all the pack or
+the dump needs, and keeps everything the game has rendered (the fix found by
+the Fable II port).
+
+### Fixed - the texture menu made a full pack look nearly empty
+
+The Textures section led with figures about the dump folder, so a pack of
+tens of thousands of textures could read as "37 in the pack". It now says
+first how many enhanced textures the pack holds, and labels the rest as the
+dump folder's. A dumped texture also counts as covered when the pack has the
+same image under another address - the way the game itself matches them - and
+"Process textures" no longer redoes those.
+
+### Fixed - the count of enhanced textures in use was wrong
+
+The "enhanced loaded" figure showed only one of the three ways a texture is
+swapped for its enhanced version, so it could say a few hundred while a few
+thousand were in use, and jumped back to an old number after F9 off and on.
+It now counts them all, and restarts when the pack is switched.
+
 ## v1.1.2 - 2026-09-28
 
 ### Changed - drawing moved off the game's thread

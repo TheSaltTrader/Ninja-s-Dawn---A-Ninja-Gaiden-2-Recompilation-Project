@@ -159,6 +159,10 @@ try {
     $game = Get-Process -Name ng2 -ErrorAction SilentlyContinue | Where-Object { $_.StartTime -gt (Get-Date).AddSeconds(-30) } | Select-Object -First 1
     if ($game) { $pid_started = $game.Id } else { $pid_started = $p.Id }
   } else {
+    # 2026-09-28 20:36 (user playing Fable II; a leg launched 1 s after their game): a user's own game has no lock
+    # line, and every earlier check was seconds old. Re-check at the instant of launch and refuse if ANY game runs.
+    $other = Get-Process -Name ng2, fable2 -ErrorAction SilentlyContinue
+    if ($other) { Die "a game is running ($(($other | ForEach-Object { "$($_.ProcessName) $($_.Id)" }) -join ', ')) - not launching" }
     $p = Start-Process -FilePath $exe -WorkingDirectory $bin -PassThru
     $pid_started = $p.Id
   }

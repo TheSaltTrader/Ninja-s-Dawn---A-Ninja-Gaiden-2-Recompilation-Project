@@ -3008,6 +3008,25 @@ void D3D12CommandProcessor::IssueSwap(uint32_t frontbuffer_ptr, uint32_t frontbu
     // [dd] File-triggered dump (2026-09-27, pause-menu ultrawide diagnosis): dd_now.txt in the working
     // directory, holding a frame count, starts a dump into dd_dump.txt from outside the process, on either
     // path (the exe has no runtime lever for gpu_draw_dump_frames). Polled every 30 swaps, stat cost only.
+    // [texpack test] 2026-09-28 (user: "F9 shows no difference", "prevent any flashing"): texpack_toggle.txt in the
+    // working directory switches the texture pack exactly as F9's live setting does (the texture_pack_path cvar), so a
+    // scripted run can capture the switch without synthetic key presses. The file holds the pack folder, or "off".
+    {
+      static uint32_t tp_poll = 0;
+      if ((++tp_poll % 30) == 0) {
+        if (FILE* tf = std::fopen("texpack_toggle.txt", "r")) {
+          char buf[512] = {};
+          if (!std::fgets(buf, sizeof(buf), tf)) buf[0] = 0;
+          std::fclose(tf);
+          std::remove("texpack_toggle.txt");
+          std::string v(buf);
+          while (!v.empty() && (v.back() == '\n' || v.back() == '\r' || v.back() == ' ')) v.pop_back();
+          const std::string path = (v == "off") ? std::string() : v;
+          rex::cvar::SetFlagByName("texture_pack_path", path);
+          REXLOG_INFO("[texpack test] file-triggered switch: texture_pack_path = '{}'", path);
+        }
+      }
+    }
     if (!dd_file_) {
       static uint32_t dd_poll = 0;
       if ((++dd_poll % 30) == 0) {
@@ -5370,6 +5389,12 @@ bool D3D12CommandProcessor::EndSubmission(bool is_swap) {
       render_target_cache_->ClearCache();
 
       shared_memory_->ClearCache();
+      texture_clear_requested_ = false;   // the full clear covered it
+    }
+    if (texture_clear_requested_ &&
+        (FenceReasonScope(fence_reason_, "cache clear"), AwaitAllQueueOperationsCompletion())) {
+      texture_clear_requested_ = false;
+      texture_cache_->DestroyGuestDataTextures();
     }
   }
 

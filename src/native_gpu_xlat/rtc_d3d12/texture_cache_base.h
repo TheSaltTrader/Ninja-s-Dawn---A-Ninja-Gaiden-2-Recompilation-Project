@@ -81,6 +81,11 @@ class TextureCache {
   }
 
   virtual void ClearCache();
+  // [texpack] What a texture-pack or dump switch needs (Fable II 6272471, ported 2026-09-28): drop the textures loaded
+  // from the game's own data so they load again (and meet the pack or the dump), and KEEP every texture of the game's
+  // own rendering - scaled resolves and anything on GPU-written memory. Neither the pack nor the dump touches those,
+  // and re-creating them mid-play at a resolution scale above 1 could draw them from stale memory: washed frames.
+  void DestroyGuestDataTextures();
 
   virtual void CompletedSubmissionUpdated(uint64_t completed_submission_index);
   virtual void BeginSubmission(uint64_t new_submission_index);

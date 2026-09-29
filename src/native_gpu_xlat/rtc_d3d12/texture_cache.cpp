@@ -90,6 +90,16 @@ REXCVAR_DEFINE_BOOL(texture_pack_resolve_at_load, true, "GPU",
 // [no-dll] registered here since rexgpu-xenos.dll is gone (gen_gpu_cvars.py, verbatim from the fork)
 REXCVAR_DEFINE_INT32(texture_pack_replaced, 0, "GPU",
                      "Read-only: textures loaded from the pack this run");
+// 2026-09-28: ONE total for the indicator. Each replacement path (prebuilt swap, worker result, read at load) used
+// to write its own private count into texture_pack_replaced, so it showed whichever path wrote last (533 while
+// the worker had built ~2,400) and jumped back after an F9 off/on. Every path adds here; a pack switch resets it.
+static std::atomic<uint32_t> g_texpack_replaced_total{0};
+// NG2_TEXPACK_FULLCLEAR=1: a pack / dump switch uses the old full ClearCaches - the same-binary control for the
+// flash test (2026-09-28). Off by default.
+static bool TexpackFullClearControl() {
+  static const bool on = [] { const char* e = std::getenv("NG2_TEXPACK_FULLCLEAR"); return e && *e == '1'; }();
+  return on;
+}
 // [no-dll] registered here since rexgpu-xenos.dll is gone (gen_gpu_cvars.py, verbatim from the fork)
 REXCVAR_DEFINE_INT32(texture_pack_original, 0, "GPU",
                      "Read-only: textures loaded from the game this run");
@@ -1533,6 +1543,7 @@ void D3D12TextureCache::BeginSubmission(uint64_t new_submission_index) {
       // The counts describe the mode that is running now, so they restart with
       // it - otherwise the indicator would show the sum of both modes and mean
       // nothing.
+      g_texpack_replaced_total = 0;
       REXCVAR_SET(texture_pack_replaced, 0);
       REXCVAR_SET(texture_pack_original, 0);
       REXLOG_INFO("[texpack] pack path changed to '{}' - reloading every texture",
@@ -1542,7 +1553,8 @@ void D3D12TextureCache::BeginSubmission(uint64_t new_submission_index) {
       // once suspected of corrupting the guest command stream, but the ring
       // buffer errors it was blamed for occur with it disabled too; they belong
       // to the attract demo, not to this.
-      command_processor_.ClearCaches();
+      if (TexpackFullClearControl()) command_processor_.ClearCaches();   // A/B control: the old full clear
+      else command_processor_.ClearTextureCache();   // [texpack] game-data textures only (Fable II 1202bbb + 6272471)
     }
   }
 
@@ -1566,7 +1578,8 @@ void D3D12TextureCache::BeginSubmission(uint64_t new_submission_index) {
         REXLOG_INFO("[texpack] dumping to '{}' - reloading every texture so the scene in "
                     "memory is written too",
                     want_dump);
-        command_processor_.ClearCaches();
+        if (TexpackFullClearControl()) command_processor_.ClearCaches();   // A/B control: the old full clear
+        else command_processor_.ClearTextureCache();   // [texpack] game-data textures only (Fable II 1202bbb + 6272471)
       }
     }
   }
@@ -3588,7 +3601,7 @@ void D3D12TextureCache::ApplyTexpackResolve(D3D12Texture& texture, const Texture
       StageNote(dir, REXCVAR_GET(texture_pack_chapter), file_id, hash);
       static std::atomic<uint32_t> built{0};
       const uint32_t n = ++built;
-      REXCVAR_SET(texture_pack_replaced, int32_t(n));
+      REXCVAR_SET(texture_pack_replaced, int32_t(++g_texpack_replaced_total));
       return;
     }
     ++g_tpa_prebuilt_misses;
@@ -3778,7 +3791,7 @@ void D3D12TextureCache::TexpackApplyBuilt(D3D12Texture& texture, const TextureKe
     // that block by design, so without this line the F10 menu read "nothing on
     // this screen is in the pack yet" and the overlay "0 enhanced loaded" on
     // every path while the pack was replacing hundreds of textures (2026-09-26).
-    REXCVAR_SET(texture_pack_replaced, int32_t(n));
+    REXCVAR_SET(texture_pack_replaced, int32_t(++g_texpack_replaced_total));
     if (n == 1 || n % 1000 == 0)
       REXLOG_INFO("[texpack] {} upscaled textures resolved at load", n);
   }
@@ -4077,6 +4090,13 @@ bool D3D12TextureCache::LoadTextureDataFromResidentMemoryImplBody(Texture& textu
           dumped_dir = dir;
           dumped_this_session = 0;
           std::error_code ec;
+          // 2026-09-28: nothing created the dump folder (not this path, not the app, not the old plugin), so on a
+          // texture folder without an existing dump/ every fopen below failed silently and dumping wrote nothing
+          // (texval leg ng2_222: "dumping to ...", 0 files). Create it once, and say if that fails.
+          std::filesystem::create_directories(dir, ec);
+          if (ec)
+            REXLOG_WARN("[texpack] cannot create the dump folder '{}': {} - nothing will be dumped", dir,
+                        ec.message());
           for (const auto& e : std::filesystem::directory_iterator(dir, ec)) {
             const std::string n = e.path().filename().string();
             unsigned long long fid = 0;
@@ -4129,6 +4149,10 @@ bool D3D12TextureCache::LoadTextureDataFromResidentMemoryImplBody(Texture& textu
             std::fputc(10, ix);
             std::fclose(ix);
           }
+        } else {
+          static std::atomic<uint32_t> failed{0};
+          if (failed.fetch_add(1) == 0)
+            REXLOG_WARN("[texpack] cannot write '{}' - texture dumping is writing nothing", path);
         }
       }
     }
@@ -4397,7 +4421,7 @@ bool D3D12TextureCache::LoadTextureDataFromResidentMemoryImplBody(Texture& textu
     static std::atomic<uint64_t> total_us{0};
     static std::atomic<uint64_t> total_read_us{0};
     const uint32_t n = ++replaced;
-    REXCVAR_SET(texture_pack_replaced, int32_t(n));
+    REXCVAR_SET(texture_pack_replaced, int32_t(++g_texpack_replaced_total));
     const uint64_t us = uint64_t(std::chrono::duration_cast<std::chrono::microseconds>(
                                      std::chrono::steady_clock::now() - texpack_t0)
                                      .count());

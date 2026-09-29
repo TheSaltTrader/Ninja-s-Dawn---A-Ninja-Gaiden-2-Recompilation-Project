@@ -728,6 +728,14 @@ def main():
                           "- made with the settings before it, so they are redone"
                           % len(older), flush=True)
                     have_tex -= older
+    # Covered = what the GAME would serve: the exact file, or any pack file with the same content hash and shape
+    # (the id's low 40 bits = its last 10 hex digits), whatever address it was dumped at. An exact-name test re-upscaled
+    # content the pack already serves (2026-09-28, Fable II's census fix; the renderer matches content first).
+    have_content = {t[17:25] + ":" + t[6:16] for t in have_tex if len(t) == 25 and t[16] == "-"}
+
+    def covered(tid):
+        return tid in have_tex or (len(tid) == 25 and tid[16] == "-" and
+                                   tid[17:25] + ":" + tid[6:16] in have_content)
     reused = 0
     # Two steps, each reported as its own PROGRESS bar. Naming them lets the
     # app restart its bar and its clock at the second rather than showing 100%
@@ -745,7 +753,7 @@ def main():
         if fmt not in FMT_INFO:
             skipped += 1
             continue
-        if args.only_missing and tid in have_tex:
+        if args.only_missing and covered(tid):
             reused += 1                 # in the pack already: leave it alone
             continue
         # Whether a texture is art is decided by shape and format alone, so
@@ -799,7 +807,7 @@ def main():
         fmt2 = by_name.get(m.group(4))
         if tid in handled or fmt2 is None:
             continue
-        if args.only_missing and tid in have_tex:
+        if args.only_missing and covered(tid):
             reused += 1
             continue
         if pack_reason(w2, h2, fmt2) and not args.include_ui:

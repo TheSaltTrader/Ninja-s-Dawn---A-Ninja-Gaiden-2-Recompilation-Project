@@ -1680,15 +1680,19 @@ bool SettingsOverlay::DrawTextures() {
   // Say the shortcut in the panel itself, not only in a tooltip: a key nobody
   // is told about is a key nobody presses.
   if (have_path && counts.have.load()) {
+    // 2026-09-28 (Fable II's census fix, the user read "37 in the pack" as a nearly empty pack of 55,848): the
+    // pack's own size first; the dump figures are about the dump folder, and "in the pack" counts a dump the
+    // renderer would serve (same content and shape, any address), not only an exact file name.
+    if (packed > 0)
+      Muted("The pack holds %d enhanced textures.  Press F9 in game to switch it on and off.", packed);
+    const int candidates = in_pack + waiting;
     if (dumped == 0)
-      Muted("No textures dumped yet.");
+      Muted("Dump folder: no textures dumped yet.");
     else if (waiting == 0)
-      Muted("%d textures can be enhanced - all %d are in the pack.  Press F9 in "
-            "game to switch the pack on and off and see the difference.",
-            dumped, in_pack);
+      Muted("Dump folder: %d textures can be enhanced - all %d are covered by the pack.", candidates, in_pack);
     else
-      Muted("%d textures can be enhanced: %d in the pack, %d waiting to be "
-            "processed.", dumped, in_pack, waiting);
+      Muted("Dump folder: %d textures can be enhanced: %d covered by the pack, %d waiting to be processed.",
+            candidates, in_pack, waiting);
     if (excluded > 0)
       Muted("(%d more were dumped but are never enhanced - HUD, fonts, video "
             "frames and other non-art - so they are not counted.)", excluded);

@@ -317,6 +317,7 @@ PackCensus CountPack(const fs::path& texture_dir) {
 
   // Every id in the pack, from one walk - not one stat per candidate.
   std::set<std::string> in_pack;
+  std::set<std::string> in_pack_content;   // "<hash>:<shape>" of every pack file
   if (fs::is_directory(pack, ec)) {
     for (fs::directory_iterator it(pack, ec), end; it != end; it.increment(ec)) {
       if (ec)
@@ -328,8 +329,13 @@ PackCensus CountPack(const fs::path& texture_dir) {
       // census is of what the game will actually load.
       if (it->path().extension() == ".tex") {
         const std::string stem = it->path().stem().string();
-        if (stem.size() == 25 && stem[16] == '-')
+        if (stem.size() == 25 && stem[16] == '-') {
           in_pack.insert(stem);
+          // hash:shape - how the RENDERER matches (content first, then the shape = the id's low 40 bits, its last
+          // 10 hex digits), so a dump whose content is packed under another address counts as packed
+          // (2026-09-28, Fable II's census fix: 251 of 1,307 fresh dumps were covered that way but shown missing).
+          in_pack_content.insert(stem.substr(17, 8) + ":" + stem.substr(6, 10));
+        }
       }
     }
   }
@@ -417,7 +423,9 @@ PackCensus CountPack(const fs::path& texture_dir) {
       continue;
     }
     ++c.candidates;
-    if (in_pack.count(tid))
+    const bool covered = in_pack.count(tid) ||
+                         (tid.size() == 25 && in_pack_content.count(tid.substr(17, 8) + ":" + tid.substr(6, 10)));
+    if (covered)
       ++c.packed;
     else
       ++c.waiting;
