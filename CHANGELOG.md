@@ -3,6 +3,19 @@
 Versions are cut with `tools/make_release.py`, which refuses to package a
 version that has no section here.
 
+## v1.1.7 - 2026-09-29
+
+### Fixed - Ultrawide: the Start and Select menus showed at full width before switching to 16:9
+
+On an ultrawide display, opening the Start or Select menu during play showed
+the menu at full width for a moment and then switched it to 16:9: the fade to
+black that hides the switch began only after the menu had been on screen for
+about ten frames, and then took twelve more. The fade now begins on the first
+frame the menu draws and reaches black in five frames; the menu then fades in
+at 16:9 as before. Measured in play: Start to full black 0.44 s before, 0.17 s
+now. The Select menu is drawn by the game a little later after the button,
+and fades just as quickly once it appears. Closing a menu is unchanged.
+
 ## v1.1.6 - 2026-09-29
 
 ### Fixed - Ultrawide: leaving a shop showed the shop stretched across the screen

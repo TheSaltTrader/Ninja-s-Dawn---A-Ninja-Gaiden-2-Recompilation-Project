@@ -2869,6 +2869,15 @@ void D3D12CommandProcessor::IssueSwap(uint32_t frontbuffer_ptr, uint32_t frontbu
       return (e && *e) ? std::max(2, std::atoi(e)) : 90;
     }();
     const int enter_frames = s_uw_after_absence ? s_uw_enter_after_absence : 2;
+    static const bool s_uw_menu_fast = [] {   // [ng2-menu-open] below; NG2_UW_MENU_FAST=0 restores the old timing
+      const char* e = std::getenv("NG2_UW_MENU_FAST");
+      return !(e && *e == '0');
+    }();
+    static const int s_uw_menu_fade_out = [] {   // swaps to black when a menu opens over gameplay
+      const char* e = std::getenv("NG2_UW_MENU_FADE_OUT");
+      const int v = (e && *e) ? std::atoi(e) : 5;
+      return std::max(1, v);
+    }();
     // Enter gameplay quickly (2 frames; 90 after a long absence of the world, above); leave it only after a
     // sustained non-gameplay signal (10 frames, ~0.16 s) so a brief 3D-less blip during play - a
     // streaming gap or a one-frame full-screen effect - does not flash 16:9. A
@@ -2876,7 +2885,12 @@ void D3D12CommandProcessor::IssueSwap(uint32_t frontbuffer_ptr, uint32_t frontbu
     if (s_uw_gameplay) s_uw_after_absence = false;
     if (!s_uw_gameplay && s_uw_gp_streak >= enter_frames) {
       s_uw_gameplay = true;
-    } else if (s_uw_gameplay && s_uw_menu_streak >= 10) {
+    } else if (s_uw_gameplay && (s_uw_menu_streak >= 10 || (cnt_mist > 0 && s_uw_menu_fast))) {
+      // [ng2-menu-open] 2026-09-29 (user: "pressing select and start shows the menu going from ultra wide to 16:9"):
+      // the 10-frame leave hysteresis showed the opened menu at full width for ~10 frames before the fade even
+      // began (Start -> switch under black took 26 frames every time, ng2_137/140). The mist is unambiguous - nothing
+      // else in the game is that wide - so a mist frame leaves gameplay at once, and the fade to black into the menu
+      // runs over ng2_uw_menu_fade_out swaps (5) instead of the full fade. NG2_UW_MENU_FAST=0: the old timing.
       s_uw_gameplay = false;
     }
     const int mode_detected = !feature ? 0 : (s_uw_gameplay ? 1 : 2);
@@ -2913,7 +2927,10 @@ void D3D12CommandProcessor::IssueSwap(uint32_t frontbuffer_ptr, uint32_t frontbu
         // it hides stays hidden, and a direct level start is one clean fade-in.
         static int s_fade_frames_out = 0;
         ++s_fade_frames_out;
-        s_uw_fade = std::min(1000, s_uw_fade + step);
+        // [ng2-menu-open] a menu opening over gameplay (mist this frame or just before) reaches black faster.
+        const bool menu_opening =
+            s_uw_menu_fast && s_uw_mode_shown == 1 && mode_detected == 2 && s_uw_since_mist <= 2;
+        s_uw_fade = std::min(1000, s_uw_fade + (menu_opening ? 1000 / s_uw_menu_fade_out + 1 : step));
         if (s_uw_fade >= 1000 && mode_detected != s_uw_mode_shown) {   // at full black: layout and letterbox switch together
           REXLOG_INFO("[ng2uw] fade: {} swaps to black, switching mode {} -> {}", s_fade_frames_out, s_uw_mode_shown,
                       mode_detected);

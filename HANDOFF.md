@@ -26,7 +26,7 @@ through a present thread. `docs/ARCHITECTURE.md` has the diagram;
 
 | Item | State |
 |---|---|
-| Version | `1.1.6` (`VERSION`) |
+| Version | `1.1.7` (`VERSION`) |
 | Work tree | `D:\ng2_frameinterp\ng2recomp-worktree`, branch `native-gpu-ng2`; `origin/main` is fast-forwarded to it at each release |
 | Published | releases v1.1.2, v1.1.3, v1.1.4, v1.1.5 on GitHub, each asset read back (size + sha256) after upload |
 | Standalone install | `D:\Ninja Gaiden 2 Portable` on v1.1.5 |
