@@ -315,7 +315,8 @@ are written up in `docs/`:
 | Document | What it answers |
 |---|---|
 | [ARCHITECTURE.md](docs/ARCHITECTURE.md) | How the pieces fit: what is in each of the three binaries, how a setting reaches the engine, and the changes that live outside any source file. |
-| [ISSUES_AND_FIXES.md](docs/ISSUES_AND_FIXES.md) | Every issue met while porting, its cause and its fix, by area, from v0.1.0 to v1.1.5. |
+| [PORTING_A_NEW_GAME.md](docs/PORTING_A_NEW_GAME.md) | The whole route from a disc image to a published native release, as steps another Xbox 360 game can follow. |
+| [ISSUES_AND_FIXES.md](docs/ISSUES_AND_FIXES.md) | Every issue met while porting, its cause and its fix, by area, from v0.1.0 to v1.1.7. |
 | [XENIA_ISSUES.md](docs/XENIA_ISSUES.md) | Every label on Xenia's compatibility issue for this title, and what this port does about each. Includes what the census does *not* cover. |
 | [VECTOR_COVERAGE.txt](docs/VECTOR_COVERAGE.txt) | How the garbled videos were traced to VMX128 registers v64–v127 reading as zero — including the two dead ends that ruled out the video files and the SDK's decoder first. |
 | [VIDEO_DECODE.md](docs/VIDEO_DECODE.md) | The game decodes its own WMVs in recompiled guest code; it imports no media APIs at all. |

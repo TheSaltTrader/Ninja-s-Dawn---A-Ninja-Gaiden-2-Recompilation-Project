@@ -1,0 +1,419 @@
+# Porting a new Xbox 360 game: the path this project took
+
+This is the whole route Ninja Gaiden II took from a disc image to a native PC
+release (v1.1.7), written as steps another game can follow. Each step says
+what to do, which files and tools do it, how you know it is done, and what went
+wrong here so it does not have to go wrong again. The detail lives in the
+other documents; this one is the order and the gates.
+
+| Document | Read it for |
+|---|---|
+| [ARCHITECTURE.md](ARCHITECTURE.md) | What is in each binary, the graphics path, how a setting reaches the engine, changes that live outside the source |
+| [ISSUES_AND_FIXES.md](ISSUES_AND_FIXES.md) | Every defect met, symptom -> cause -> fix, by area (ids like B2, R3, N16 below point there) |
+| [DEVELOPMENT_JOURNAL.md](DEVELOPMENT_JOURNAL.md) | The first weeks: analysing the image, the first boots |
+| [XENIA_ISSUES.md](XENIA_ISSUES.md) | Using Xenia's issue tracker as a checklist for a title |
+| [VIDEO_DECODE.md](VIDEO_DECODE.md) | The one recompiler defect that garbled every video |
+| [TEXTURE_PACK.md](TEXTURE_PACK.md) | Dumping, upscaling and replacing textures |
+| [native_gpu/README.md](native_gpu/README.md) and `src/native_gpu_xlat/ORIGIN.txt` | The native renderer's origin, vendoring and patches |
+| [../HANDOFF.md](../HANDOFF.md) | The current state and the rules of the test machine |
+
+Ids in brackets - (B2), (N16) - are entries in ISSUES_AND_FIXES.md. Names in
+`NG2_*` are this game's; a new game renames them.
+
+---
+
+## The phases at a glance
+
+| # | Phase | Done when |
+|---|---|---|
+| 1 | Extract and analyse the disc | You know the title id, entry point, imports, and whether it loads guest DLLs |
+| 2 | Recompile | `generated/` exists and `tools\build.cmd Release` links an exe |
+| 3 | First boot | The game reaches its title screen, input works, it survives three boots in a row |
+| 4 | Playable | Every chapter or level loads and plays to its end; videos, audio and transitions work |
+| 5 | The app shell | Settings file, setup screen, in-game menu, updater |
+| 6 | Native graphics | The game draws with its own renderer inside the exe; no GPU plugin |
+| 7 | Display features | Internal resolution, ultrawide, fades that never cut |
+| 8 | Texture pack | Dump, upscale, replace, with no hitches |
+| 9 | Test method | Every claim above backed by a log line and a control |
+| 10 | Release | A packaged, checked, published build that updates itself |
+
+Phases 1-4 are the recompilation; phase 6 is the largest single piece of work;
+phases 7 and 8 are where most of the player-visible defects of this project
+were found. Keep the order: a feature built before the base is stable gets its
+bugs blamed on the wrong layer.
+
+---
+
+## Phase 0 - Tools
+
+| Tool | Version used | Notes |
+|---|---|---|
+| ReXGlue SDK + `rexglue.exe` | 0.10.0, built from source | The runtime (`rexruntime.dll`) must come from the same tree as the codegen tool; this port carries SDK fixes (README "What this is built on") |
+| LLVM clang | 22.x (`clang++`, GNU front end, MSVC ABI) | Not clang-cl |
+| Visual Studio 2022 Build Tools | MSVC 14.44 | Always build through `vcvars64.bat`: without it clang falls back to an older MSVC and the precompiled header fails to load |
+| CMake / Ninja | 3.25+ / 1.13 (`pip install ninja`) | No vcpkg |
+| Python | 3.12 + `cryptography`, `capstone` | For the XEX and analysis tools |
+| Git + `gh` | | Releases |
+
+Two traps before anything else:
+* A reconfigure without clang on PATH once cached empty release flags: the
+  build ran unoptimised and the exe grew from 144 MB to 580 MB (X1). Build only
+  through `tools\build.cmd`.
+* `RexBlue/win-amd64/bin/` is a staging folder that has held stale DLLs; never
+  trust a DLL because of where it sits, check it by content (X13).
+
+---
+
+## Phase 1 - Extract and analyse the disc
+
+1. `python tools/extract_disc.py <iso> <outdir>` (GDF: XGD1/2/3; `--list`,
+   `--only default.xex`). Put `default.xex` in `assets/` and the disc in
+   `game/`. Both are git-ignored and are never published.
+2. `tools/xex_image.py` decrypts the XEX and caches a flat image
+   (`out/image.bin`); `tools/xex_imports.py` lists the kernel imports, their
+   thunks and call sites.
+3. Record: title id, image base, entry point, the `.pdata` count, the imports,
+   and whether the game loads guest DLL modules (NG2 imports only `xam.xex` and
+   `xboxkrnl.exe`, which keeps everything in one image; `COMPATIBILITY.md`).
+4. Read the title's page in Xenia's issue tracker and turn its labels into a
+   checklist (`XENIA_ISSUES.md`). Two of NG2's became fixed tuning entries
+   (`protect_zero`, `clear_memory_page_state`).
+
+Address tools for later: `tools/whereis.py`, `tools/xrefs.py`,
+`tools/gstrings.py`. Validate every scanner against a known answer first:
+`xrefs.py` had three bugs that each gave a confident wrong answer (X15).
+
+---
+
+## Phase 2 - Recompile
+
+1. **Manifest** (`ng2_manifest.toml`, generated by ReXGlue and then edited).
+   What matters in it:
+   * `[entrypoint]` includes `config/functions.toml`, `config/rexcrt.toml` and
+     `config/hooks/*.toml`.
+   * Codegen flags: `skip_lr`, `ctr_as_local`, `xer_as_local`, `cr_as_local`,
+     `reserved_as_local`, `non_volatile_as_local` (R2: without them a callee
+     corrupts its caller through the one shared context).
+   * `setjmp_address` / `longjmp_address` (B1: a garbage indirect call far from
+     the cause).
+   * `shared_vector_registers` - found by a scan of which VMX registers are read
+     before written; sharing all of v64-v127 broke `__savevmx` (R4). This list
+     is per game.
+2. **`config/rexcrt.toml`** maps the guest's fiber functions to the host's (B2:
+   a black screen while the main loop runs). Map the fast-path second entry the
+   scheduler actually calls, not only the documented one.
+3. **Codegen and build**: `tools\build.cmd Release` runs
+   `rexglue.exe codegen <manifest>` (about 1,100 files of C++ into
+   `generated/default/`) before CMake, then builds with Ninja.
+4. **Codegen checks**: `tools/codegen_validation/run_all.sh generated/default`
+   compares each emitted instruction with its disassembly comment.
+5. **Changing the recompiler itself** means rebuilding `rexglue.exe`, deploying
+   it by hand, clearing the stale precompiled header and regenerating every
+   file (HANDOFF section 3). The one recompiler defect that mattered here:
+   `non_volatile_as_local` turned v64-v127 into zero-initialised locals, which
+   garbled every video (R3, `VIDEO_DECODE.md`).
+
+---
+
+## Phase 3 - First boot
+
+Run: `ng2.exe --game_data_root "<root>\game"`; logs in `logs/ng2_NNN.log`
+(highest is newest). A boolean flag needs `=true`: a bare `--flag` is ignored
+without a word.
+
+Work through this list; each line is a defect class NG2 had, and the fix
+pattern transfers:
+
+| Symptom | Cause | Fix (entry) |
+|---|---|---|
+| Faults reading low addresses | Guest page 0 never committed | Commit 0..0x3FFFF, zero it, protect read-only in `OnPostSetup`; `protect_zero=false` (B3) |
+| Nothing renders | `gpu_plugin` is a RuntimeConfig field, not a cvar | Set it in `OnPreSetup` (B4); today the exe supplies its own graphics system instead (phase 6) |
+| Controller ignored, sign-in prompts repeat | Device N feeds guest user N, the game polls user 0 | Shared assignment in `OnPostSetup` (I3) |
+| A wait that never ends | The watchdog covered one wait path in five | Guard all kernel wait entries; a 300 s report is not by itself a deadlock (X4) |
+| Audio stops for good | The SDL semaphore credit was not returned on an underrun | Return it on the silence path (A1) |
+| Freeze at the attract demo | Ring re-initialisation reset the read pointer only | Reset both pointers (D12) |
+| Quit leaves a black screen | The main fiber thread never checks for termination | Watch for its thread to end (B6) |
+| Needs the VC++ runtime installed | Not shipped | Ship the four VC++ DLLs beside the exe (B8) |
+
+Gate: `tools/boot_check.py --runs 3 --seconds 45`. One boot proves nothing on
+a game like this one.
+
+---
+
+## Phase 4 - Playable
+
+### Missing functions
+
+`[FATAL] Call to invalid or unregistered function at guest address 0x...`
+means the analyzer folded a small helper with no `.pdata` into its neighbour;
+the game reaches it only through a pointer table (R1).
+
+* Fix: `python tools/add_function.py 0xADDR` (appends to
+  `config/functions.toml` with the disassembly as a comment), then rebuild.
+  `tools/boot_loop.py` repeats build -> run -> add until another failure.
+* Check the proposed size against the disassembly: the tool scans to the next
+  `blr` and once proposed 0x3DD4 bytes for an 8-byte thunk (X10).
+* Do not bulk-register scanner output: `.text` holds pointer tables that decode
+  as plausible instructions, and a bulk registration produced overlapping
+  extents (O10). A narrow pattern sweep (a this-adjusting `addi r3,r3,-n`
+  followed by a branch to a known function) worked; broad ones did not.
+* Expect about one new one per new area of the game. The runtime is the only
+  reliable oracle.
+
+### Fixes in generated code, and hooks
+
+* **Post-generation patches** edit the generated C++ for defects a hook cannot
+  express (`local/diag/patch_missed_regs.py`, `patch_scanguard.py`): exact
+  string replacements with an expected match count, marked `NG2FIX`,
+  idempotent, and run by CMake before the recompiled code compiles. They are
+  wired into the build because a regeneration once silently dropped them and
+  shipped fixed crashes again (R9).
+* **Midasm hooks** (`[[midasm_hook]]` in `config/hooks/*.toml`: address, name,
+  registers, `after_instruction`) call a C++ function in `src/`. They survive
+  regeneration. Gate each with a cvar. Xenia-style memory patches do not work
+  in a static recompilation - the immediates are C++ constants - so rewrite the
+  register after the instruction instead.
+* **Guest addresses in generated code are signed decimal** `lis` immediates:
+  `0x84C40000` appears as `-2067529728`. Grepping for the hex proves nothing.
+
+### Game-logic defects that look like engine bugs
+
+* **A state the runtime never sets.** After a boss the next chapter never
+  loaded: the game waited for the profile's achievement write to reach state 2,
+  which the runtime never issued (C2). Xenia was the ground truth.
+* **A race the console never lost.** The music worker stopped because the
+  game's own barrier loses a wakeup under PC timing (A2); found by polling the
+  barrier word from outside the process.
+* **A failed file open read as a bad disc.** The game treats a chapter video
+  that fails to open as a dirty disc (V5).
+
+Gate: a walk of every chapter from a saves list, and each boss played through.
+
+---
+
+## Phase 5 - The app shell
+
+Copy and adapt these (`src/`):
+
+| File | Role |
+|---|---|
+| `main.cpp`, `ng2_app.h` | The `ReXApp` subclass: `OnConfigurePaths`, `OnPreSetup`, `OnPostSetup`, `OnShutdown`... |
+| `ng2_settings.h` | The `key=value` settings file beside the exe |
+| `ng2_tuning.h` | `Fixed()` correctness entries + `FromSettings()`; writes `cache/ng2_tuning.toml` |
+| `ng2_menu.cpp/.h` | Setup screen and the F10 overlay |
+| `ng2_autoskip.cpp/.h` | Synthetic pad; the `pad_script.txt` test channel |
+| `ng2_update.cpp` | The in-game updater |
+
+**How a setting reaches the engine**: settings file -> `Ng2Settings` ->
+`Ng2Tuning` -> `cache/ng2_tuning.toml` -> `rex::cvar::LoadConfig`, the one path
+that holds values for cvars not registered yet. Duplicate keys make the parser
+drop the whole file, so `Apply` folds them. Live settings go through
+`ApplyLiveSettings`.
+
+**Rules for the menu**, each learned the hard way:
+* A setting that only applies at start-up says so: `RestartTag()` after the
+  control draws "takes effect after a restart" in red and raises a RESTART
+  REQUIRED banner when edited (N12). Find which rows those are with
+  `tools/f10_census.py`, which traces each row to the cvars it sets and where
+  they are read; a read inside an init function means a restart.
+* A setting shown to break the game leaves every screen; its field stays so
+  older settings files still parse, and the reason goes in
+  `tools/settings-ledger.json` (frame rate above 60 and V-Sync were game-speed
+  controls on this title).
+* `tools/lodestone_census.py` must pass after any settings change: every field
+  reachable or declared, documented in the README, defaults agreeing,
+  round-tripping, guarded cvars guarded by their own field, and the package
+  carrying its tools and no game data. It checks coverage, not truth, and the
+  ledger's `doc_phrase` must match the menu's label.
+
+---
+
+## Phase 6 - Native graphics
+
+The SDK draws through a GPU plugin (`rexgpu-xenos.dll`) that parses the
+console's command stream. This project moved all of it into the exe, in stages,
+each with a gate that had to read zero before the next began. The Fable II port
+did it first and packaged the method as a migration kit (its
+`MIGRATION_GUIDE.md`, engine patches, reference tree and tools); NG2 took that
+tree verbatim with one rename. `ORIGIN.txt` records every source commit and
+patch.
+
+| Stage | What changes | Gate |
+|---|---|---|
+| 1. Vendor | `src/native_gpu_xlat/` + the Driver, bridge and window; built, not run | Builds; `carry_census.py` finds each feature by content |
+| 2. Lockstep | The plugin's draw and swap callbacks feed the in-exe backend beside the plugin; registers synced by a dirty bitmap with a self-check | `[ngpu] LOCKSTEP ... 0 failed`, self-check 0 mismatches; `windiff2.py` same-instant picture diff near the paused floor |
+| 3. Offload, one window | The plugin skips its own GPU work; the backend draws on its device and hands frames to the presenter | `ONE WINDOW` line; A/B timing pairs; `audit_vendored.py` finds nothing unported |
+| 4. Attribution census | Every command packet credited to the D3D entry point that wrote it | 0 unattributed packets over title, cinematic, gameplay and load routes |
+| 5. Own stream reader | The exe decodes the ring at the game's write-pointer kick, expanding indirect buffers | 0 registers differ over hundreds of thousands of draws; draws fed equal draws seen |
+| 6. Plugin stops parsing | Side effects (fences, interrupts, register writes) compared, then a one-switch cut-over | Equal side effects; 0 stale read pointers, 0 wait timeouts |
+| 7. Own graphics system | The exe supplies the provider, presenter, register window, executor and vblank | 0 failed draws; A/B at 60 fps |
+| 8. Present thread | Frames reach the window on their own thread | Present cost on the game thread ~0.6 ms -> 0.002 ms |
+| 9. Plugin removed | The exe registers the plugin's GPU cvars itself (`gen_gpu_cvars.py`); a message box without D3D12 | Every chapter walked: no unhandled packet, no failed draw; bosses played |
+| 10. Draw thread | Decode stays on the game thread, D3D12 recording moves to a thread fed in order, side effects queued behind their draws | `[split] ... waited 0%`; 0 failed draws |
+
+What is **game-specific** in the renderer, so find these first for a new title:
+the loading -> world signal (NG2: its mode word entering 3), whether
+`clear_memory_page_state` is needed (NG2 yes, Fable II no), the render-target
+path the game's settings ask for, which registers the game writes outside the
+forwarded ranges, and the D3D trace-hook set. The device layout (write cursor
+at `device+0x30`, constants at `+0x780` / `+0x1780`) matched in both games
+but must be checked.
+
+Pitfalls that each cost a day or more (N-entries and the migration docs):
+* The ROV support query was stubbed to "no", so the renderer silently took a
+  path the game cannot use: a black cinematic and a box shadow (N2). Query the
+  device.
+* A `VirtualQuery` per draw made a chapter card run at 9 fps.
+* The shader pipeline storage was never loaded, so every launch recompiled.
+* Reading back from a write-combined upload heap stalls about 700 ns a read;
+  mapped upload pointers are write-only.
+* A 2.5 fps stall of exactly 400 ms per frame was scratch-register write-back
+  that no packet performs; the executor must mirror it.
+* The draw thread's queue of 8 chunks made the game wait 17% of the time; 128
+  never waits (N14).
+* A duplicated tuning key dropped every tuning entry.
+* Starting the backend before the kernel exists (`OnCreateDialogs`) crashes;
+  start it in `OnPostSetup`.
+
+---
+
+## Phase 7 - Display features
+
+### Internal resolution
+
+The console renders a fixed world size into 10 MB of EDRAM. NG2 offers the
+world at up to 720p (a 1080p world overflows EDRAM and renders black) times a
+whole-number scale that also scales the shadow maps, set through midasm hooks
+at the game's own size constants (N13). Find the size constants first; they
+are signed-decimal immediates (phase 4).
+
+### Ultrawide
+
+A wider render surface does not work (the frame resolves are bound to the 16:9
+surface). The widen is done in the projection, and the presenter stretches the
+16:9 frame (D13, O1). The pieces, all in the renderer's constant upload:
+
+1. `k = (16/9) / display_aspect`, written to a cvar the renderer reads.
+2. Classify each vertex shader once and cache it: a **perspective** block (w
+   tracks z) and the **2D UI ortho** (for NG2 at c21-c24: w column
+   [0,0,0,1], small +x/-y scale, origin (-1,+1)). A search per draw cost a
+   third of the frame rate.
+3. Multiply column 0 of the block by k: the 3D field of view widens exactly
+   (Hor+); the HUD compresses into a centred 16:9 band.
+4. Exceptions that stay full width: a solid quad spanning the canvas width (a
+   fade or bar - a narrower one is HUD, N3); a quad covering the whole canvas
+   (a transition or a copy of the frame, N4).
+5. A compressed draw's scissor is compressed with it, or health bars cut in the
+   wrong place (N3).
+6. **Scene detection** once per frame decides fill or pillarbox: the world
+   draw count, fades, and the menu's own signature (NG2's menus draw a mist
+   quad at least twice the canvas wide). Game flags looked cleaner and were
+   worse - NG2's "paused" flags toggle about once a second with the menu open
+   (N5).
+7. **Hysteresis and fades**: enter after 2 frames, leave after 10 (at once on
+   a menu signature, N17); every switch fades to black, switches layout and
+   letterbox together, and fades back - never a cut. Where the game plays its
+   own transition (a level start, a menu's closing cross-fade), hold at black
+   until gameplay and fade in once (N4, N16).
+8. The presenter reads the mode by cvar name from the runtime DLL; the release
+   packaging must check both halves are present (D19).
+
+Log a line for every decision (`[ng2uw] fade: N swaps to black, switching mode
+a -> b`, `menu exit: held 16:9 for N frames`) and give each rule an
+environment switch to turn it off, so the next A/B differs by one thing.
+
+---
+
+## Phase 8 - Texture pack
+
+1. **Dump** the raw guest bytes plus the texture key the first time a texture
+   is seen (the renderer converts on the GPU, so reading back finished pixels
+   would stall per texture). Create the dump folder yourself (N9).
+2. **Offline**: untile with a verbatim port of `GetTiledOffset2D`, decode,
+   filter out non-art (video planes, render targets, fonts, HUD atlases,
+   ramps), upscale (Real-ESRGAN bundled), write raw RGBA behind a 16-byte
+   header (PNG decode cost 16 ms a texture) - `tools/upscale_textures.py`. The
+   key's pitch is in units of 32 texels; the tiler wants blocks.
+3. **Match by content, not address**: a pack file is `<id>-<hash>.tex`, found by
+   hash plus shape, so it follows a texture that streams to a new address (T14).
+4. **No hitches**: file reads and creation on worker threads, a per-stage list,
+   the game's own textures pre-created at a stage load, and the stage's
+   replacements built ready for the GPU within 30% of video memory, 512 MB to
+   4 GB (N6). Replacements count against the texture cache (N8).
+5. **Switching** live (F9) reloads only textures from game data, never the
+   rendered ones (N10); one counter of replacements in use, shown in the menu
+   and on a log line (N7).
+
+---
+
+## Phase 9 - Test method
+
+These rules come from mistakes; each one produced a wrong conclusion at least
+once.
+
+* **One game at a time.** A shared lock file (`~/.game-test-lock`:
+  `session=<id> game=<name|none> until=HH:MM note=...`) is claimed before any
+  run or build, re-read at the moment of acting (a waited-on check is stale),
+  and released only if still yours. No build and no test while any game runs,
+  including the owner's own play. Kill only the process you started, never by
+  window title, and look for surviving children of a stopped script.
+* **Saves.** The game's content folder is its save folder: back it up before a
+  run, verify the copy by content, restore it afterwards (`run_native.ps1` does
+  this).
+* **Driving the game.** A script channel (`pad_script.txt` beside the exe) or a
+  launch-time pad script; input is otherwise held while the window is not in
+  front - which also means a game started from a script may ignore a real
+  controller until its window is clicked.
+* **Evidence.** A log line that proves the code path fired; screen captures
+  that stop when the game exits and are checked to show the game (a capture
+  records whatever window is on top); a control arm that differs by exactly one
+  thing (same binary, one switch). For anything intermittent between runs,
+  three clean runs are weak evidence and one bad run refutes.
+* **The owner plays the final check.** Every player-visible fix here was
+  confirmed in play before release, and two of them (N16, N17) were refined
+  after the first cut was played.
+
+---
+
+## Phase 10 - Release
+
+1. Bump `VERSION` (CMake reads it; a bump re-runs configure) and add a
+   `## vX.Y.Z - date` section to `CHANGELOG.md`, headed by the symptom as the
+   player saw it. Build, then grep the exe for the version.
+2. Test that exact build; record its hash.
+3. `python tools/make_release.py --version X.Y.Z` refuses a missing changelog
+   section, a missing tool, a stale build, game data, or a staged binary missing
+   its feature strings (checked by content, after a control string, because a
+   check on where a DLL came from passed on the build that lost ultrawide, D19).
+4. Publish with a script that checks everything before anything irreversible:
+   clean tree, fast-forward only, tag absent, the play-evidence line present,
+   the built exe identical to the one tested; then push, tag,
+   `gh release create --latest`, and read the release back (asset size and the
+   downloaded file's sha256).
+5. The in-game updater takes it from there: it checks GitHub's latest release,
+   stages every file beside its destination and commits only once all have
+   landed (S25).
+
+What ships: the exe, the SDK runtime, the VC++ runtime, the tools and the
+docs. Never game data - `make_release.py` and `tools/stage_repo.py` both sweep
+for it, and `stage_repo.py` also refuses personal paths.
+
+---
+
+## The values a new game has to find
+
+| NG2 value | What it is | How it was found |
+|---|---|---|
+| `shared_vector_registers = [64,65,69,72,96]` | VMX registers read before written | Scan of the generated code (R4) |
+| Fiber functions in `config/rexcrt.toml` | The guest scheduler | Black screen with a running main loop (B2) |
+| 28 extra functions in `config/functions.toml` | Helpers without `.pdata` | `[FATAL]` lines, one at a time (R1) |
+| Achievement-write state `[0x8555B930+88]` | What the chapter transition waits for | Xenia as ground truth (C2) |
+| World size constants | Internal resolution | Hooks at the game's size immediates (N13) |
+| 2D UI ortho at c21-c24 | HUD compression | In the vertex constants of the HUD draws (D13); `NG2_DUMP_VSCONST=1` logs a draw's constants |
+| Menu mist (>= 2560 px quad) | "A menu is open" | Draw census; the pause flags failed (N5) |
+| Mode word `0x84C25070` = 3 | Loading -> world | Mapped during the ultrawide work (v1.0.19); see the reveal hold in `src/ng2_ngpu_bridge.cpp` |
+| `clear_memory_page_state = true` | Needed by this title | Xenia labels; hang without it |
+
+Find each with an instrument that can say "no": a memory scan or census that
+reports what it could not cover, a control run where the value is absent, and
+a log line in the build that shows the value in use.

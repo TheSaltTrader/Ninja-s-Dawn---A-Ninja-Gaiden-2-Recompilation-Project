@@ -19,9 +19,10 @@ What it refuses to do, because each of these has produced a bad release before:
   * overwrite an existing release folder without --force,
   * stage anything that looks like game data (see FORBIDDEN_SUFFIXES).
 
-Nothing here is redistributable: ng2.exe contains the game's own code,
-translated. The zip is for keeping versions straight on this machine and for
-handing to someone who already owns Ninja Gaiden II - not for publishing.
+ng2.exe contains the game's own code in translated form and no game data; the
+zip is attached to the project's GitHub release (the owner's decision since the
+v1.0.x releases) and does nothing without the player's own copy of the game.
+Game data is never staged - that is what the FORBIDDEN_SUFFIXES check is for.
 """
 
 import argparse

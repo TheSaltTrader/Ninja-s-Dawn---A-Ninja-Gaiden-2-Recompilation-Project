@@ -115,7 +115,7 @@ setup screen ready to press Play.
 | Version | `1.0.24` (`VERSION`) |
 | Lodestone census | green — `python tools/lodestone_census.py`. It died with a `KeyError` for a period; see gotchas. |
 | Publication staging | 83 files, sweep clean — `python tools/stage_repo.py` |
-| Release decision | **Source + docs only.** No `ng2.exe`, no game assets, ever. |
+| Release decision | (2026-09-26; superseded) Source + docs only. Since then the zip with `ng2.exe` is attached to each GitHub release by the owner's decision; no game assets, ever. |
 | Published | GitHub repo `TheSaltTrader/Ninja-s-Dawn---A-Ninja-Gaiden-2-Recompilation-Project`, releases through v1.0.24 |
 | Standalone install | `D:\Ninja Gaiden 2 Portable` tracks the latest release (`make_release.py --update <folder>`) |
 
